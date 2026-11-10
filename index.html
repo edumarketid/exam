@@ -381,11 +381,11 @@
           </div>
         </div>
 
-        <!-- TAB BARU: KELOLA MATA PELAJARAN (PERMANEN DI SUPABASE) -->
+        <!-- TAB: KELOLA MATA PELAJARAN (SINKRONISASI FULL SUPABASE) -->
         <div id="tab-mapel" class="hidden bg-white p-6 rounded-lg shadow border space-y-6">
           <div class="border-b pb-4">
             <h3 class="font-bold text-md text-gray-800">Kelola Data Mata Pelajaran (Supabase Database)</h3>
-            <p class="text-xs text-gray-500 mt-1">Tambah, perbarui, atau hapus daftar Mata Pelajaran yang berlaku di sekolah.</p>
+            <p class="text-xs text-gray-500 mt-1">Tambah, perbarui, atau hapus daftar Mata Pelajaran yang berlaku di sekolah secara permanen.</p>
           </div>
 
           <form onsubmit="app.addMapelToSupabase(event)" class="flex gap-3 max-w-lg">
@@ -606,12 +606,8 @@
 
         this.students = [];
         this.kelasOptions = [];
-        this.mapelList = [
-          "Perencanaan dan Pengalamatan Jaringan",
-          "Dasar-Dasar Teknik Komputer dan Jaringan",
-          "Kreativitas, Inovasi, dan Kewirausahaan"
-        ];
-        
+        this.mapelList = []; // Diisi murni dari Supabase
+
         this.jadwalList = JSON.parse(localStorage.getItem('EXAM_JADWAL_LIST')) || [];
         this.hasilUjianList = [];
         this.questions = [];
@@ -624,6 +620,7 @@
         this.updateDBStatus();
         this.setupSecurityListeners();
         
+        // URUTAN Wajib Async: Tarik data Supabase DAHULU baru tampilkan UI
         await this.loadMapelFromSupabase();
         await this.loadDaftarKelasFromSupabase();
         await this.loadSiswaFromSupabase();
@@ -661,17 +658,17 @@
         }
       }
 
-      // INTEGRASI PERMANEN: TARIK DATA MAPEL DARI TABEL SUPABASE
+      // INTEGRASI UTAMA: AMBIL DATA DARI TABEL 'mapel' SUPABASE (KOLOM nama_mapel)
       async loadMapelFromSupabase() {
         if (!supabaseClient) return;
         try {
-          const { data, error } = await supabaseClient.from('mapel').select('*').order('id', { ascending: true });
+          const { data, error } = await supabaseClient.from('mapel').select('nama_mapel').order('id', { ascending: true });
           if (error) throw error;
           if (data && data.length > 0) {
-            this.mapelList = data.map(m => m.nama_mapel);
+            this.mapelList = data.map(m => m.nama_mapel).filter(Boolean);
           }
         } catch (err) {
-          console.error("Gagal menarik data mapel:", err.message);
+          console.error("Gagal menarik data mapel Supabase:", err.message);
         }
       }
 
@@ -686,7 +683,7 @@
             const { error } = await supabaseClient.from('mapel').insert([{ nama_mapel: namaMapel }]);
             if (error) throw error;
 
-            alert(`Mata pelajaran "${namaMapel}" berhasil ditambahkan ke Supabase!`);
+            alert(`Mata pelajaran "${namaMapel}" berhasil disimpan ke Supabase!`);
             input.value = '';
             await this.loadMapelFromSupabase();
             this.populateDropdowns();
@@ -703,7 +700,7 @@
       }
 
       async deleteMapelFromSupabase(namaMapel) {
-        if (!confirm(`Hapus mata pelajaran "${namaMapel}" dari database?`)) return;
+        if (!confirm(`Hapus mata pelajaran "${namaMapel}" dari database Supabase?`)) return;
 
         if (supabaseClient) {
           try {
@@ -730,7 +727,7 @@
         container.innerHTML = '';
 
         if (this.mapelList.length === 0) {
-          container.innerHTML = `<p class="text-xs text-gray-500 italic">Belum ada data mata pelajaran.</p>`;
+          container.innerHTML = `<p class="text-xs text-gray-500 italic">Belum ada data mata pelajaran di Supabase.</p>`;
           return;
         }
 
