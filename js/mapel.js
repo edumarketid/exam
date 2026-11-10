@@ -18,7 +18,7 @@ const MapelModule = {
     container.innerHTML = '';
 
     if (!State.mapelList || State.mapelList.length === 0) {
-      container.innerHTML = `<p class="text-xs text-amber-600 italic">Belum ada data mata pelajaran di Supabase (atau tabel masih kosong).</p>`;
+      container.innerHTML = `<p class="text-xs text-amber-600 italic">Belum ada data mata pelajaran di Supabase.</p>`;
       return;
     }
 
@@ -78,3 +78,6 @@ const MapelModule = {
     }
   }
 };
+
+// Pastikan terdaftar global di browser
+window.MapelModule = MapelModule;
