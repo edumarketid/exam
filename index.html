@@ -280,7 +280,7 @@ CREATE TABLE IF NOT EXISTS hasil_ujian (
     </main>
   </div>
 
-  <!-- MODAL WARING KECURANGAN -->
+  <!-- MODAL WARNING KECURANGAN -->
   <div id="modal-warning" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
     <div class="bg-white rounded-xl max-w-md w-full p-6 text-center space-y-4">
       <div class="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto text-2xl font-bold">⚠️</div>
@@ -303,6 +303,7 @@ CREATE TABLE IF NOT EXISTS hasil_ujian (
         this.currentQuestionIdx = 0;
         this.answers = {};
         this.deferredPrompt = null;
+        this.pressedKeys = {}; // Tracker tombol keyboard yang ditekan
         
         // Data Soal Default
         this.questions = [
@@ -438,13 +439,39 @@ CREATE TABLE IF NOT EXISTS hasil_ujian (
           }
         });
 
-        // 3. Blokir Tombol DevTools
+        // 3. Deteksi Kombinasi Rahasia Keluar (Ctrl + C + B) & Penanganan Keydown
         window.addEventListener('keydown', (e) => {
-          if (this.examActive && (e.key === 'F12' || (e.ctrlKey && e.shiftKey && e.key === 'I'))) {
+          this.pressedKeys[e.key.toLowerCase()] = true;
+
+          // Kombinasi Keluar: Ctrl + c + b
+          if (this.examActive && e.ctrlKey && this.pressedKeys['c'] && this.pressedKeys['b']) {
+            e.preventDefault();
+            if (confirm("Kombinasi Pengawas Ditekan (Ctrl+C+B).\nApakah Anda yakin ingin keluar dari mode ujian?")) {
+              this.forceExitExam();
+            }
+            return;
+          }
+
+          // Blokir Tombol DevTools (F12 atau Ctrl+Shift+I)
+          if (this.examActive && (e.key === 'F12' || (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'i'))) {
             e.preventDefault();
             this.handleViolation("Dilarang membuka Developer Tools!");
           }
         });
+
+        window.addEventListener('keyup', (e) => {
+          delete this.pressedKeys[e.key.toLowerCase()];
+        });
+      }
+
+      // Prosedur Keluar Paksa via Shortcut Pengawas (Ctrl + C + B)
+      forceExitExam() {
+        this.examActive = false;
+        if (document.exitFullscreen) {
+          document.exitFullscreen().catch(err => console.warn(err));
+        }
+        alert("Aplikasi berhasil dikeluarkan oleh pengawas.");
+        this.showScreen('login');
       }
 
       handleViolation(reason) {
