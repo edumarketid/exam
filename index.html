@@ -125,6 +125,7 @@
             <button onclick="app.switchAdminTab('rekap-nilai')" class="px-3 py-1.5 text-xs rounded bg-emerald-600 text-white font-medium">Rekap & Cetak Nilai</button>
             <button onclick="app.switchAdminTab('upload-soal')" class="px-3 py-1.5 text-xs rounded bg-blue-600 text-white font-medium">Upload File Soal HTML</button>
             <button onclick="app.switchAdminTab('bank-soal')" class="px-3 py-1.5 text-xs rounded bg-indigo-600 text-white font-medium">Bank Soal & Editor</button>
+            <button onclick="app.switchAdminTab('mapel')" class="px-3 py-1.5 text-xs rounded bg-amber-600 text-white font-medium">Data Mapel</button>
             <button onclick="app.switchAdminTab('siswa')" class="px-3 py-1.5 text-xs rounded bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium">Kartu Siswa</button>
           </div>
         </div>
@@ -343,7 +344,7 @@
           <div id="upload-log" class="hidden border rounded p-4 bg-gray-900 text-green-400 font-mono text-xs max-h-48 overflow-y-auto"></div>
         </div>
 
-        <!-- TAB: BANK SOAL & EDITOR GAMBAR SUPABASE STORAGE (MODE ACCORDION RAPI + HAPUS PER MAPEL) -->
+        <!-- TAB: BANK SOAL & EDITOR GAMBAR SUPABASE STORAGE -->
         <div id="tab-bank-soal" class="hidden bg-white p-6 rounded-lg shadow border space-y-6">
           <div class="flex flex-wrap justify-between items-center border-b pb-4 gap-3 print:hidden">
             <div>
@@ -377,6 +378,26 @@
             </div>
 
             <div id="print-soal-content-container" class="space-y-6 text-xs"></div>
+          </div>
+        </div>
+
+        <!-- TAB BARU: KELOLA MATA PELAJARAN (PERMANEN DI SUPABASE) -->
+        <div id="tab-mapel" class="hidden bg-white p-6 rounded-lg shadow border space-y-6">
+          <div class="border-b pb-4">
+            <h3 class="font-bold text-md text-gray-800">Kelola Data Mata Pelajaran (Supabase Database)</h3>
+            <p class="text-xs text-gray-500 mt-1">Tambah, perbarui, atau hapus daftar Mata Pelajaran yang berlaku di sekolah.</p>
+          </div>
+
+          <form onsubmit="app.addMapelToSupabase(event)" class="flex gap-3 max-w-lg">
+            <input type="text" id="input-nama-mapel-baru" required placeholder="Masukkan Nama Mata Pelajaran Baru..." class="flex-grow border px-3 py-2 rounded text-xs font-medium focus:ring-2 focus:ring-amber-500">
+            <button type="submit" class="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-4 py-2 rounded shadow transition">
+              + Tambah Mapel
+            </button>
+          </form>
+
+          <div class="space-y-2">
+            <h4 class="font-bold text-xs text-gray-700 uppercase">Daftar Mata Pelajaran Aktif di Supabase:</h4>
+            <div id="mapel-list-container" class="space-y-2 max-w-lg"></div>
           </div>
         </div>
 
@@ -482,7 +503,6 @@
           <label class="block font-bold text-gray-800">Opsi Jawaban & Upload Gambar Opsi:</label>
           
           <div class="space-y-3">
-            <!-- OPSI A -->
             <div class="border p-2 rounded bg-gray-50 space-y-1">
               <span class="font-bold text-blue-800">Opsi A:</span>
               <input type="text" id="edit-opsi-a" required class="w-full border px-2 py-1 rounded">
@@ -494,7 +514,6 @@
               </div>
             </div>
 
-            <!-- OPSI B -->
             <div class="border p-2 rounded bg-gray-50 space-y-1">
               <span class="font-bold text-blue-800">Opsi B:</span>
               <input type="text" id="edit-opsi-b" required class="w-full border px-2 py-1 rounded">
@@ -506,7 +525,6 @@
               </div>
             </div>
 
-            <!-- OPSI C -->
             <div class="border p-2 rounded bg-gray-50 space-y-1">
               <span class="font-bold text-blue-800">Opsi C:</span>
               <input type="text" id="edit-opsi-c" required class="w-full border px-2 py-1 rounded">
@@ -518,7 +536,6 @@
               </div>
             </div>
 
-            <!-- OPSI D -->
             <div class="border p-2 rounded bg-gray-50 space-y-1">
               <span class="font-bold text-blue-800">Opsi D:</span>
               <input type="text" id="edit-opsi-d" required class="w-full border px-2 py-1 rounded">
@@ -530,7 +547,6 @@
               </div>
             </div>
 
-            <!-- OPSI E -->
             <div class="border p-2 rounded bg-gray-50 space-y-1">
               <span class="font-bold text-blue-800">Opsi E:</span>
               <input type="text" id="edit-opsi-e" required class="w-full border px-2 py-1 rounded">
@@ -590,7 +606,7 @@
 
         this.students = [];
         this.kelasOptions = [];
-        this.mapelList = JSON.parse(localStorage.getItem('EXAM_MAPEL_LIST')) || [
+        this.mapelList = [
           "Perencanaan dan Pengalamatan Jaringan",
           "Dasar-Dasar Teknik Komputer dan Jaringan",
           "Kreativitas, Inovasi, dan Kewirausahaan"
@@ -608,6 +624,7 @@
         this.updateDBStatus();
         this.setupSecurityListeners();
         
+        await this.loadMapelFromSupabase();
         await this.loadDaftarKelasFromSupabase();
         await this.loadSiswaFromSupabase();
         await this.fetchBankSoalFromSupabase();
@@ -615,6 +632,7 @@
         
         this.populateDropdowns();
         this.renderJadwalList();
+        this.renderMapelTabList();
       }
 
       updateDBStatus() {
@@ -641,6 +659,92 @@
             .then(reg => console.log('SW Registered:', reg.scope))
             .catch(err => console.error('SW Failed:', err));
         }
+      }
+
+      // INTEGRASI PERMANEN: TARIK DATA MAPEL DARI TABEL SUPABASE
+      async loadMapelFromSupabase() {
+        if (!supabaseClient) return;
+        try {
+          const { data, error } = await supabaseClient.from('mapel').select('*').order('id', { ascending: true });
+          if (error) throw error;
+          if (data && data.length > 0) {
+            this.mapelList = data.map(m => m.nama_mapel);
+          }
+        } catch (err) {
+          console.error("Gagal menarik data mapel:", err.message);
+        }
+      }
+
+      async addMapelToSupabase(e) {
+        e.preventDefault();
+        const input = document.getElementById('input-nama-mapel-baru');
+        const namaMapel = input.value.trim();
+        if (!namaMapel) return;
+
+        if (supabaseClient) {
+          try {
+            const { error } = await supabaseClient.from('mapel').insert([{ nama_mapel: namaMapel }]);
+            if (error) throw error;
+
+            alert(`Mata pelajaran "${namaMapel}" berhasil ditambahkan ke Supabase!`);
+            input.value = '';
+            await this.loadMapelFromSupabase();
+            this.populateDropdowns();
+            this.renderMapelTabList();
+          } catch (err) {
+            alert(`Gagal menambah mapel: ${err.message}`);
+          }
+        } else {
+          this.mapelList.push(namaMapel);
+          input.value = '';
+          this.populateDropdowns();
+          this.renderMapelTabList();
+        }
+      }
+
+      async deleteMapelFromSupabase(namaMapel) {
+        if (!confirm(`Hapus mata pelajaran "${namaMapel}" dari database?`)) return;
+
+        if (supabaseClient) {
+          try {
+            const { error } = await supabaseClient.from('mapel').delete().eq('nama_mapel', namaMapel);
+            if (error) throw error;
+
+            alert(`Mata pelajaran "${namaMapel}" berhasil dihapus.`);
+            await this.loadMapelFromSupabase();
+            this.populateDropdowns();
+            this.renderMapelTabList();
+          } catch (err) {
+            alert(`Gagal menghapus mapel: ${err.message}`);
+          }
+        } else {
+          this.mapelList = this.mapelList.filter(m => m !== namaMapel);
+          this.populateDropdowns();
+          this.renderMapelTabList();
+        }
+      }
+
+      renderMapelTabList() {
+        const container = document.getElementById('mapel-list-container');
+        if (!container) return;
+        container.innerHTML = '';
+
+        if (this.mapelList.length === 0) {
+          container.innerHTML = `<p class="text-xs text-gray-500 italic">Belum ada data mata pelajaran.</p>`;
+          return;
+        }
+
+        this.mapelList.forEach((m, idx) => {
+          const div = document.createElement('div');
+          div.className = "flex justify-between items-center p-3 border rounded bg-gray-50 text-xs";
+          div.innerHTML = `
+            <span class="font-bold text-gray-800">${idx + 1}. ${m}</span>
+            <button onclick="app.deleteMapelFromSupabase('${m.replace(/'/g, "\\'")}')" class="bg-red-600 hover:bg-red-700 text-white text-[10px] px-2.5 py-1 rounded font-bold">
+              Hapus Mapel
+            </button>
+          `;
+          container.appendChild(div);
+        });
       }
 
       async loadDaftarKelasFromSupabase() {
@@ -950,13 +1054,14 @@
       }
 
       switchAdminTab(tabName) {
-        ['monitoring', 'jadwal', 'rekap-nilai', 'upload-soal', 'siswa', 'bank-soal'].forEach(t => {
+        ['monitoring', 'jadwal', 'rekap-nilai', 'upload-soal', 'siswa', 'bank-soal', 'mapel'].forEach(t => {
           document.getElementById(`tab-${t}`)?.classList.add('hidden');
         });
         document.getElementById(`tab-${tabName}`)?.classList.remove('hidden');
         if (tabName === 'rekap-nilai') this.renderRekapNilai();
         if (tabName === 'monitoring') this.refreshMonitoringData();
         if (tabName === 'bank-soal') this.renderBankSoalList();
+        if (tabName === 'mapel') this.renderMapelTabList();
       }
 
       async fetchHasilUjianFromSupabase() {
@@ -1331,7 +1436,6 @@
         this.renderBankSoalList();
       }
 
-      // FUNGSI BARU: HAPUS SEMUA SOAL DALAM SATU MATA PELAJARAN
       async deleteSoalByMapel(mapelName) {
         const countMapel = this.questions.filter(q => q.mapel === mapelName).length;
         
@@ -1408,7 +1512,6 @@
               </div>
               
               <div class="flex items-center gap-2">
-                <!-- Tombol Hapus Seluruh Soal Mapel -->
                 <button onclick="event.stopPropagation(); app.deleteSoalByMapel('${mapelName.replace(/'/g, "\\'")}')" class="bg-red-600 hover:bg-red-700 text-white text-[11px] font-bold px-3 py-1.5 rounded shadow transition flex items-center gap-1">
                   🗑️ Hapus Soal Mapel Ini
                 </button>
