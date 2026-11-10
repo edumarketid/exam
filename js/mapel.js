@@ -18,7 +18,7 @@ const MapelModule = {
     container.innerHTML = '';
 
     if (!State.mapelList || State.mapelList.length === 0) {
-      container.innerHTML = `<p class="text-xs text-amber-600 italic">Belum ada data mata pelajaran di Supabase (atau RLS Supabase mengunci akses SELECT).</p>`;
+      container.innerHTML = `<p class="text-xs text-amber-600 italic">Belum ada data mata pelajaran di Supabase (atau tabel masih kosong).</p>`;
       return;
     }
 
@@ -63,7 +63,7 @@ const MapelModule = {
       input.value = '';
       await this.loadAndRender();
     } catch (err) {
-      alert(`Gagal menambah mapel: ${err.message}\n(Periksa Policy RLS INSERT pada Supabase)`);
+      alert(`Gagal menambah mapel: ${err.message}`);
     }
   },
 
