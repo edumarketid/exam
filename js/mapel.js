@@ -79,5 +79,5 @@ const MapelModule = {
   }
 };
 
-// Pastikan terdaftar global di browser
+// WAJIB: Daftarkan ke window agar dibaca app.js
 window.MapelModule = MapelModule;
