@@ -124,7 +124,7 @@
             <button onclick="app.switchAdminTab('jadwal')" class="px-3 py-1.5 text-xs rounded bg-purple-600 text-white font-medium">Jadwal Ujian</button>
             <button onclick="app.switchAdminTab('rekap-nilai')" class="px-3 py-1.5 text-xs rounded bg-emerald-600 text-white font-medium">Rekap & Cetak Nilai</button>
             <button onclick="app.switchAdminTab('upload-soal')" class="px-3 py-1.5 text-xs rounded bg-blue-600 text-white font-medium">Upload File Soal HTML</button>
-            <button onclick="app.switchAdminTab('bank-soal')" class="px-3 py-1.5 text-xs rounded bg-indigo-600 text-white font-medium">Bank Soal & Cetak Arsip</button>
+            <button onclick="app.switchAdminTab('bank-soal')" class="px-3 py-1.5 text-xs rounded bg-indigo-600 text-white font-medium">Bank Soal & Editor</button>
             <button onclick="app.switchAdminTab('siswa')" class="px-3 py-1.5 text-xs rounded bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium">Kartu Siswa</button>
           </div>
         </div>
@@ -142,7 +142,6 @@
             </button>
           </div>
 
-          <!-- KARTU RINGKASAN MONITORING -->
           <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div onclick="app.filterMonitoringStatus('BELUM')" class="cursor-pointer bg-gray-50 border border-gray-300 p-4 rounded-xl text-center shadow-sm hover:border-gray-500 transition">
               <span class="text-xs font-bold text-gray-500 uppercase block mb-1">Belum Tes</span>
@@ -162,7 +161,6 @@
             </div>
           </div>
 
-          <!-- TABEL DAFTAR MONITORING PESERTA -->
           <div class="space-y-3">
             <div class="flex flex-wrap justify-between items-center">
               <h4 class="font-bold text-xs text-gray-700 uppercase">Daftar Status Peserta Ujian:</h4>
@@ -192,15 +190,13 @@
                     <th class="border p-2 text-center">Aksi Pengawas</th>
                   </tr>
                 </thead>
-                <tbody id="monitoring-tbody">
-                  <!-- Dimuat secara dinamis -->
-                </tbody>
+                <tbody id="monitoring-tbody"></tbody>
               </table>
             </div>
           </div>
         </div>
 
-        <!-- TAB: PENGATURAN JADWAL & AKTIVASI SOAL -->
+        <!-- TAB: PENGATURAN JADWAL -->
         <div id="tab-jadwal" class="hidden bg-white p-6 rounded-lg shadow border space-y-6">
           <div class="border-b pb-4">
             <h3 class="font-bold text-md text-gray-800">Aktivasi & Roster Waktu Akses Ujian</h3>
@@ -246,7 +242,7 @@
           </div>
         </div>
 
-        <!-- TAB: REKAP & CETAK NILAI SISWA PER KELAS -->
+        <!-- TAB: REKAP & CETAK NILAI SISWA -->
         <div id="tab-rekap-nilai" class="hidden bg-white p-6 rounded-lg shadow border space-y-6">
           <div class="flex flex-wrap justify-between items-center border-b pb-4 gap-3 print:hidden">
             <div>
@@ -257,13 +253,11 @@
               <select id="rekap-filter-kelas" onchange="app.renderRekapNilai()" class="border px-3 py-1.5 rounded text-xs font-semibold bg-gray-50"></select>
               <select id="rekap-filter-mapel" onchange="app.renderRekapNilai()" class="border px-3 py-1.5 rounded text-xs font-semibold bg-gray-50"></select>
               <button onclick="app.printHasilUjian()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-1.5 rounded shadow transition flex items-center gap-1">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
                 Cetak Hasil Ujian (PDF)
               </button>
             </div>
           </div>
 
-          <!-- TABEL PRINT AREA REKAP NILAI -->
           <div id="print-area" class="space-y-4">
             <div class="hidden print:block text-center border-b pb-3">
               <h2 class="text-lg font-bold">PEMERINTAH PROVINSI SULAWESI TENGGARA</h2>
@@ -288,9 +282,7 @@
                     <th class="border p-2 text-center print:hidden">Aksi Reset</th>
                   </tr>
                 </thead>
-                <tbody id="rekap-nilai-tbody">
-                  <!-- Dimuat secara dinamis -->
-                </tbody>
+                <tbody id="rekap-nilai-tbody"></tbody>
               </table>
             </div>
 
@@ -343,27 +335,24 @@
           <div id="upload-log" class="hidden border rounded p-4 bg-gray-900 text-green-400 font-mono text-xs max-h-48 overflow-y-auto"></div>
         </div>
 
-        <!-- TAB: BANK SOAL & EDITING SOAL / GAMBAR / CETAK ARSIP -->
+        <!-- TAB: BANK SOAL & EDITOR GAMBAR SUPABASE STORAGE -->
         <div id="tab-bank-soal" class="hidden bg-white p-6 rounded-lg shadow border space-y-6">
           <div class="flex flex-wrap justify-between items-center border-b pb-4 gap-3 print:hidden">
             <div>
               <h3 class="font-bold text-md text-gray-800">Bank Soal, Editor & Cetak Berkas Ujian</h3>
-              <p class="text-xs text-gray-500">Edit teks soal, ganti gambar, ubah opsi jawaban, dan cetak naskah soal arsip fisik.</p>
+              <p class="text-xs text-gray-500">Edit teks soal, unggah gambar ke Supabase Storage, dan cetak naskah soal.</p>
             </div>
             <div class="flex flex-wrap items-center gap-2">
               <select id="bank-filter-kelas" onchange="app.renderBankSoalList()" class="border px-3 py-1.5 rounded text-xs font-semibold bg-gray-50"></select>
               <select id="bank-filter-mapel" onchange="app.renderBankSoalList()" class="border px-3 py-1.5 rounded text-xs font-semibold bg-gray-50"></select>
               <button onclick="app.printNaskahSoalArsip()" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-1.5 rounded shadow transition flex items-center gap-1">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
                 Cetak Berkas Soal (PDF)
               </button>
             </div>
           </div>
 
-          <!-- CONTAINER LIST SOAL & EDIT BUTTONS -->
           <div id="bank-soal-list" class="space-y-4 print:hidden"></div>
 
-          <!-- PRINT AREA ARSIP NASKAH SOAL FIZIK -->
           <div id="print-soal-area" class="hidden print:block space-y-4">
             <div class="text-center border-b-2 border-black pb-3">
               <h2 class="text-lg font-bold">PEMERINTAH PROVINSI SULAWESI TENGGARA</h2>
@@ -401,7 +390,6 @@
 
       <!-- SCREEN 3: EXAM INTERFACE (Siswa) -->
       <section id="screen-exam" class="hidden space-y-4">
-        <!-- Top Banner Ujian -->
         <div class="bg-white p-4 rounded-lg shadow border flex justify-between items-center">
           <div>
             <h2 id="exam-mapel-title" class="font-bold text-md text-blue-900">Mata Pelajaran Ujian</h2>
@@ -414,7 +402,6 @@
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
-          <!-- Soal Container (3/4) -->
           <div class="lg:col-span-3 bg-white p-6 rounded-lg shadow border flex flex-col justify-between min-h-[400px]">
             <div>
               <div class="flex justify-between items-center border-b pb-2 mb-4">
@@ -433,7 +420,6 @@
             </div>
           </div>
 
-          <!-- Navigasi Nomor Soal (1/4) -->
           <div class="bg-white p-4 rounded-lg shadow border">
             <h3 class="font-bold text-xs text-gray-600 uppercase mb-3">Navigasi Nomor Soal</h3>
             <div id="question-grid" class="grid grid-cols-5 gap-2 text-xs font-bold"></div>
@@ -444,11 +430,11 @@
     </main>
   </div>
 
-  <!-- MODAL EDIT SOAL & GAMBAR -->
+  <!-- MODAL EDIT SOAL & GAMBAR DENGAN SUPABASE STORAGE INTEGRATION -->
   <div id="modal-edit-soal" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 overflow-y-auto">
-    <div class="bg-white rounded-xl max-w-2xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+    <div class="bg-white rounded-xl max-w-3xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
       <div class="flex justify-between items-center border-b pb-3">
-        <h3 class="text-md font-bold text-gray-800">Edit Soal, Opsi Jawaban & Gambar</h3>
+        <h3 class="text-md font-bold text-gray-800">Edit Soal & Unggah Gambar (Supabase Storage)</h3>
         <button onclick="app.closeEditModal()" class="text-gray-500 hover:text-gray-700 text-lg font-bold">&times;</button>
       </div>
 
@@ -471,41 +457,80 @@
           <textarea id="edit-soal-html" rows="3" required class="w-full border p-2 font-mono rounded focus:ring-2 focus:ring-blue-500"></textarea>
         </div>
 
-        <!-- FITUR GANTI / UPLOAD GAMBAR SOAL -->
+        <!-- UPLOAD GAMBAR SOAL KE SUPABASE STORAGE -->
         <div class="bg-blue-50 border border-blue-200 p-3 rounded space-y-2">
-          <label class="block font-bold text-blue-900">Ganti / Sisipkan Gambar Soal</label>
+          <label class="block font-bold text-blue-900">Upload / Ganti Gambar Soal (Supabase Storage)</label>
           <div class="flex items-center gap-2">
-            <input type="file" id="edit-soal-img-file" accept="image/*" onchange="app.handleSoalImageUpload(event)" class="border bg-white p-1 rounded text-xs max-w-xs">
-            <span class="text-gray-400">atau URL:</span>
-            <input type="text" id="edit-soal-img-url" placeholder="https://..." class="border px-2 py-1 rounded flex-grow text-xs">
-            <button type="button" onclick="app.applySoalImageUrl()" class="bg-blue-600 text-white px-2.5 py-1 rounded font-bold">Pasang</button>
+            <input type="file" id="edit-soal-img-file" accept="image/*" class="border bg-white p-1 rounded text-xs max-w-xs">
+            <button type="button" onclick="app.uploadImageToStorage('edit-soal-img-file', 'edit-soal-html')" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded font-bold transition">
+              Upload Gambar Soal
+            </button>
           </div>
         </div>
 
-        <!-- EDIT OPSI A-E -->
+        <!-- EDIT OPSI A-E BESERTA UPLOAD GAMBAR OPSI -->
         <div class="space-y-3 pt-2 border-t">
-          <label class="block font-bold text-gray-800">Opsi Jawaban A, B, C, D, E & Gambar Opsi:</label>
+          <label class="block font-bold text-gray-800">Opsi Jawaban & Upload Gambar Opsi:</label>
           
-          <div class="space-y-2">
-            <div>
+          <div class="space-y-3">
+            <!-- OPSI A -->
+            <div class="border p-2 rounded bg-gray-50 space-y-1">
               <span class="font-bold text-blue-800">Opsi A:</span>
-              <input type="text" id="edit-opsi-a" required class="w-full border px-3 py-1.5 rounded mt-0.5">
+              <input type="text" id="edit-opsi-a" required class="w-full border px-2 py-1 rounded">
+              <div class="flex items-center gap-2 pt-1">
+                <input type="file" id="edit-opsi-a-img" accept="image/*" class="text-[10px] bg-white border p-0.5 rounded">
+                <button type="button" onclick="app.uploadImageToStorage('edit-opsi-a-img', 'edit-opsi-a')" class="bg-gray-700 text-white text-[10px] px-2 py-0.5 rounded font-bold">
+                  Upload Gambar Opsi A
+                </button>
+              </div>
             </div>
-            <div>
+
+            <!-- OPSI B -->
+            <div class="border p-2 rounded bg-gray-50 space-y-1">
               <span class="font-bold text-blue-800">Opsi B:</span>
-              <input type="text" id="edit-opsi-b" required class="w-full border px-3 py-1.5 rounded mt-0.5">
+              <input type="text" id="edit-opsi-b" required class="w-full border px-2 py-1 rounded">
+              <div class="flex items-center gap-2 pt-1">
+                <input type="file" id="edit-opsi-b-img" accept="image/*" class="text-[10px] bg-white border p-0.5 rounded">
+                <button type="button" onclick="app.uploadImageToStorage('edit-opsi-b-img', 'edit-opsi-b')" class="bg-gray-700 text-white text-[10px] px-2 py-0.5 rounded font-bold">
+                  Upload Gambar Opsi B
+                </button>
+              </div>
             </div>
-            <div>
+
+            <!-- OPSI C -->
+            <div class="border p-2 rounded bg-gray-50 space-y-1">
               <span class="font-bold text-blue-800">Opsi C:</span>
-              <input type="text" id="edit-opsi-c" required class="w-full border px-3 py-1.5 rounded mt-0.5">
+              <input type="text" id="edit-opsi-c" required class="w-full border px-2 py-1 rounded">
+              <div class="flex items-center gap-2 pt-1">
+                <input type="file" id="edit-opsi-c-img" accept="image/*" class="text-[10px] bg-white border p-0.5 rounded">
+                <button type="button" onclick="app.uploadImageToStorage('edit-opsi-c-img', 'edit-opsi-c')" class="bg-gray-700 text-white text-[10px] px-2 py-0.5 rounded font-bold">
+                  Upload Gambar Opsi C
+                </button>
+              </div>
             </div>
-            <div>
+
+            <!-- OPSI D -->
+            <div class="border p-2 rounded bg-gray-50 space-y-1">
               <span class="font-bold text-blue-800">Opsi D:</span>
-              <input type="text" id="edit-opsi-d" required class="w-full border px-3 py-1.5 rounded mt-0.5">
+              <input type="text" id="edit-opsi-d" required class="w-full border px-2 py-1 rounded">
+              <div class="flex items-center gap-2 pt-1">
+                <input type="file" id="edit-opsi-d-img" accept="image/*" class="text-[10px] bg-white border p-0.5 rounded">
+                <button type="button" onclick="app.uploadImageToStorage('edit-opsi-d-img', 'edit-opsi-d')" class="bg-gray-700 text-white text-[10px] px-2 py-0.5 rounded font-bold">
+                  Upload Gambar Opsi D
+                </button>
+              </div>
             </div>
-            <div>
+
+            <!-- OPSI E -->
+            <div class="border p-2 rounded bg-gray-50 space-y-1">
               <span class="font-bold text-blue-800">Opsi E:</span>
-              <input type="text" id="edit-opsi-e" required class="w-full border px-3 py-1.5 rounded mt-0.5">
+              <input type="text" id="edit-opsi-e" required class="w-full border px-2 py-1 rounded">
+              <div class="flex items-center gap-2 pt-1">
+                <input type="file" id="edit-opsi-e-img" accept="image/*" class="text-[10px] bg-white border p-0.5 rounded">
+                <button type="button" onclick="app.uploadImageToStorage('edit-opsi-e-img', 'edit-opsi-e')" class="bg-gray-700 text-white text-[10px] px-2 py-0.5 rounded font-bold">
+                  Upload Gambar Opsi E
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1265,7 +1290,6 @@
         }
       }
 
-      // RENDER BANK SOAL & FITUR EDIT MODAL
       renderBankSoalList() {
         const container = document.getElementById('bank-soal-list');
         const filterKelas = document.getElementById('bank-filter-kelas')?.value || 'ALL';
@@ -1318,7 +1342,6 @@
         });
       }
 
-      // INTEGRASI EDIT MODAL & GAMBAR
       openEditModal(qId) {
         const q = this.questions.find(item => (item.id || this.questions.indexOf(item)) == qId);
         if (!q) return;
@@ -1342,25 +1365,58 @@
         document.getElementById('modal-edit-soal').classList.add('hidden');
       }
 
-      handleSoalImageUpload(e) {
-        const file = e.target.files[0];
-        if (file) {
-          const reader = new FileReader();
-          reader.onload = (event) => {
-            const base64Img = event.target.result;
-            const imgTag = `<br><img src="${base64Img}" alt="Gambar Soal" class="my-2 rounded border max-h-48">`;
-            document.getElementById('edit-soal-html').value += imgTag;
-          };
-          reader.readAsDataURL(file);
-        }
-      }
+      // INTEGRASI UTAMA UPLOAD GAMBAR KE SUPABASE STORAGE
+      async uploadImageToStorage(fileInputId, targetFieldId) {
+        const fileInput = document.getElementById(fileInputId);
+        const file = fileInput.files[0];
 
-      applySoalImageUrl() {
-        const url = document.getElementById('edit-soal-img-url').value.trim();
-        if (url) {
-          const imgTag = `<br><img src="${url}" alt="Gambar Soal" class="my-2 rounded border max-h-48">`;
-          document.getElementById('edit-soal-html').value += imgTag;
-          document.getElementById('edit-soal-img-url').value = '';
+        if (!file) {
+          alert("Silakan pilih file gambar terlebih dahulu.");
+          return;
+        }
+
+        if (!supabaseClient) {
+          alert("Koneksi Supabase tidak aktif. Menggunakan mode fallback lokal.");
+          return;
+        }
+
+        try {
+          const fileExt = file.name.split('.').pop();
+          const fileName = `img_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
+          const filePath = `${fileName}`;
+
+          // Upload ke Bucket 'soal-images'
+          const { data, error } = await supabaseClient.storage
+            .from('soal-images')
+            .upload(filePath, file, { cacheControl: '3600', upsert: true });
+
+          if (error) throw error;
+
+          // Dapatkan Public URL Gambar
+          const { data: publicUrlData } = supabaseClient.storage
+            .from('soal-images')
+            .getPublicUrl(filePath);
+
+          const publicUrl = publicUrlData.publicUrl;
+          const targetElem = document.getElementById(targetFieldId);
+
+          if (targetFieldId === 'edit-soal-html') {
+            // Jika target adalah Soal HTML
+            if (targetElem.value.includes('<img')) {
+              targetElem.value = targetElem.value.replace(/<img[^>]*>/g, `<img src="${publicUrl}" alt="Gambar Soal" class="my-2 rounded border max-h-48">`);
+            } else {
+              targetElem.value += `<br><img src="${publicUrl}" alt="Gambar Soal" class="my-2 rounded border max-h-48">`;
+            }
+          } else {
+            // Jika target adalah Opsi Jawaban (A-E)
+            targetElem.value += ` <img src="${publicUrl}" alt="Gambar Opsi" class="inline-block max-h-24 my-1 rounded border">`;
+          }
+
+          alert("Gambar berhasil diunggah ke Supabase Storage!");
+          fileInput.value = ''; // Reset file input
+
+        } catch (err) {
+          alert(`Gagal mengunggah gambar ke Storage: ${err.message}`);
         }
       }
 
@@ -1377,40 +1433,31 @@
         const opsi_e = document.getElementById('edit-opsi-e').value;
         const kunci_jawaban = document.getElementById('edit-soal-kunci').value;
 
-        if (supabaseClient && typeof parseInt(qId) === 'number') {
+        if (supabaseClient && qId) {
           try {
             const { error } = await supabaseClient
               .from('bank_soal')
               .update({ mapel, kelas, soal_html, opsi_a, opsi_b, opsi_c, opsi_d, opsi_e, kunci_jawaban })
-              .eq('id', qId);
+              .eq('id', parseInt(qId));
 
             if (error) throw error;
             alert("Soal & Gambar berhasil diperbarui di Supabase!");
             await this.fetchBankSoalFromSupabase();
+            this.closeEditModal();
           } catch (err) {
             alert(`Gagal menyimpan perubahan: ${err.message}`);
           }
         } else {
-          const q = this.questions.find((item, idx) => (item.id || idx) == qId);
-          if (q) {
-            q.mapel = mapel;
-            q.kelas = kelas;
-            q.soal_html = soal_html;
-            q.opsi_a = opsi_a;
-            q.opsi_b = opsi_b;
-            q.opsi_c = opsi_c;
-            q.opsi_d = opsi_d;
-            q.opsi_e = opsi_e;
-            q.kunci_jawaban = kunci_jawaban;
+          const index = this.questions.findIndex((q, idx) => (q.id || idx) == qId);
+          if (index !== -1) {
+            this.questions[index] = { ...this.questions[index], mapel, kelas, soal_html, opsi_a, opsi_b, opsi_c, opsi_d, opsi_e, kunci_jawaban };
             alert("Soal berhasil diperbarui di memori lokal.");
             this.renderBankSoalList();
+            this.closeEditModal();
           }
         }
-
-        this.closeEditModal();
       }
 
-      // FITUR CETAK NASKAH ARSIP SOAL BERKAS FIZIK
       printNaskahSoalArsip() {
         const filterKelas = document.getElementById('bank-filter-kelas').value;
         const filterMapel = document.getElementById('bank-filter-mapel').value;
