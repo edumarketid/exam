@@ -30,10 +30,10 @@
       body * {
         visibility: hidden;
       }
-      #print-area, #print-area * {
+      #print-area, #print-area *, #print-soal-area, #print-soal-area * {
         visibility: visible;
       }
-      #print-area {
+      #print-area, #print-soal-area {
         position: absolute;
         left: 0;
         top: 0;
@@ -117,15 +117,15 @@
 
       <!-- SCREEN 2: ADMIN DASHBOARD -->
       <section id="screen-admin" class="hidden space-y-6">
-        <div class="flex flex-wrap justify-between items-center bg-white p-4 rounded-lg shadow border gap-3">
+        <div class="flex flex-wrap justify-between items-center bg-white p-4 rounded-lg shadow border gap-3 print:hidden">
           <h2 class="text-lg font-bold text-gray-800">Dashboard Pengelolaan Ujian</h2>
           <div class="flex flex-wrap gap-2">
             <button onclick="app.switchAdminTab('monitoring')" class="px-3 py-1.5 text-xs rounded bg-red-600 text-white font-medium">Live Monitoring Tes</button>
             <button onclick="app.switchAdminTab('jadwal')" class="px-3 py-1.5 text-xs rounded bg-purple-600 text-white font-medium">Jadwal Ujian</button>
             <button onclick="app.switchAdminTab('rekap-nilai')" class="px-3 py-1.5 text-xs rounded bg-emerald-600 text-white font-medium">Rekap & Cetak Nilai</button>
             <button onclick="app.switchAdminTab('upload-soal')" class="px-3 py-1.5 text-xs rounded bg-blue-600 text-white font-medium">Upload File Soal HTML</button>
+            <button onclick="app.switchAdminTab('bank-soal')" class="px-3 py-1.5 text-xs rounded bg-indigo-600 text-white font-medium">Bank Soal & Cetak Arsip</button>
             <button onclick="app.switchAdminTab('siswa')" class="px-3 py-1.5 text-xs rounded bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium">Kartu Siswa</button>
-            <button onclick="app.switchAdminTab('bank-soal')" class="px-3 py-1.5 text-xs rounded bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium">Bank Soal</button>
           </div>
         </div>
 
@@ -343,6 +343,45 @@
           <div id="upload-log" class="hidden border rounded p-4 bg-gray-900 text-green-400 font-mono text-xs max-h-48 overflow-y-auto"></div>
         </div>
 
+        <!-- TAB: BANK SOAL & EDITING SOAL / GAMBAR / CETAK ARSIP -->
+        <div id="tab-bank-soal" class="hidden bg-white p-6 rounded-lg shadow border space-y-6">
+          <div class="flex flex-wrap justify-between items-center border-b pb-4 gap-3 print:hidden">
+            <div>
+              <h3 class="font-bold text-md text-gray-800">Bank Soal, Editor & Cetak Berkas Ujian</h3>
+              <p class="text-xs text-gray-500">Edit teks soal, ganti gambar, ubah opsi jawaban, dan cetak naskah soal arsip fisik.</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <select id="bank-filter-kelas" onchange="app.renderBankSoalList()" class="border px-3 py-1.5 rounded text-xs font-semibold bg-gray-50"></select>
+              <select id="bank-filter-mapel" onchange="app.renderBankSoalList()" class="border px-3 py-1.5 rounded text-xs font-semibold bg-gray-50"></select>
+              <button onclick="app.printNaskahSoalArsip()" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-1.5 rounded shadow transition flex items-center gap-1">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+                Cetak Berkas Soal (PDF)
+              </button>
+            </div>
+          </div>
+
+          <!-- CONTAINER LIST SOAL & EDIT BUTTONS -->
+          <div id="bank-soal-list" class="space-y-4 print:hidden"></div>
+
+          <!-- PRINT AREA ARSIP NASKAH SOAL FIZIK -->
+          <div id="print-soal-area" class="hidden print:block space-y-4">
+            <div class="text-center border-b-2 border-black pb-3">
+              <h2 class="text-lg font-bold">PEMERINTAH PROVINSI SULAWESI TENGGARA</h2>
+              <h3 class="text-md font-bold">SMK NEGERI 1 WAKATOBI</h3>
+              <p class="text-xs">NASKAH SOAL PENILAIAN SUMATIF SEMESTER GANJIL TA 2026/2027</p>
+              <p id="print-soal-meta" class="text-xs font-semibold text-gray-800 mt-1"></p>
+            </div>
+
+            <div class="border p-3 rounded text-xs space-y-1 mb-4">
+              <strong>PETUNJUK UMUM:</strong>
+              <p>1. Bacalah setiap butir soal dengan teliti sebelum menjawab.</p>
+              <p>2. Pilihlah salah satu jawaban A, B, C, D, atau E yang paling benar pada lembar jawaban.</p>
+            </div>
+
+            <div id="print-soal-content-container" class="space-y-6 text-xs"></div>
+          </div>
+        </div>
+
         <!-- TAB: DATA & KARTU UJIAN SISWA -->
         <div id="tab-siswa" class="hidden bg-white p-6 rounded-lg shadow border space-y-6">
           <div class="flex flex-wrap justify-between items-center border-b pb-4 gap-3">
@@ -357,15 +396,6 @@
             </div>
           </div>
           <div id="cards-container" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
-        </div>
-
-        <!-- TAB: BANK SOAL TERSIMPAN -->
-        <div id="tab-bank-soal" class="hidden bg-white p-6 rounded-lg shadow border space-y-4">
-          <div class="flex justify-between items-center border-b pb-3">
-            <h3 class="font-bold text-md text-gray-800">Bank Soal Tersimpan (<span id="total-soal-count">0</span>)</h3>
-            <button onclick="app.fetchBankSoalFromSupabase()" class="text-xs bg-gray-200 hover:bg-gray-300 px-3 py-1 rounded">Refresh Data</button>
-          </div>
-          <div id="bank-soal-list" class="space-y-3 max-h-96 overflow-y-auto pr-2"></div>
         </div>
       </section>
 
@@ -412,6 +442,91 @@
       </section>
 
     </main>
+  </div>
+
+  <!-- MODAL EDIT SOAL & GAMBAR -->
+  <div id="modal-edit-soal" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 overflow-y-auto">
+    <div class="bg-white rounded-xl max-w-2xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center border-b pb-3">
+        <h3 class="text-md font-bold text-gray-800">Edit Soal, Opsi Jawaban & Gambar</h3>
+        <button onclick="app.closeEditModal()" class="text-gray-500 hover:text-gray-700 text-lg font-bold">&times;</button>
+      </div>
+
+      <form onsubmit="app.saveEditedSoal(event)" class="space-y-4 text-xs">
+        <input type="hidden" id="edit-soal-id">
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold text-gray-700 mb-1">Mata Pelajaran</label>
+            <input type="text" id="edit-soal-mapel" required class="w-full border px-3 py-2 rounded">
+          </div>
+          <div>
+            <label class="block font-bold text-gray-700 mb-1">Kelas Target</label>
+            <input type="text" id="edit-soal-kelas" required class="w-full border px-3 py-2 rounded">
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-bold text-gray-700 mb-1">Konten Soal (Format HTML)</label>
+          <textarea id="edit-soal-html" rows="3" required class="w-full border p-2 font-mono rounded focus:ring-2 focus:ring-blue-500"></textarea>
+        </div>
+
+        <!-- FITUR GANTI / UPLOAD GAMBAR SOAL -->
+        <div class="bg-blue-50 border border-blue-200 p-3 rounded space-y-2">
+          <label class="block font-bold text-blue-900">Ganti / Sisipkan Gambar Soal</label>
+          <div class="flex items-center gap-2">
+            <input type="file" id="edit-soal-img-file" accept="image/*" onchange="app.handleSoalImageUpload(event)" class="border bg-white p-1 rounded text-xs max-w-xs">
+            <span class="text-gray-400">atau URL:</span>
+            <input type="text" id="edit-soal-img-url" placeholder="https://..." class="border px-2 py-1 rounded flex-grow text-xs">
+            <button type="button" onclick="app.applySoalImageUrl()" class="bg-blue-600 text-white px-2.5 py-1 rounded font-bold">Pasang</button>
+          </div>
+        </div>
+
+        <!-- EDIT OPSI A-E -->
+        <div class="space-y-3 pt-2 border-t">
+          <label class="block font-bold text-gray-800">Opsi Jawaban A, B, C, D, E & Gambar Opsi:</label>
+          
+          <div class="space-y-2">
+            <div>
+              <span class="font-bold text-blue-800">Opsi A:</span>
+              <input type="text" id="edit-opsi-a" required class="w-full border px-3 py-1.5 rounded mt-0.5">
+            </div>
+            <div>
+              <span class="font-bold text-blue-800">Opsi B:</span>
+              <input type="text" id="edit-opsi-b" required class="w-full border px-3 py-1.5 rounded mt-0.5">
+            </div>
+            <div>
+              <span class="font-bold text-blue-800">Opsi C:</span>
+              <input type="text" id="edit-opsi-c" required class="w-full border px-3 py-1.5 rounded mt-0.5">
+            </div>
+            <div>
+              <span class="font-bold text-blue-800">Opsi D:</span>
+              <input type="text" id="edit-opsi-d" required class="w-full border px-3 py-1.5 rounded mt-0.5">
+            </div>
+            <div>
+              <span class="font-bold text-blue-800">Opsi E:</span>
+              <input type="text" id="edit-opsi-e" required class="w-full border px-3 py-1.5 rounded mt-0.5">
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-bold text-gray-700 mb-1">Kunci Jawaban</label>
+          <select id="edit-soal-kunci" class="w-full border px-3 py-2 rounded font-bold text-emerald-700">
+            <option value="A">A</option>
+            <option value="B">B</option>
+            <option value="C">C</option>
+            <option value="D">D</option>
+            <option value="E">E</option>
+          </select>
+        </div>
+
+        <div class="flex justify-end gap-2 border-t pt-3">
+          <button type="button" onclick="app.closeEditModal()" class="bg-gray-400 hover:bg-gray-500 text-white font-bold px-4 py-2 rounded">Batal</button>
+          <button type="submit" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2 rounded">Simpan Perubahan</button>
+        </div>
+      </form>
+    </div>
   </div>
 
   <!-- MODAL WARNING KECURANGAN -->
@@ -537,17 +652,20 @@
         const selectMapelUpload = document.getElementById('select-upload-mapel');
         const selectMapelJadwal = document.getElementById('jadwal-mapel');
         const selectMapelRekap = document.getElementById('rekap-filter-mapel');
+        const selectMapelBank = document.getElementById('bank-filter-mapel');
         
         const mapelOpts = this.mapelList.map(m => `<option value="${m}">${m}</option>`).join('');
         if (selectMapelUpload) selectMapelUpload.innerHTML = mapelOpts;
         if (selectMapelJadwal) selectMapelJadwal.innerHTML = mapelOpts;
         if (selectMapelRekap) selectMapelRekap.innerHTML = `<option value="ALL">Semua Mapel</option>` + mapelOpts;
+        if (selectMapelBank) selectMapelBank.innerHTML = `<option value="ALL">Semua Mapel</option>` + mapelOpts;
 
         const selectKelasUpload = document.getElementById('select-upload-kelas');
         const selectKelasJadwal = document.getElementById('jadwal-kelas');
         const selectKelasKartu = document.getElementById('filter-kelas-kartu');
         const selectKelasRekap = document.getElementById('rekap-filter-kelas');
         const selectKelasMon = document.getElementById('monitoring-filter-kelas');
+        const selectKelasBank = document.getElementById('bank-filter-kelas');
 
         const kelasOpts = this.kelasOptions.map(k => `<option value="${k}">${k}</option>`).join('');
         if (selectKelasUpload) selectKelasUpload.innerHTML = kelasOpts;
@@ -555,6 +673,7 @@
         if (selectKelasKartu) selectKelasKartu.innerHTML = `<option value="ALL">Semua Kelas</option>` + kelasOpts;
         if (selectKelasRekap) selectKelasRekap.innerHTML = `<option value="ALL">Semua Kelas</option>` + kelasOpts;
         if (selectKelasMon) selectKelasMon.innerHTML = `<option value="ALL">Semua Kelas Target</option>` + kelasOpts;
+        if (selectKelasBank) selectKelasBank.innerHTML = `<option value="ALL">Semua Kelas</option>` + kelasOpts;
       }
 
       // MONITORING & STATISTIK REALTIME
@@ -613,7 +732,6 @@
             statusTag = `<span class="px-2 py-0.5 rounded font-bold bg-gray-100 text-gray-700">Belum Mulai</span>`;
           }
 
-          // Filter tampilan tabel
           if (filterStatus !== 'ALL' && filterStatus !== statusCategory) return;
 
           const tr = document.createElement('tr');
@@ -637,14 +755,12 @@
           tbody.appendChild(tr);
         });
 
-        // Update Kartu Statistika
         document.getElementById('count-stat-belum').textContent = countBelum;
         document.getElementById('count-stat-kerjakan').textContent = countKerjakan;
         document.getElementById('count-stat-kecurangan').textContent = countKecurangan;
         document.getElementById('count-stat-selesai').textContent = countSelesai;
       }
 
-      // HAPUS / RESET JAWABAN SISWA
       async resetJawabanSiswa(idSiswa, namaSiswa) {
         if (!confirm(`HAPUS JAWABAN SISWA?\n\nApakah Anda yakin ingin menghapus seluruh riwayat jawaban & diskualifikasi untuk siswa: "${namaSiswa}"?\n\nSiswa akan diizinkan untuk login dan mengulang tes dari awal.`)) {
           return;
@@ -672,7 +788,6 @@
         }
       }
 
-      // FITUR PENGATURAN JADWAL UJIAN
       saveJadwalUjian(e) {
         e.preventDefault();
         const mapel = document.getElementById('jadwal-mapel').value;
@@ -794,6 +909,7 @@
         document.getElementById(`tab-${tabName}`)?.classList.remove('hidden');
         if (tabName === 'rekap-nilai') this.renderRekapNilai();
         if (tabName === 'monitoring') this.refreshMonitoringData();
+        if (tabName === 'bank-soal') this.renderBankSoalList();
       }
 
       async fetchHasilUjianFromSupabase() {
@@ -1149,29 +1265,190 @@
         }
       }
 
+      // RENDER BANK SOAL & FITUR EDIT MODAL
       renderBankSoalList() {
         const container = document.getElementById('bank-soal-list');
+        const filterKelas = document.getElementById('bank-filter-kelas')?.value || 'ALL';
+        const filterMapel = document.getElementById('bank-filter-mapel')?.value || 'ALL';
         if (!container) return;
-        document.getElementById('total-soal-count').textContent = this.questions.length;
-        container.innerHTML = '';
 
-        this.questions.forEach((q, idx) => {
+        container.innerHTML = '';
+        let filtered = this.questions;
+
+        if (filterKelas !== 'ALL') filtered = filtered.filter(q => q.kelas === filterKelas);
+        if (filterMapel !== 'ALL') filtered = filtered.filter(q => q.mapel === filterMapel);
+
+        if (filtered.length === 0) {
+          container.innerHTML = `<div class="text-xs text-gray-500 italic p-4 text-center border rounded">Tidak ada soal ditemukan untuk filter ini.</div>`;
+          return;
+        }
+
+        filtered.forEach((q, idx) => {
+          const qId = q.id || idx;
           const item = document.createElement('div');
-          item.className = "border p-3 rounded bg-gray-50 flex justify-between items-start gap-4 text-xs";
+          item.className = "border p-4 rounded-lg bg-gray-50 space-y-3 text-xs";
           item.innerHTML = `
-            <div>
-              <span class="font-bold text-blue-700">[${q.kelas}] ${q.mapel}</span>
-              <div class="mt-1 font-sans">${q.soal_html}</div>
-              <div class="text-gray-500 mt-1">Kunci: <strong class="text-emerald-700">${q.kunci_jawaban}</strong></div>
+            <div class="flex justify-between items-start gap-4 border-b pb-2">
+              <div>
+                <span class="font-bold text-blue-800">[${q.kelas}] ${q.mapel}</span>
+                <span class="ml-2 font-bold text-emerald-800">Kunci: ${q.kunci_jawaban}</span>
+              </div>
+              <div class="flex gap-2">
+                <button onclick="app.openEditModal(${qId})" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-2.5 py-1 rounded text-[10px] flex items-center gap-1">
+                  ✏️ Edit Soal & Gambar
+                </button>
+                <button onclick="app.deleteSoal(${qId})" class="bg-red-500 hover:bg-red-600 text-white font-bold px-2.5 py-1 rounded text-[10px]">
+                  Hapus
+                </button>
+              </div>
             </div>
-            <button onclick="app.deleteSoal(${q.id || idx})" class="bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded text-[10px]">Hapus</button>
+
+            <div class="font-sans space-y-2">
+              <div class="font-medium">${q.soal_html}</div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-1 text-gray-700 font-sans pt-1">
+                <div><strong>A.</strong> ${q.opsi_a}</div>
+                <div><strong>B.</strong> ${q.opsi_b}</div>
+                <div><strong>C.</strong> ${q.opsi_c}</div>
+                <div><strong>D.</strong> ${q.opsi_d}</div>
+                <div class="md:col-span-2"><strong>E.</strong> ${q.opsi_e}</div>
+              </div>
+            </div>
           `;
           container.appendChild(item);
         });
       }
 
+      // INTEGRASI EDIT MODAL & GAMBAR
+      openEditModal(qId) {
+        const q = this.questions.find(item => (item.id || this.questions.indexOf(item)) == qId);
+        if (!q) return;
+
+        document.getElementById('edit-soal-id').value = qId;
+        document.getElementById('edit-soal-mapel').value = q.mapel;
+        document.getElementById('edit-soal-kelas').value = q.kelas;
+        document.getElementById('edit-soal-html').value = q.soal_html;
+        
+        document.getElementById('edit-opsi-a').value = q.opsi_a;
+        document.getElementById('edit-opsi-b').value = q.opsi_b;
+        document.getElementById('edit-opsi-c').value = q.opsi_c;
+        document.getElementById('edit-opsi-d').value = q.opsi_d;
+        document.getElementById('edit-opsi-e').value = q.opsi_e;
+        document.getElementById('edit-soal-kunci').value = q.kunci_jawaban;
+
+        document.getElementById('modal-edit-soal').classList.remove('hidden');
+      }
+
+      closeEditModal() {
+        document.getElementById('modal-edit-soal').classList.add('hidden');
+      }
+
+      handleSoalImageUpload(e) {
+        const file = e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            const base64Img = event.target.result;
+            const imgTag = `<br><img src="${base64Img}" alt="Gambar Soal" class="my-2 rounded border max-h-48">`;
+            document.getElementById('edit-soal-html').value += imgTag;
+          };
+          reader.readAsDataURL(file);
+        }
+      }
+
+      applySoalImageUrl() {
+        const url = document.getElementById('edit-soal-img-url').value.trim();
+        if (url) {
+          const imgTag = `<br><img src="${url}" alt="Gambar Soal" class="my-2 rounded border max-h-48">`;
+          document.getElementById('edit-soal-html').value += imgTag;
+          document.getElementById('edit-soal-img-url').value = '';
+        }
+      }
+
+      async saveEditedSoal(e) {
+        e.preventDefault();
+        const qId = document.getElementById('edit-soal-id').value;
+        const mapel = document.getElementById('edit-soal-mapel').value;
+        const kelas = document.getElementById('edit-soal-kelas').value;
+        const soal_html = document.getElementById('edit-soal-html').value;
+        const opsi_a = document.getElementById('edit-opsi-a').value;
+        const opsi_b = document.getElementById('edit-opsi-b').value;
+        const opsi_c = document.getElementById('edit-opsi-c').value;
+        const opsi_d = document.getElementById('edit-opsi-d').value;
+        const opsi_e = document.getElementById('edit-opsi-e').value;
+        const kunci_jawaban = document.getElementById('edit-soal-kunci').value;
+
+        if (supabaseClient && typeof parseInt(qId) === 'number') {
+          try {
+            const { error } = await supabaseClient
+              .from('bank_soal')
+              .update({ mapel, kelas, soal_html, opsi_a, opsi_b, opsi_c, opsi_d, opsi_e, kunci_jawaban })
+              .eq('id', qId);
+
+            if (error) throw error;
+            alert("Soal & Gambar berhasil diperbarui di Supabase!");
+            await this.fetchBankSoalFromSupabase();
+          } catch (err) {
+            alert(`Gagal menyimpan perubahan: ${err.message}`);
+          }
+        } else {
+          const q = this.questions.find((item, idx) => (item.id || idx) == qId);
+          if (q) {
+            q.mapel = mapel;
+            q.kelas = kelas;
+            q.soal_html = soal_html;
+            q.opsi_a = opsi_a;
+            q.opsi_b = opsi_b;
+            q.opsi_c = opsi_c;
+            q.opsi_d = opsi_d;
+            q.opsi_e = opsi_e;
+            q.kunci_jawaban = kunci_jawaban;
+            alert("Soal berhasil diperbarui di memori lokal.");
+            this.renderBankSoalList();
+          }
+        }
+
+        this.closeEditModal();
+      }
+
+      // FITUR CETAK NASKAH ARSIP SOAL BERKAS FIZIK
+      printNaskahSoalArsip() {
+        const filterKelas = document.getElementById('bank-filter-kelas').value;
+        const filterMapel = document.getElementById('bank-filter-mapel').value;
+        const container = document.getElementById('print-soal-content-container');
+        if (!container) return;
+
+        container.innerHTML = '';
+        let filtered = this.questions;
+
+        if (filterKelas !== 'ALL') filtered = filtered.filter(q => q.kelas === filterKelas);
+        if (filterMapel !== 'ALL') filtered = filtered.filter(q => q.mapel === filterMapel);
+
+        document.getElementById('print-soal-meta').textContent = `Mata Pelajaran: ${filterMapel} | Kelas Target: ${filterKelas} | Alokasi Waktu: 45 Menit`;
+
+        filtered.forEach((q, idx) => {
+          const item = document.createElement('div');
+          item.className = "border-b pb-4 space-y-2";
+          item.innerHTML = `
+            <div class="flex gap-2 font-bold">
+              <span>${idx + 1}.</span>
+              <div>${q.soal_html}</div>
+            </div>
+            <div class="pl-5 space-y-1">
+              <div>A. ${q.opsi_a}</div>
+              <div>B. ${q.opsi_b}</div>
+              <div>C. ${q.opsi_c}</div>
+              <div>D. ${q.opsi_d}</div>
+              <div>E. ${q.opsi_e}</div>
+            </div>
+          `;
+          container.appendChild(item);
+        });
+
+        window.print();
+      }
+
       async deleteSoal(id) {
-        if (confirm("Hapus soal ini?")) {
+        if (confirm("Hapus soal ini dari bank soal?")) {
           if (supabaseClient && typeof id === 'number') {
             await supabaseClient.from('bank_soal').delete().eq('id', id);
             this.fetchBankSoalFromSupabase();
