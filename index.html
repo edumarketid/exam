@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ExamSMKN1Wakatobi - CBT System</title>
+  
+  <!-- Manifest & Web App Settings (PWA) -->
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#2563eb">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3429/3429149.png">
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Supabase JS SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <!-- External Configuration File -->
+  <script src="./config.js"></script>
+
+  <style>
+    .no-select {
+      user-select: none;
+      -webkit-user-select: none;
+    }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen font-sans text-gray-800 no-select" oncontextmenu="return false;">
+
+  <!-- APP CONTAINER -->
+  <div id="app" class="min-h-screen flex flex-col">
+
+    <!-- NAVIGATION BAR -->
+    <header class="bg-blue-700 text-white shadow-md">
+      <div class="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 bg-white text-blue-700 font-bold flex items-center justify-center rounded-lg shadow">
+            CBT
+          </div>
+          <div>
+            <h1 class="font-bold text-lg leading-tight">ExamSMKN1Wakatobi</h1>
+            <p class="text-xs text-blue-200">Penilaian Sumatif Semester Ganjil TA 2026/2027</p>
+          </div>
+        </div>
+        <div class="flex items-center space-x-3">
+          <!-- Status Indicator Database -->
+          <span id="db-status-badge" class="px-2.5 py-1 text-xs rounded-full bg-yellow-500 text-white font-medium">
+            Memuat DB...
+          </span>
+
+          <!-- Tombol Install PWA -->
+          <button id="pwa-install-btn" class="hidden bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-1.5 rounded-md shadow flex items-center gap-1 transition">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+            Instal PWA
+          </button>
+
+          <!-- Status User / Logout -->
+          <div id="user-info" class="hidden flex items-center gap-2">
+            <span id="user-display" class="text-xs bg-blue-800 px-3 py-1.5 rounded-full font-medium"></span>
+            <button onclick="app.logout()" class="text-xs bg-red-600 hover:bg-red-700 px-3 py-1.5 rounded-md text-white font-medium transition">
+              Keluar
+            </button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- MAIN CONTENT VIEW -->
+    <main class="flex-grow max-w-7xl w-full mx-auto p-4">
+
+      <!-- SCREEN 1: LOGIN PAGE -->
+      <section id="screen-login" class="max-w-md mx-auto mt-12 bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+        <div class="bg-blue-600 p-6 text-center text-white">
+          <h2 class="text-xl font-bold">Portal Ujian Siswa & Guru</h2>
+          <p class="text-xs text-blue-100 mt-1">SMK Negeri 1 Wakatobi</p>
+        </div>
+        <div class="p-6">
+          <form onsubmit="app.handleLogin(event)" class="space-y-4">
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Username / NISN</label>
+              <input type="text" id="login-username" required class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="Masukkan Username">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Password</label>
+              <input type="password" id="login-password" required class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="Masukkan Password">
+            </div>
+            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-lg shadow transition">
+              Masuk Ke Ujian
+            </button>
+          </form>
+          <div class="mt-6 pt-4 border-t text-center">
+            <p class="text-xs text-gray-500">Login Administrator/Guru?</p>
+            <p class="text-xs text-blue-600 mt-0.5">Username: <code class="bg-gray-100 px-1 rounded">admin</code> | Pass: <code class="bg-gray-100 px-1 rounded">admin122333</code></p>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 2: ADMIN DASHBOARD -->
+      <section id="screen-admin" class="hidden space-y-6">
+        <div class="flex justify-between items-center bg-white p-4 rounded-lg shadow border">
+          <h2 class="text-lg font-bold text-gray-800">Dashboard Pengelolaan Ujian</h2>
+          <div class="flex gap-2">
+            <button onclick="app.switchAdminTab('bank-soal')" class="px-3 py-1.5 text-xs rounded bg-blue-600 text-white font-medium">Input & Bank Soal</button>
+            <button onclick="app.switchAdminTab('siswa')" class="px-3 py-1.5 text-xs rounded bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium">Data Siswa</button>
+            <button onclick="app.switchAdminTab('hasil')" class="px-3 py-1.5 text-xs rounded bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium">Hasil & Nilai</button>
+            <button onclick="app.switchAdminTab('sql')" class="px-3 py-1.5 text-xs rounded bg-emerald-600 text-white font-medium">Skema SQL</button>
+          </div>
+        </div>
+
+        <!-- TAB: BANK SOAL HTML INPUT -->
+        <div id="tab-bank-soal" class="bg-white p-6 rounded-lg shadow border space-y-6">
+          <h3 class="font-bold text-md text-gray-800 border-b pb-2">Form Input Soal Berbasis HTML</h3>
+          <form onsubmit="app.saveSoal(event)" class="space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label class="block text-xs font-bold text-gray-600 mb-1">Mata Pelajaran</label>
+                <input type="text" id="soal-mapel" required class="w-full border px-3 py-2 rounded text-sm" placeholder="Contoh: Perencanaan & Pengalamatan Jaringan">
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-gray-600 mb-1">Kelas Target</label>
+                <select id="soal-kelas" class="w-full border px-3 py-2 rounded text-sm">
+                  <option value="X TKJ">X TKJ</option>
+                  <option value="XI TKJ" selected>XI TKJ</option>
+                  <option value="XII TKJ">XII TKJ</option>
+                  <option value="XI PHL">XI PHL</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-gray-600 mb-1">Kunci Jawaban</label>
+                <select id="soal-kunci" class="w-full border px-3 py-2 rounded text-sm font-bold text-blue-700">
+                  <option value="A">A</option>
+                  <option value="B">B</option>
+                  <option value="C">C</option>
+                  <option value="D">D</option>
+                  <option value="E">E</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-gray-600 mb-1">Konten Soal (Format HTML)</label>
+              <textarea id="soal-html" rows="4" required class="w-full font-mono text-xs border px-3 py-2 rounded focus:ring-2 focus:ring-blue-500" placeholder="<p>Berapakah subnet mask /24?</p>"></textarea>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-semibold text-gray-600">Opsi A (HTML)</label>
+                <input type="text" id="soal-opsi-a" required class="w-full border px-3 py-1.5 rounded text-xs" placeholder="255.255.255.0">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-600">Opsi B (HTML)</label>
+                <input type="text" id="soal-opsi-b" required class="w-full border px-3 py-1.5 rounded text-xs" placeholder="255.255.0.0">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-600">Opsi C (HTML)</label>
+                <input type="text" id="soal-opsi-c" required class="w-full border px-3 py-1.5 rounded text-xs" placeholder="255.0.0.0">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-600">Opsi D (HTML)</label>
+                <input type="text" id="soal-opsi-d" required class="w-full border px-3 py-1.5 rounded text-xs" placeholder="255.255.255.128">
+              </div>
+              <div class="md:col-span-2">
+                <label class="block text-xs font-semibold text-gray-600">Opsi E (HTML)</label>
+                <input type="text" id="soal-opsi-e" required class="w-full border px-3 py-1.5 rounded text-xs" placeholder="255.255.255.192">
+              </div>
+            </div>
+
+            <div class="flex gap-3">
+              <button type="submit" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded text-xs font-bold transition">Simpan Soal ke Database</button>
+              <button type="button" onclick="app.previewSoalHTML()" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded text-xs font-bold transition">Preview Render</button>
+            </div>
+          </form>
+
+          <!-- Container Live Preview -->
+          <div id="preview-container" class="hidden border rounded p-4 bg-gray-50">
+            <h4 class="font-bold text-xs text-gray-500 uppercase mb-2">Live Preview Tampilan Soal Siswa:</h4>
+            <div id="preview-content" class="bg-white p-4 rounded border text-sm"></div>
+          </div>
+        </div>
+
+        <!-- TAB: SKEMA SQL -->
+        <div id="tab-sql" class="hidden bg-white p-6 rounded-lg shadow border space-y-4">
+          <h3 class="font-bold text-md text-gray-800">Skema SQL Database Supabase</h3>
+          <p class="text-xs text-gray-600">Salin skema DDL berikut dan jalankan pada menu <strong>SQL Editor</strong> di dashboard Supabase Anda:</p>
+          <pre class="bg-gray-900 text-green-400 p-4 rounded text-xs overflow-x-auto font-mono">
+-- 1. TABEL DATA SISWA
+CREATE TABLE IF NOT EXISTS siswa (
+    id_siswa VARCHAR(50) PRIMARY KEY,
+    nisn VARCHAR(20) UNIQUE NOT NULL,
+    nama_siswa VARCHAR(150) NOT NULL,
+    kelas VARCHAR(50) NOT NULL,
+    status VARCHAR(20) DEFAULT 'Aktif',
+    qr_code_key VARCHAR(50),
+    ttl VARCHAR(100)
+);
+
+-- 2. TABEL AKUN LOGIN SISWA
+CREATE TABLE IF NOT EXISTS akun_siswa (
+    username VARCHAR(50) PRIMARY KEY,
+    password VARCHAR(50) NOT NULL,
+    id_siswa VARCHAR(50) REFERENCES siswa(id_siswa) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 3. TABEL BANK SOAL (SUPPORTS HTML)
+CREATE TABLE IF NOT EXISTS bank_soal (
+    id BIGSERIAL PRIMARY KEY,
+    mapel VARCHAR(100) NOT NULL,
+    kelas VARCHAR(50) NOT NULL,
+    soal_html TEXT NOT NULL,
+    opsi_a TEXT NOT NULL,
+    opsi_b TEXT NOT NULL,
+    opsi_c TEXT NOT NULL,
+    opsi_d TEXT NOT NULL,
+    opsi_e TEXT NOT NULL,
+    kunci_jawaban CHAR(1) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 4. TABEL HASIL UJIAN SISWA
+CREATE TABLE IF NOT EXISTS hasil_ujian (
+    id BIGSERIAL PRIMARY KEY,
+    id_siswa VARCHAR(50) REFERENCES siswa(id_siswa),
+    mapel VARCHAR(100) NOT NULL,
+    jawaban_json JSONB,
+    nilai NUMERIC(5,2),
+    status_selesai VARCHAR(30) DEFAULT 'SELESAI',
+    jumlah_pelanggaran INT DEFAULT 0,
+    waktu_selesai TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+          </pre>
+        </div>
+      </section>
+
+      <!-- SCREEN 3: EXAM INTERFACE (Siswa) -->
+      <section id="screen-exam" class="hidden space-y-4">
+        <!-- Top Banner Ujian -->
+        <div class="bg-white p-4 rounded-lg shadow border flex justify-between items-center">
+          <div>
+            <h2 id="exam-mapel-title" class="font-bold text-md text-blue-900">Perencanaan dan Pengalamatan Jaringan</h2>
+            <p id="exam-student-info" class="text-xs text-gray-500">Siswa: Mawar Fikasari (XI TKJ)</p>
+          </div>
+          <div class="text-right">
+            <p class="text-xs text-gray-500">Sisa Waktu Ujian</p>
+            <div id="exam-timer" class="text-xl font-black text-red-600">00:45:00</div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
+          <!-- Soal Container (3/4) -->
+          <div class="lg:col-span-3 bg-white p-6 rounded-lg shadow border flex flex-col justify-between min-h-[400px]">
+            <div>
+              <div class="flex justify-between items-center border-b pb-2 mb-4">
+                <span class="font-bold text-sm text-gray-700">Soal No. <span id="current-question-num">1</span></span>
+                <span class="text-xs bg-blue-100 text-blue-800 px-2.5 py-0.5 rounded-full">Pilihan Ganda</span>
+              </div>
+              <div id="question-render-area" class="text-sm space-y-4"></div>
+              
+              <div id="options-render-area" class="mt-6 space-y-3"></div>
+            </div>
+
+            <div class="flex justify-between border-t pt-4 mt-6">
+              <button onclick="app.prevQuestion()" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded text-xs font-bold">Sebelumnya</button>
+              <button onclick="app.nextQuestion()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-xs font-bold">Berikutnya</button>
+              <button onclick="app.finishExamConfirm()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded text-xs font-bold">Kirim Jawaban</button>
+            </div>
+          </div>
+
+          <!-- Navigasi Nomor Soal (1/4) -->
+          <div class="bg-white p-4 rounded-lg shadow border">
+            <h3 class="font-bold text-xs text-gray-600 uppercase mb-3">Navigasi Nomor Soal</h3>
+            <div id="question-grid" class="grid grid-cols-5 gap-2 text-xs font-bold"></div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- MODAL WARING KECURANGAN -->
+  <div id="modal-warning" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-xl max-w-md w-full p-6 text-center space-y-4">
+      <div class="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto text-2xl font-bold">⚠️</div>
+      <h3 class="text-lg font-bold text-gray-800">PERINGATAN KECURANGAN!</h3>
+      <p id="warning-text" class="text-xs text-gray-600">Anda terdeteksi meninggalkan layar ujian atau berpindah aplikasi! Ini adalah peringatan terakhir (1 kali).</p>
+      <button onclick="app.closeWarningModal()" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 rounded text-xs transition">
+        Saya Mengerti & Kembali Ujian Fullscreen
+      </button>
+    </div>
+  </div>
+
+  <!-- APPLICATION JAVASCRIPT LOGIC -->
+  <script>
+    class ExamApp {
+      constructor() {
+        this.currentView = 'login';
+        this.currentUser = null;
+        this.violations = 0;
+        this.examActive = false;
+        this.currentQuestionIdx = 0;
+        this.answers = {};
+        this.deferredPrompt = null;
+        
+        // Data Soal Default
+        this.questions = [
+          {
+            id: 1,
+            soal_html: '<p>Toko Najma Komputer ingin membangun jaringan lokal dengan alokasi IP address <code>192.168.10.0/24</code>. Berapakah subnet mask yang harus digunakan?</p>',
+            opsi_a: '255.255.255.0',
+            opsi_b: '255.255.0.0',
+            opsi_c: '255.0.0.0',
+            opsi_d: '255.255.255.128',
+            opsi_e: '255.255.255.192',
+            kunci_jawaban: 'A'
+          }
+        ];
+
+        this.init();
+      }
+
+      init() {
+        this.setupPWA();
+        this.updateDBStatus();
+        this.setupSecurityListeners();
+      }
+
+      updateDBStatus() {
+        const badge = document.getElementById('db-status-badge');
+        if (supabaseClient) {
+          badge.textContent = "Database Connected";
+          badge.className = "px-2.5 py-1 text-xs rounded-full bg-emerald-600 text-white font-medium";
+        } else {
+          badge.textContent = "Offline Mode";
+          badge.className = "px-2.5 py-1 text-xs rounded-full bg-gray-500 text-white font-medium";
+        }
+      }
+
+      setupPWA() {
+        // Event Listener PWA Install
+        window.addEventListener('beforeinstallprompt', (e) => {
+          e.preventDefault();
+          this.deferredPrompt = e;
+          const installBtn = document.getElementById('pwa-install-btn');
+          if (installBtn) installBtn.classList.remove('hidden');
+        });
+
+        document.getElementById('pwa-install-btn')?.addEventListener('click', async () => {
+          if (this.deferredPrompt) {
+            this.deferredPrompt.prompt();
+            const { outcome } = await this.deferredPrompt.userChoice;
+            if (outcome === 'accepted') {
+              document.getElementById('pwa-install-btn').classList.add('hidden');
+            }
+            this.deferredPrompt = null;
+          }
+        });
+
+        // Register Service Worker
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.register('./sw.js')
+            .then(reg => console.log('SW Registered:', reg.scope))
+            .catch(err => console.error('SW Failed:', err));
+        }
+      }
+
+      // LOGIN HANDLER
+      handleLogin(e) {
+        e.preventDefault();
+        const u = document.getElementById('login-username').value.trim();
+        const p = document.getElementById('login-password').value.trim();
+
+        if (u === 'admin' && p === 'admin122333') {
+          this.currentUser = { role: 'admin', username: 'admin' };
+          this.showScreen('admin');
+        } else {
+          // Login Siswa Simulasi
+          this.currentUser = { role: 'siswa', username: u, nama: 'Siswa SMKN 1 Wakatobi' };
+          this.startExam();
+        }
+
+        document.getElementById('user-info').classList.remove('hidden');
+        document.getElementById('user-display').textContent = this.currentUser.username;
+      }
+
+      logout() {
+        this.currentUser = null;
+        this.examActive = false;
+        document.getElementById('user-info').classList.add('hidden');
+        this.showScreen('login');
+      }
+
+      showScreen(screenId) {
+        ['login', 'admin', 'exam'].forEach(id => {
+          document.getElementById(`screen-${id}`).classList.add('hidden');
+        });
+        document.getElementById(`screen-${screenId}`).classList.remove('hidden');
+      }
+
+      switchAdminTab(tabName) {
+        ['bank-soal', 'sql'].forEach(t => {
+          document.getElementById(`tab-${t}`)?.classList.add('hidden');
+        });
+        document.getElementById(`tab-${tabName}`)?.classList.remove('hidden');
+      }
+
+      // PROSES EXAM & SECURITY
+      startExam() {
+        this.showScreen('exam');
+        this.examActive = true;
+        this.violations = 0;
+        this.enterFullscreen();
+        this.renderQuestion();
+        this.renderGrid();
+      }
+
+      enterFullscreen() {
+        const elem = document.documentElement;
+        if (elem.requestFullscreen) {
+          elem.requestFullscreen().catch(err => console.warn(err));
+        }
+      }
+
+      setupSecurityListeners() {
+        // 1. Deteksi Keluar Fullscreen
+        document.addEventListener('fullscreenchange', () => {
+          if (!document.fullscreenElement && this.examActive) {
+            this.handleViolation("Anda keluar dari mode Fullscreen!");
+          }
+        });
+
+        // 2. Deteksi Perpindahan Tab / Aplikasi
+        document.addEventListener('visibilitychange', () => {
+          if (document.hidden && this.examActive) {
+            this.handleViolation("Anda membuka tab atau aplikasi lain!");
+          }
+        });
+
+        // 3. Blokir Tombol DevTools
+        window.addEventListener('keydown', (e) => {
+          if (this.examActive && (e.key === 'F12' || (e.ctrlKey && e.shiftKey && e.key === 'I'))) {
+            e.preventDefault();
+            this.handleViolation("Dilarang membuka Developer Tools!");
+          }
+        });
+      }
+
+      handleViolation(reason) {
+        if (!this.examActive) return;
+
+        this.violations++;
+
+        if (this.violations >= CONFIG.MAX_VIOLATIONS) {
+          alert(`PELANGGARAN HUKUMAN! ${reason}\n\nUjian Anda dihentikan secara otomatis dan jawaban Anda dikirimkan.`);
+          this.finishExam(true);
+        } else {
+          document.getElementById('warning-text').textContent = `${reason} (Peringatan ${this.violations} dari ${CONFIG.MAX_VIOLATIONS})`;
+          document.getElementById('modal-warning').classList.remove('hidden');
+        }
+      }
+
+      closeWarningModal() {
+        document.getElementById('modal-warning').classList.add('hidden');
+        this.enterFullscreen();
+      }
+
+      renderQuestion() {
+        const q = this.questions[this.currentQuestionIdx];
+        if (!q) return;
+
+        document.getElementById('current-question-num').textContent = this.currentQuestionIdx + 1;
+        document.getElementById('question-render-area').innerHTML = q.soal_html;
+
+        const options = ['a', 'b', 'c', 'd', 'e'];
+        let html = '';
+        options.forEach(opt => {
+          const isSelected = this.answers[q.id] === opt.toUpperCase();
+          html += `
+            <label class="flex items-start gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition ${isSelected ? 'border-blue-600 bg-blue-50' : ''}">
+              <input type="radio" name="opt" value="${opt.toUpperCase()}" ${isSelected ? 'checked' : ''} onchange="app.selectAnswer('${q.id}', '${opt.toUpperCase()}')" class="mt-1">
+              <span class="font-bold text-xs uppercase">${opt}.</span>
+              <div class="text-xs">${q['opsi_' + opt]}</div>
+            </label>
+          `;
+        });
+        document.getElementById('options-render-area').innerHTML = html;
+      }
+
+      renderGrid() {
+        const grid = document.getElementById('question-grid');
+        grid.innerHTML = '';
+        this.questions.forEach((q, idx) => {
+          const isAnswered = !!this.answers[q.id];
+          const isCurrent = idx === this.currentQuestionIdx;
+          const btn = document.createElement('button');
+          btn.textContent = idx + 1;
+          btn.className = `p-2 rounded border text-center transition ${isCurrent ? 'ring-2 ring-blue-600 font-bold' : ''} ${isAnswered ? 'bg-blue-600 text-white' : 'bg-gray-100 hover:bg-gray-200'}`;
+          btn.onclick = () => {
+            this.currentQuestionIdx = idx;
+            this.renderQuestion();
+            this.renderGrid();
+          };
+          grid.appendChild(btn);
+        });
+      }
+
+      selectAnswer(qId, val) {
+        this.answers[qId] = val;
+        this.renderGrid();
+      }
+
+      prevQuestion() {
+        if (this.currentQuestionIdx > 0) {
+          this.currentQuestionIdx--;
+          this.renderQuestion();
+          this.renderGrid();
+        }
+      }
+
+      nextQuestion() {
+        if (this.currentQuestionIdx < this.questions.length - 1) {
+          this.currentQuestionIdx++;
+          this.renderQuestion();
+          this.renderGrid();
+        }
+      }
+
+      finishExamConfirm() {
+        if (confirm("Apakah Anda yakin ingin menyelesaikan ujian dan mengirimkan jawaban?")) {
+          this.finishExam(false);
+        }
+      }
+
+      finishExam(isDisqualified = false) {
+        this.examActive = false;
+        if (document.exitFullscreen) {
+          document.exitFullscreen().catch(err => console.warn(err));
+        }
+
+        alert(isDisqualified ? "Status: DIDISKUALIFIKASI. Jawaban telah terkirim." : "Ujian Selesai! Terima kasih telah mengikuti ujian.");
+        this.showScreen('login');
+      }
+
+      // PREVIEW SOAL HTML
+      previewSoalHTML() {
+        const htmlContent = document.getElementById('soal-html').value;
+        const container = document.getElementById('preview-container');
+        const content = document.getElementById('preview-content');
+        
+        content.innerHTML = htmlContent;
+        container.classList.remove('hidden');
+      }
+
+      saveSoal(e) {
+        e.preventDefault();
+        const mapel = document.getElementById('soal-mapel').value;
+        const kelas = document.getElementById('soal-kelas').value;
+        const soal_html = document.getElementById('soal-html').value;
+        const opsi_a = document.getElementById('soal-opsi-a').value;
+        const opsi_b = document.getElementById('soal-opsi-b').value;
+        const opsi_c = document.getElementById('soal-opsi-c').value;
+        const opsi_d = document.getElementById('soal-opsi-d').value;
+        const opsi_e = document.getElementById('soal-opsi-e').value;
+        const kunci_jawaban = document.getElementById('soal-kunci').value;
+
+        const newSoal = {
+          id: Date.now(),
+          mapel, kelas, soal_html, opsi_a, opsi_b, opsi_c, opsi_d, opsi_e, kunci_jawaban
+        };
+
+        this.questions.push(newSoal);
+        alert("Soal berhasil disimpan ke Bank Soal!");
+        e.target.reset();
+        document.getElementById('preview-container').classList.add('hidden');
+      }
+    }
+
+    // Inisialisasi Aplikasi
+    const app = new ExamApp();
+  </script>
+</body>
+</html>
