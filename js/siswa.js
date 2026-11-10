@@ -1,9 +1,19 @@
 const SiswaModule = {
   async loadAndRender() {
-    State.students = await DB.fetchSiswa();
-    State.kelasOptions = [...new Set(State.students.map(item => item.kelas))].filter(Boolean);
-    this.populateKelasDropdowns();
-    this.renderCards();
+    try {
+      console.log("[SiswaModule] Menarik data siswa dari Supabase...");
+      State.students = await DB.fetchSiswa();
+      console.log("[SiswaModule] Data siswa diterima:", State.students.length, "orang");
+
+      if (State.students.length > 0) {
+        State.kelasOptions = [...new Set(State.students.map(item => item.kelas))].filter(Boolean);
+      }
+      
+      this.populateKelasDropdowns();
+      this.renderCards();
+    } catch (err) {
+      console.error("[SiswaModule] Error saat render siswa:", err.message);
+    }
   },
 
   populateKelasDropdowns() {
@@ -12,6 +22,8 @@ const SiswaModule = {
     const selectKelasRekap = document.getElementById('rekap-filter-kelas');
     const selectKelasMon = document.getElementById('monitoring-filter-kelas');
     const selectKelasBank = document.getElementById('bank-filter-kelas');
+
+    if (!State.kelasOptions || State.kelasOptions.length === 0) return;
 
     const kelasOpts = State.kelasOptions.map(k => `<option value="${k}">${k}</option>`).join('');
     if (selectKelasJadwal) selectKelasJadwal.innerHTML = kelasOpts;
@@ -36,6 +48,11 @@ const SiswaModule = {
     const filterKelas = document.getElementById('filter-kelas-kartu')?.value || 'ALL';
     if (!container) return;
     container.innerHTML = '';
+
+    if (!State.students || State.students.length === 0) {
+      container.innerHTML = `<p class="text-xs text-amber-600 italic col-span-2 text-center p-4">Belum ada data siswa di Supabase.</p>`;
+      return;
+    }
 
     const filtered = filterKelas === 'ALL' ? State.students : State.students.filter(s => s.kelas === filterKelas);
 
@@ -74,3 +91,6 @@ const SiswaModule = {
 
   printCards() { window.print(); }
 };
+
+// WAJIB: Daftarkan ke window agar bisa dipanggil app.js
+window.SiswaModule = SiswaModule;
