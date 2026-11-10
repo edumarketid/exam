@@ -1,18 +1,47 @@
 const DB = {
+  client: null,
+
   async getClient() {
-    if (window.supabaseClient) return window.supabaseClient;
+    if (this.client) return this.client;
+    if (window.supabaseClient) {
+      this.client = window.supabaseClient;
+      return this.client;
+    }
+
+    // Polling aman untuk memastikan Supabase SDK dan CONFIG siap
     return new Promise((resolve) => {
       let attempts = 0;
+      const maxAttempts = 30; // Maksimal 3 detik menunggu SDK
+
       const interval = setInterval(() => {
         attempts++;
-        if (window.supabaseClient || typeof supabase !== 'undefined') {
-          if (!window.supabaseClient && typeof supabase !== 'undefined' && typeof CONFIG !== 'undefined') {
-            window.supabaseClient = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
+
+        // 1. Cek apakah supabaseClient sudah diinisialisasi global
+        if (window.supabaseClient) {
+          this.client = window.supabaseClient;
+          clearInterval(interval);
+          resolve(this.client);
+          return;
+        }
+
+        // 2. Cek apakah SDK Supabase dan CONFIG sudah siap
+        if (typeof supabase !== 'undefined' && typeof CONFIG !== 'undefined' && CONFIG.SUPABASE_URL) {
+          if (CONFIG.SUPABASE_URL !== "HTTPS_SUPABASE_URL_ANDA") {
+            try {
+              window.supabaseClient = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
+              this.client = window.supabaseClient;
+              console.log("[Supabase] Inisialisasi Klien Berhasil.");
+            } catch (e) {
+              console.error("[Supabase] Error pembuatan client:", e.message);
+            }
           }
           clearInterval(interval);
-          resolve(window.supabaseClient);
+          resolve(this.client);
+          return;
         }
-        if (attempts > 20) {
+
+        if (attempts >= maxAttempts) {
+          console.warn("[Supabase] Gagal terhubung: Timeout / Config belum diisi.");
           clearInterval(interval);
           resolve(null);
         }
@@ -22,7 +51,10 @@ const DB = {
 
   async fetchMapel() {
     const client = await this.getClient();
-    if (!client) return [];
+    if (!client) {
+      console.warn("[Supabase] client offline, mengambil data lokal jika ada.");
+      return [];
+    }
     try {
       const { data, error } = await client.from('mapel').select('nama_mapel').order('id', { ascending: true });
       if (error) throw error;
@@ -35,7 +67,7 @@ const DB = {
 
   async insertMapel(namaMapel) {
     const client = await this.getClient();
-    if (!client) throw new Error("Database tidak terhubung.");
+    if (!client) throw new Error("Database tidak terhubung. Periksa config.js");
     const { data, error } = await client.from('mapel').insert([{ nama_mapel: namaMapel }]);
     if (error) throw error;
     return data;
@@ -43,7 +75,7 @@ const DB = {
 
   async deleteMapel(namaMapel) {
     const client = await this.getClient();
-    if (!client) throw new Error("Database tidak terhubung.");
+    if (!client) throw new Error("Database tidak terhubung. Periksa config.js");
     const { error } = await client.from('mapel').delete().eq('nama_mapel', namaMapel);
     if (error) throw error;
     return true;
