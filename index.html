@@ -120,7 +120,8 @@
         <div class="flex flex-wrap justify-between items-center bg-white p-4 rounded-lg shadow border gap-3">
           <h2 class="text-lg font-bold text-gray-800">Dashboard Pengelolaan Ujian</h2>
           <div class="flex flex-wrap gap-2">
-            <button onclick="app.switchAdminTab('jadwal')" class="px-3 py-1.5 text-xs rounded bg-purple-600 text-white font-medium">Pengaturan Jadwal Ujian</button>
+            <button onclick="app.switchAdminTab('monitoring')" class="px-3 py-1.5 text-xs rounded bg-red-600 text-white font-medium">Live Monitoring Tes</button>
+            <button onclick="app.switchAdminTab('jadwal')" class="px-3 py-1.5 text-xs rounded bg-purple-600 text-white font-medium">Jadwal Ujian</button>
             <button onclick="app.switchAdminTab('rekap-nilai')" class="px-3 py-1.5 text-xs rounded bg-emerald-600 text-white font-medium">Rekap & Cetak Nilai</button>
             <button onclick="app.switchAdminTab('upload-soal')" class="px-3 py-1.5 text-xs rounded bg-blue-600 text-white font-medium">Upload File Soal HTML</button>
             <button onclick="app.switchAdminTab('siswa')" class="px-3 py-1.5 text-xs rounded bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium">Kartu Siswa</button>
@@ -128,11 +129,82 @@
           </div>
         </div>
 
+        <!-- TAB: MONITORING REAL-TIME AKTIVITAS TES -->
+        <div id="tab-monitoring" class="bg-white p-6 rounded-lg shadow border space-y-6">
+          <div class="flex flex-wrap justify-between items-center border-b pb-4 gap-3">
+            <div>
+              <h3 class="font-bold text-md text-gray-800">Live Monitoring Ujian & Status Siswa</h3>
+              <p class="text-xs text-gray-500">Pantau siswa yang sedang mengerjakan, melanggar kecurangan, belum mulai, atau sudah selesai tes.</p>
+            </div>
+            <button onclick="app.refreshMonitoringData()" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-1.5 rounded shadow transition flex items-center gap-1">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+              Refresh Status Live
+            </button>
+          </div>
+
+          <!-- KARTU RINGKASAN MONITORING -->
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div onclick="app.filterMonitoringStatus('BELUM')" class="cursor-pointer bg-gray-50 border border-gray-300 p-4 rounded-xl text-center shadow-sm hover:border-gray-500 transition">
+              <span class="text-xs font-bold text-gray-500 uppercase block mb-1">Belum Tes</span>
+              <span id="count-stat-belum" class="text-2xl font-black text-gray-700">0</span>
+            </div>
+            <div onclick="app.filterMonitoringStatus('KERJAKAN')" class="cursor-pointer bg-blue-50 border border-blue-300 p-4 rounded-xl text-center shadow-sm hover:border-blue-500 transition">
+              <span class="text-xs font-bold text-blue-800 uppercase block mb-1">Sedang Mengerjakan</span>
+              <span id="count-stat-kerjakan" class="text-2xl font-black text-blue-600">0</span>
+            </div>
+            <div onclick="app.filterMonitoringStatus('KECURANGAN')" class="cursor-pointer bg-red-50 border border-red-300 p-4 rounded-xl text-center shadow-sm hover:border-red-500 transition">
+              <span class="text-xs font-bold text-red-800 uppercase block mb-1">Kecurangan / Diskualifikasi</span>
+              <span id="count-stat-kecurangan" class="text-2xl font-black text-red-600">0</span>
+            </div>
+            <div onclick="app.filterMonitoringStatus('SELESAI')" class="cursor-pointer bg-emerald-50 border border-emerald-300 p-4 rounded-xl text-center shadow-sm hover:border-emerald-500 transition">
+              <span class="text-xs font-bold text-emerald-800 uppercase block mb-1">Selesai Tes</span>
+              <span id="count-stat-selesai" class="text-2xl font-black text-emerald-600">0</span>
+            </div>
+          </div>
+
+          <!-- TABEL DAFTAR MONITORING PESERTA -->
+          <div class="space-y-3">
+            <div class="flex flex-wrap justify-between items-center">
+              <h4 class="font-bold text-xs text-gray-700 uppercase">Daftar Status Peserta Ujian:</h4>
+              <div class="flex gap-2">
+                <select id="monitoring-filter-kelas" onchange="app.renderMonitoringTable()" class="border px-2.5 py-1 rounded text-xs font-semibold bg-gray-50"></select>
+                <select id="monitoring-filter-status" onchange="app.renderMonitoringTable()" class="border px-2.5 py-1 rounded text-xs font-semibold bg-gray-50">
+                  <option value="ALL">Semua Status Aktivitas</option>
+                  <option value="KERJAKAN">Sedang Mengerjakan</option>
+                  <option value="KECURANGAN">Melakukan Kecurangan</option>
+                  <option value="BELUM">Belum Mulai</option>
+                  <option value="SELESAI">Sudah Selesai</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="overflow-x-auto">
+              <table class="w-full border-collapse border border-gray-200 text-xs">
+                <thead>
+                  <tr class="bg-gray-800 text-white">
+                    <th class="border p-2 text-center w-10">No</th>
+                    <th class="border p-2 text-left">NISN</th>
+                    <th class="border p-2 text-left">Nama Siswa</th>
+                    <th class="border p-2 text-center">Kelas</th>
+                    <th class="border p-2 text-center">Status Tes</th>
+                    <th class="border p-2 text-center">Pelanggaran</th>
+                    <th class="border p-2 text-center">Skor Nilai</th>
+                    <th class="border p-2 text-center">Aksi Pengawas</th>
+                  </tr>
+                </thead>
+                <tbody id="monitoring-tbody">
+                  <!-- Dimuat secara dinamis -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
         <!-- TAB: PENGATURAN JADWAL & AKTIVASI SOAL -->
-        <div id="tab-jadwal" class="bg-white p-6 rounded-lg shadow border space-y-6">
+        <div id="tab-jadwal" class="hidden bg-white p-6 rounded-lg shadow border space-y-6">
           <div class="border-b pb-4">
             <h3 class="font-bold text-md text-gray-800">Aktivasi & Roster Waktu Akses Ujian</h3>
-            <p class="text-xs text-gray-500 mt-1">Tentukan tanggal dan jam buka-tutup ujian per Mata Pelajaran & Kelas agar siswa hanya dapat mengakses ujian pada jadwal yang ditentukan.</p>
+            <p class="text-xs text-gray-500 mt-1">Tentukan tanggal dan jam buka-tutup ujian per Mata Pelajaran & Kelas.</p>
           </div>
 
           <form onsubmit="app.saveJadwalUjian(event)" class="space-y-4 max-w-2xl bg-purple-50 border border-purple-200 p-4 rounded-lg">
@@ -213,6 +285,7 @@
                     <th class="border p-2 text-center">Pelanggaran</th>
                     <th class="border p-2 text-center">Status</th>
                     <th class="border p-2 text-left">Waktu Selesai</th>
+                    <th class="border p-2 text-center print:hidden">Aksi Reset</th>
                   </tr>
                 </thead>
                 <tbody id="rekap-nilai-tbody">
@@ -474,12 +547,129 @@
         const selectKelasJadwal = document.getElementById('jadwal-kelas');
         const selectKelasKartu = document.getElementById('filter-kelas-kartu');
         const selectKelasRekap = document.getElementById('rekap-filter-kelas');
+        const selectKelasMon = document.getElementById('monitoring-filter-kelas');
 
         const kelasOpts = this.kelasOptions.map(k => `<option value="${k}">${k}</option>`).join('');
         if (selectKelasUpload) selectKelasUpload.innerHTML = kelasOpts;
         if (selectKelasJadwal) selectKelasJadwal.innerHTML = kelasOpts;
         if (selectKelasKartu) selectKelasKartu.innerHTML = `<option value="ALL">Semua Kelas</option>` + kelasOpts;
         if (selectKelasRekap) selectKelasRekap.innerHTML = `<option value="ALL">Semua Kelas</option>` + kelasOpts;
+        if (selectKelasMon) selectKelasMon.innerHTML = `<option value="ALL">Semua Kelas Target</option>` + kelasOpts;
+      }
+
+      // MONITORING & STATISTIK REALTIME
+      async refreshMonitoringData() {
+        await this.fetchHasilUjianFromSupabase();
+        this.renderMonitoringTable();
+      }
+
+      filterMonitoringStatus(statusKey) {
+        const select = document.getElementById('monitoring-filter-status');
+        if (select) {
+          select.value = statusKey;
+          this.renderMonitoringTable();
+        }
+      }
+
+      renderMonitoringTable() {
+        const tbody = document.getElementById('monitoring-tbody');
+        const filterKelas = document.getElementById('monitoring-filter-kelas')?.value || 'ALL';
+        const filterStatus = document.getElementById('monitoring-filter-status')?.value || 'ALL';
+        if (!tbody) return;
+
+        tbody.innerHTML = '';
+
+        let countBelum = 0;
+        let countKerjakan = 0;
+        let countKecurangan = 0;
+        let countSelesai = 0;
+
+        let filteredStudents = this.students;
+        if (filterKelas !== 'ALL') {
+          filteredStudents = filteredStudents.filter(s => s.kelas === filterKelas);
+        }
+
+        let rowNo = 1;
+
+        filteredStudents.forEach((s) => {
+          const hasil = this.hasilUjianList.find(h => h.ID_SISWA === s.id_siswa);
+
+          let statusTag = '';
+          let statusCategory = 'BELUM';
+
+          if (hasil) {
+            if (hasil.status_selesai === 'DIDISKUALIFIKASI' || hasil.jumlah_pelanggaran >= 2) {
+              statusCategory = 'KECURANGAN';
+              countKecurangan++;
+              statusTag = `<span class="px-2 py-0.5 rounded font-bold bg-red-100 text-red-800">Melakukan Kecurangan</span>`;
+            } else if (hasil.status_selesai === 'SELESAI') {
+              statusCategory = 'SELESAI';
+              countSelesai++;
+              statusTag = `<span class="px-2 py-0.5 rounded font-bold bg-emerald-100 text-emerald-800">Sudah Selesai</span>`;
+            }
+          } else {
+            statusCategory = 'BELUM';
+            countBelum++;
+            statusTag = `<span class="px-2 py-0.5 rounded font-bold bg-gray-100 text-gray-700">Belum Mulai</span>`;
+          }
+
+          // Filter tampilan tabel
+          if (filterStatus !== 'ALL' && filterStatus !== statusCategory) return;
+
+          const tr = document.createElement('tr');
+          tr.className = "hover:bg-gray-50 border-b";
+          tr.innerHTML = `
+            <td class="border p-2 text-center">${rowNo++}</td>
+            <td class="border p-2 font-mono">${s.nisn}</td>
+            <td class="border p-2 font-bold">${s.nama}</td>
+            <td class="border p-2 text-center font-bold">${s.kelas}</td>
+            <td class="border p-2 text-center">${statusTag}</td>
+            <td class="border p-2 text-center font-bold ${hasil?.jumlah_pelanggaran > 0 ? 'text-red-600' : 'text-gray-500'}">${hasil?.jumlah_pelanggaran || 0}</td>
+            <td class="border p-2 text-center font-bold text-blue-700">${hasil ? hasil.nilai : '-'}</td>
+            <td class="border p-2 text-center">
+              ${hasil ? `
+                <button onclick="app.resetJawabanSiswa('${s.id_siswa}', '${s.nama}')" class="bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold px-2.5 py-1 rounded transition">
+                  Reset / Hapus Jawaban
+                </button>
+              ` : `<span class="text-gray-400 text-[10px] italic">Tidak ada aksi</span>`}
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+
+        // Update Kartu Statistika
+        document.getElementById('count-stat-belum').textContent = countBelum;
+        document.getElementById('count-stat-kerjakan').textContent = countKerjakan;
+        document.getElementById('count-stat-kecurangan').textContent = countKecurangan;
+        document.getElementById('count-stat-selesai').textContent = countSelesai;
+      }
+
+      // HAPUS / RESET JAWABAN SISWA
+      async resetJawabanSiswa(idSiswa, namaSiswa) {
+        if (!confirm(`HAPUS JAWABAN SISWA?\n\nApakah Anda yakin ingin menghapus seluruh riwayat jawaban & diskualifikasi untuk siswa: "${namaSiswa}"?\n\nSiswa akan diizinkan untuk login dan mengulang tes dari awal.`)) {
+          return;
+        }
+
+        if (supabaseClient) {
+          try {
+            const { error } = await supabaseClient
+              .from('hasil_ujian')
+              .delete()
+              .eq('ID_SISWA', idSiswa);
+
+            if (error) throw error;
+
+            alert(`Jawaban siswa "${namaSiswa}" berhasil dihapus dari database. Siswa dapat login kembali untuk mengulang ujian.`);
+            await this.refreshMonitoringData();
+            this.renderRekapNilai();
+          } catch (err) {
+            alert(`Gagal menghapus jawaban: ${err.message}`);
+          }
+        } else {
+          this.hasilUjianList = this.hasilUjianList.filter(h => h.ID_SISWA !== idSiswa);
+          alert(`Jawaban siswa "${namaSiswa}" dihapus dari memori lokal.`);
+          this.renderMonitoringTable();
+        }
       }
 
       // FITUR PENGATURAN JADWAL UJIAN
@@ -532,9 +722,8 @@
         }
       }
 
-      // PENGECEKAN JADWAL LOGIN SISWA
       validateJadwalSiswa(siswaKelas) {
-        if (this.jadwalList.length === 0) return true; // Jika jadwal belum dikonfigurasi admin
+        if (this.jadwalList.length === 0) return true;
 
         const now = new Date();
         const yyyy = now.getFullYear();
@@ -543,17 +732,14 @@
         const currentDateStr = `${yyyy}-${mm}-${dd}`;
         const currentTimeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-        const validJadwal = this.jadwalList.find(j => {
+        return this.jadwalList.find(j => {
           return j.kelas === siswaKelas &&
                  j.tanggal === currentDateStr &&
                  currentTimeStr >= j.jamMulai &&
                  currentTimeStr <= j.jamSelesai;
         });
-
-        return validJadwal;
       }
 
-      // LOGIN & AUTHENTICATION
       handleLogin(e) {
         e.preventDefault();
         const u = document.getElementById('login-username').value.trim();
@@ -562,11 +748,11 @@
         if (u === 'admin' && p === 'admin122333') {
           this.currentUser = { role: 'admin', username: 'admin' };
           this.showScreen('admin');
+          this.refreshMonitoringData();
           this.renderRekapNilai();
         } else {
           const matchStudent = this.students.find(s => s.user === u && s.pass === p);
           if (matchStudent) {
-            // Validasi Hari & Jam Ujian
             const activeJadwal = this.validateJadwalSiswa(matchStudent.kelas);
             if (!activeJadwal && this.jadwalList.length > 0) {
               alert(`MAAF! Ujian untuk kelas ${matchStudent.kelas} belum dibuka atau jam akses telah berakhir.`);
@@ -602,14 +788,14 @@
       }
 
       switchAdminTab(tabName) {
-        ['jadwal', 'rekap-nilai', 'upload-soal', 'siswa', 'bank-soal'].forEach(t => {
+        ['monitoring', 'jadwal', 'rekap-nilai', 'upload-soal', 'siswa', 'bank-soal'].forEach(t => {
           document.getElementById(`tab-${t}`)?.classList.add('hidden');
         });
         document.getElementById(`tab-${tabName}`)?.classList.remove('hidden');
         if (tabName === 'rekap-nilai') this.renderRekapNilai();
+        if (tabName === 'monitoring') this.refreshMonitoringData();
       }
 
-      // REKAP & CETAK HASIL UJIAN
       async fetchHasilUjianFromSupabase() {
         if (!supabaseClient) return;
         try {
@@ -628,7 +814,6 @@
         if (!tbody) return;
 
         tbody.innerHTML = '';
-
         let filtered = this.hasilUjianList;
 
         if (filterMapel !== 'ALL') {
@@ -636,14 +821,13 @@
         }
 
         if (filtered.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="9" class="p-4 text-center text-gray-500 italic">Belum ada data rekap nilai ujian.</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="10" class="p-4 text-center text-gray-500 italic">Belum ada data rekap nilai ujian.</td></tr>`;
           return;
         }
 
         let no = 1;
         filtered.forEach(h => {
           const student = this.students.find(s => s.id_siswa === h.ID_SISWA) || { nama: 'Siswa', nisn: '-', kelas: '-' };
-          
           if (filterKelas !== 'ALL' && student.kelas !== filterKelas) return;
 
           const tr = document.createElement('tr');
@@ -662,6 +846,11 @@
               </span>
             </td>
             <td class="border p-2 text-gray-500 text-[10px]">${new Date(h.waktu_selesai).toLocaleString('id-ID')}</td>
+            <td class="border p-2 text-center print:hidden">
+              <button onclick="app.resetJawabanSiswa('${student.id_siswa}', '${student.nama}')" class="bg-red-600 text-white text-[10px] px-2 py-1 rounded font-bold">
+                Reset
+              </button>
+            </td>
           `;
           tbody.appendChild(tr);
         });
@@ -675,7 +864,6 @@
         window.print();
       }
 
-      // EXAM PROCESS & TIMER
       startExam() {
         const targetMapel = this.currentUser.jadwalActive?.mapel;
         let studentQuestions = this.questions;
@@ -704,7 +892,6 @@
         this.timerInterval = setInterval(() => {
           const minutes = Math.floor(timer / 60);
           const seconds = timer % 60;
-
           timerDisplay.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 
           if (--timer < 0) {
@@ -860,7 +1047,6 @@
           document.exitFullscreen().catch(err => console.warn(err));
         }
 
-        // HITUNG NILAI OTOMATIS
         let totalBenar = 0;
         this.questions.forEach((q) => {
           const qId = q.id || this.questions.indexOf(q);
@@ -870,7 +1056,6 @@
         });
         const nilaiAkhir = (this.questions.length > 0) ? ((totalBenar / this.questions.length) * 100).toFixed(2) : 0;
 
-        // SIMPAN HASIL KE SUPABASE
         if (supabaseClient && this.currentUser) {
           try {
             await supabaseClient.from('hasil_ujian').insert([{
@@ -881,7 +1066,7 @@
               status_selesai: isDisqualified ? 'DIDISKUALIFIKASI' : 'SELESAI',
               jumlah_pelanggaran: this.violations
             }]);
-            await this.fetchHasilUjianFromSupabase();
+            await this.refreshMonitoringData();
           } catch (err) {
             console.error("Gagal menyimpan hasil ujian:", err.message);
           }
@@ -893,7 +1078,6 @@
         this.showScreen('login');
       }
 
-      // FITUR UPLOAD FILE HTML SOAL
       async processHTMLUpload(e) {
         e.preventDefault();
         const mapel = document.getElementById('select-upload-mapel').value;
