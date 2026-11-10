@@ -14,20 +14,30 @@ const App = {
       const client = await DB.getClient();
       this.updateDBStatus(client);
 
-      // PANGGUL DENGAN EKSPLISIT DAN TUNGGU AWAIT-NYA
+      // MEMANGGIL SEMUA MODUL SECARA EKSPLISIT
       if (window.MapelModule) {
         console.log("[App] Memanggil MapelModule...");
         await MapelModule.loadAndRender();
-      } else {
-        console.warn("[App] MapelModule tidak ditemukan di window!");
       }
 
-      if (window.SiswaModule) await SiswaModule.loadAndRender();
-      if (window.SoalModule) await SoalModule.loadAndRender();
-      if (window.RekapModule) await RekapModule.refreshMonitoringData();
+      if (window.SiswaModule) {
+        console.log("[App] Memanggil SiswaModule...");
+        await SiswaModule.loadAndRender();
+      }
+
+      if (window.SoalModule) {
+        console.log("[App] Memanggil SoalModule...");
+        await SoalModule.loadAndRender();
+      }
+
+      if (window.RekapModule) {
+        console.log("[App] Memanggil RekapModule...");
+        await RekapModule.refreshMonitoringData();
+      }
+
       if (window.JadwalModule) JadwalModule.renderJadwalList();
 
-      console.log("[App] Aplikasi Siap Digunakan.");
+      console.log("[App] Seluruh Modul Siap Digunakan.");
     } catch (err) {
       console.error("[App] Terjadi kesalahan saat inisialisasi:", err.message);
       if (badge) {
@@ -77,10 +87,10 @@ const App = {
     
     if (tabName === 'rekap-nilai' && window.RekapModule) RekapModule.renderRekapNilai();
     if (tabName === 'monitoring' && window.RekapModule) RekapModule.refreshMonitoringData();
-    if (tabName === 'bank-soal' && window.SoalModule) SoalModule.renderBankSoalList();
+    if (tabName === 'bank-soal' && window.SoalModule) SoalModule.loadAndRender();
+    if (tabName === 'siswa' && window.SiswaModule) SiswaModule.loadAndRender();
     if (tabName === 'mapel' && window.MapelModule) MapelModule.loadAndRender();
   }
 };
 
-// Pastikan dipanggil setelah semua file script selesai di-load browser
 window.addEventListener('load', () => App.init());
