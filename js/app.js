@@ -4,7 +4,6 @@ const App = {
     this.setupPWA();
     if (window.ExamModule) ExamModule.setupSecurityListeners();
     
-    // Set indikator awal
     const badge = document.getElementById('db-status-badge');
     if (badge) {
       badge.textContent = "Menghubungkan...";
@@ -15,8 +14,14 @@ const App = {
       const client = await DB.getClient();
       this.updateDBStatus(client);
 
-      // Jalankan fungsi modul satu per satu dengan pelindung try-catch per modul
-      if (window.MapelModule) await MapelModule.loadAndRender();
+      // PANGGUL DENGAN EKSPLISIT DAN TUNGGU AWAIT-NYA
+      if (window.MapelModule) {
+        console.log("[App] Memanggil MapelModule...");
+        await MapelModule.loadAndRender();
+      } else {
+        console.warn("[App] MapelModule tidak ditemukan di window!");
+      }
+
       if (window.SiswaModule) await SiswaModule.loadAndRender();
       if (window.SoalModule) await SoalModule.loadAndRender();
       if (window.RekapModule) await RekapModule.refreshMonitoringData();
@@ -40,7 +45,7 @@ const App = {
       badge.textContent = "Database Connected";
       badge.className = "px-2.5 py-1 text-xs rounded-full bg-emerald-600 text-white font-medium";
     } else {
-      badge.textContent = "Offline / Config Belum Diisi";
+      badge.textContent = "Offline / Config Error";
       badge.className = "px-2.5 py-1 text-xs rounded-full bg-amber-600 text-white font-medium";
     }
   },
@@ -77,9 +82,5 @@ const App = {
   }
 };
 
-// Pastikan DOM siap penuh sebelum App.init dipanggil
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => App.init());
-} else {
-  App.init();
-}
+// Pastikan dipanggil setelah semua file script selesai di-load browser
+window.addEventListener('load', () => App.init());
