@@ -355,10 +355,15 @@
     </div>
   </div>
 
-  <!-- LOAD SCRIPT MODULAR SESUAI URUTAN MANDATORI -->
+  <!-- 1. Supabase SDK & Config -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="./config.js"></script>
+
+  <!-- 2. Core DB Helper & State -->
   <script src="./js/supabase.js"></script>
   <script src="./js/state.js"></script>
+
+  <!-- 3. Sub-Modul (Pastikan folder js/mapel.js benar) -->
   <script src="./js/mapel.js"></script>
   <script src="./js/siswa.js"></script>
   <script src="./js/jadwal.js"></script>
@@ -366,6 +371,8 @@
   <script src="./js/rekap.js"></script>
   <script src="./js/auth.js"></script>
   <script src="./js/exam.js"></script>
+
+  <!-- 4. Controller Utama -->
   <script src="./js/app.js"></script>
 </body>
 </html>
