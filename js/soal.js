@@ -2,8 +2,24 @@ const SoalModule = {
   async loadAndRender() {
     try {
       console.log("[SoalModule] Menarik bank soal dari Supabase...");
-      State.questions = await DB.fetchBankSoal();
-      console.log("[SoalModule] Data bank soal diterima:", State.questions.length, "butir");
+      const rawQuestions = await DB.fetchBankSoal();
+      console.log("[SoalModule] Raw Data dari Supabase:", rawQuestions);
+
+      // Normalisasi nama kolom agar tahan terhadap perbedaan huruf besar/kecil (Upper/Lowercase)
+      State.questions = (rawQuestions || []).map(q => ({
+        id: q.id || q.ID,
+        mapel: q.mapel || q.MAPEL || q.nama_mapel || q.NAMA_MAPEL || 'Lainnya',
+        kelas: q.kelas || q.KELAS || 'Umum',
+        soal_html: q.soal_html || q.SOAL_HTML || q.soal || q.SOAL || '',
+        opsi_a: q.opsi_a || q.OPSI_A || '',
+        opsi_b: q.opsi_b || q.OPSI_B || '',
+        opsi_c: q.opsi_c || q.OPSI_C || '',
+        opsi_d: q.opsi_d || q.OPSI_D || '',
+        opsi_e: q.opsi_e || q.OPSI_E || '',
+        kunci_jawaban: q.kunci_jawaban || q.KUNCI_JAWABAN || q.kunci || q.KUNCI || 'A'
+      }));
+
+      console.log("[SoalModule] Data soal berhasil dinormalisasi:", State.questions.length, "butir");
       this.renderBankSoalList();
     } catch (err) {
       console.error("[SoalModule] Error saat render bank soal:", err.message);
@@ -112,13 +128,13 @@ const SoalModule = {
     if (!container) return;
 
     container.innerHTML = '';
-    let filtered = State.questions;
+    let filtered = State.questions || [];
 
     if (filterKelas !== 'ALL') filtered = filtered.filter(q => q.kelas === filterKelas);
     if (filterMapel !== 'ALL') filtered = filtered.filter(q => q.mapel === filterMapel);
 
-    if (!filtered || filtered.length === 0) {
-      container.innerHTML = `<div class="text-xs text-amber-600 italic p-4 text-center border rounded">Tidak ada soal ditemukan di Supabase.</div>`;
+    if (filtered.length === 0) {
+      container.innerHTML = `<div class="text-xs text-amber-600 italic p-4 text-center border rounded bg-amber-50">Belum ada data soal di Supabase (atau tidak ada yang cocok dengan filter).</div>`;
       return;
     }
 
@@ -130,11 +146,11 @@ const SoalModule = {
 
     Object.keys(groupedByMapel).forEach((mapelName) => {
       const mapelQuestions = groupedByMapel[mapelName];
-      const isOpen = !!State.openAccordionMapel[mapelName];
+      const isOpen = State.openAccordionMapel[mapelName] !== false; // Default terbuka jika baru dimuat
       const daftarKelasUnique = [...new Set(mapelQuestions.map(q => q.kelas))].join(', ');
 
       const mapelCard = document.createElement('div');
-      mapelCard.className = "border rounded-lg bg-white overflow-hidden shadow-sm transition";
+      mapelCard.className = "border rounded-lg bg-white overflow-hidden shadow-sm transition mb-3";
 
       mapelCard.innerHTML = `
         <div class="p-4 bg-gray-50 hover:bg-blue-50 flex justify-between items-center transition border-b">
@@ -228,4 +244,168 @@ const SoalModule = {
     return new Promise((resolve, reject) => {
       const image = new Image();
       const reader = new FileReader();
-      reader.onload = (
+      reader.onload = (e) => { image.src = e.target.result; };
+      image.onload = () => {
+        let width = image.width;
+        let height = image.height;
+        if (width > height) {
+          if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; }
+        } else {
+          if (height > maxHeight) { width = Math.round((width * maxHeight) / height); height = maxHeight; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(image, 0, 0, width, height);
+        canvas.toBlob((blob) => {
+          if (blob) {
+            resolve(new File([blob], `compressed_${Date.now()}.jpg`, { type: 'image/jpeg', lastModified: Date.now() }));
+          } else reject(new Error("Gagal kompresi."));
+        }, 'image/jpeg', quality);
+      };
+      image.onerror = (err) => reject(err);
+      reader.readAsDataURL(file);
+    });
+  },
+
+  async uploadImageToStorage(fileInputId, targetFieldId) {
+    const fileInput = document.getElementById(fileInputId);
+    const originalFile = fileInput.files[0];
+    const qId = document.getElementById('edit-soal-id').value;
+
+    if (!originalFile) {
+      alert("Silakan pilih file gambar dari perangkat Anda terlebih dahulu.");
+      return;
+    }
+
+    const client = await DB.getClient();
+    if (!client) {
+      alert("Koneksi Supabase tidak aktif.");
+      return;
+    }
+
+    try {
+      const compressedFile = await this.compressImage(originalFile);
+      const targetElem = document.getElementById(targetFieldId);
+      const fileName = `img_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.jpg`;
+
+      const { data: uploadData, error: uploadError } = await client.storage
+        .from('soal-images')
+        .upload(fileName, compressedFile, { cacheControl: '3600', upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: publicUrlData } = client.storage.from('soal-images').getPublicUrl(fileName);
+      const publicUrl = publicUrlData.publicUrl;
+
+      if (targetFieldId === 'edit-soal-html') {
+        const imgHtml = `<br><img src="${publicUrl}" alt="Gambar Soal" class="my-2 rounded border max-h-48">`;
+        targetElem.value = targetElem.value.includes('<img') ? targetElem.value.replace(/<img[^>]*>/g, imgHtml) : targetElem.value + imgHtml;
+      } else {
+        targetElem.value += ` <img src="${publicUrl}" alt="Gambar Opsi" class="inline-block max-h-24 my-1 rounded border">`;
+      }
+
+      if (qId) {
+        const mapel = document.getElementById('edit-soal-mapel').value;
+        const kelas = document.getElementById('edit-soal-kelas').value;
+        const soal_html = document.getElementById('edit-soal-html').value;
+        const opsi_a = document.getElementById('edit-opsi-a').value;
+        const opsi_b = document.getElementById('edit-opsi-b').value;
+        const opsi_c = document.getElementById('edit-opsi-c').value;
+        const opsi_d = document.getElementById('edit-opsi-d').value;
+        const opsi_e = document.getElementById('edit-opsi-e').value;
+        const kunci_jawaban = document.getElementById('edit-soal-kunci').value;
+
+        await client.from('bank_soal')
+          .update({ mapel, kelas, soal_html, opsi_a, opsi_b, opsi_c, opsi_d, opsi_e, kunci_jawaban })
+          .eq('id', parseInt(qId));
+
+        await this.loadAndRender();
+      }
+
+      alert(`Gambar berhasil dikompres & diunggah!`);
+      fileInput.value = '';
+
+    } catch (err) {
+      alert(`Gagal mengunggah gambar: ${err.message}`);
+    }
+  },
+
+  async saveEditedSoal(e) {
+    e.preventDefault();
+    const qId = document.getElementById('edit-soal-id').value;
+    const mapel = document.getElementById('edit-soal-mapel').value;
+    const kelas = document.getElementById('edit-soal-kelas').value;
+    const soal_html = document.getElementById('edit-soal-html').value;
+    const opsi_a = document.getElementById('edit-opsi-a').value;
+    const opsi_b = document.getElementById('edit-opsi-b').value;
+    const opsi_c = document.getElementById('edit-opsi-c').value;
+    const opsi_d = document.getElementById('edit-opsi-d').value;
+    const opsi_e = document.getElementById('edit-opsi-e').value;
+    const kunci_jawaban = document.getElementById('edit-soal-kunci').value;
+
+    const client = await DB.getClient();
+    if (client && qId) {
+      try {
+        const { error } = await client.from('bank_soal')
+          .update({ mapel, kelas, soal_html, opsi_a, opsi_b, opsi_c, opsi_d, opsi_e, kunci_jawaban })
+          .eq('id', parseInt(qId));
+
+        if (error) throw error;
+        alert("Perubahan teks soal berhasil diperbarui di Supabase!");
+        await this.loadAndRender();
+        this.closeEditModal();
+      } catch (err) {
+        alert(`Gagal menyimpan perubahan: ${err.message}`);
+      }
+    }
+  },
+
+  printNaskahSoalArsip() {
+    const filterKelas = document.getElementById('bank-filter-kelas').value;
+    const filterMapel = document.getElementById('bank-filter-mapel').value;
+    const container = document.getElementById('print-soal-content-container');
+    if (!container) return;
+
+    container.innerHTML = '';
+    let filtered = State.questions;
+
+    if (filterKelas !== 'ALL') filtered = filtered.filter(q => q.kelas === filterKelas);
+    if (filterMapel !== 'ALL') filtered = filtered.filter(q => q.mapel === filterMapel);
+
+    document.getElementById('print-soal-meta').textContent = `Mata Pelajaran: ${filterMapel} | Kelas Target: ${filterKelas} | Alokasi Waktu: 45 Menit`;
+
+    filtered.forEach((q, idx) => {
+      const item = document.createElement('div');
+      item.className = "border-b pb-4 space-y-2";
+      item.innerHTML = `
+        <div class="flex gap-2 font-bold">
+          <span>${idx + 1}.</span>
+          <div>${q.soal_html}</div>
+        </div>
+        <div class="pl-5 space-y-1">
+          <div>A. ${q.opsi_a}</div>
+          <div>B. ${q.opsi_b}</div>
+          <div>C. ${q.opsi_c}</div>
+          <div>D. ${q.opsi_d}</div>
+          <div>E. ${q.opsi_e}</div>
+        </div>
+      `;
+      container.appendChild(item);
+    });
+
+    window.print();
+  },
+
+  async deleteSoal(id) {
+    if (confirm("Hapus soal ini dari bank soal?")) {
+      const client = await DB.getClient();
+      if (client && typeof id === 'number') {
+        await client.from('bank_soal').delete().eq('id', id);
+        await this.loadAndRender();
+      }
+    }
+  }
+};
+
+window.SoalModule = SoalModule;
