@@ -430,11 +430,11 @@
     </main>
   </div>
 
-  <!-- MODAL EDIT SOAL & GAMBAR (AUTO-SAVE STORAGE INTEGRATION) -->
+  <!-- MODAL EDIT SOAL & GAMBAR (AUTO-SAVE & AUTO-COMPRESS STORAGE INTEGRATION) -->
   <div id="modal-edit-soal" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 overflow-y-auto">
     <div class="bg-white rounded-xl max-w-3xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
       <div class="flex justify-between items-center border-b pb-3">
-        <h3 class="text-md font-bold text-gray-800">Edit Soal & Upload Gambar (Supabase Storage)</h3>
+        <h3 class="text-md font-bold text-gray-800">Edit Soal & Upload Gambar (Kompresi Otomatis)</h3>
         <button onclick="app.closeEditModal()" class="text-gray-500 hover:text-gray-700 text-lg font-bold">&times;</button>
       </div>
 
@@ -457,13 +457,13 @@
           <textarea id="edit-soal-html" rows="3" required class="w-full border p-2 font-mono rounded focus:ring-2 focus:ring-blue-500"></textarea>
         </div>
 
-        <!-- UPLOAD GAMBAR SOAL KE SUPABASE STORAGE -->
+        <!-- UPLOAD GAMBAR SOAL DENGAN KOMPRESI OTOMATIS -->
         <div class="bg-blue-50 border border-blue-200 p-3 rounded space-y-2">
-          <label class="block font-bold text-blue-900">Upload Berkas Gambar Soal (Supabase Storage)</label>
+          <label class="block font-bold text-blue-900">Upload Gambar Soal (Auto-Compress to ~75% JPG)</label>
           <div class="flex items-center gap-2">
             <input type="file" id="edit-soal-img-file" accept="image/*" class="border bg-white p-1 rounded text-xs max-w-xs">
             <button type="button" onclick="app.uploadImageToStorage('edit-soal-img-file', 'edit-soal-html')" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded font-bold transition">
-              Upload Gambar Soal
+              Upload & Kompres Gambar
             </button>
           </div>
         </div>
@@ -1364,13 +1364,72 @@
         document.getElementById('modal-edit-soal').classList.add('hidden');
       }
 
-      // INTEGRASI UPLOAD GAMBAR DENGAN AUTO-SAVE KE SUPABASE DATABASE
+      // -------------------------------------------------------------
+      // FUNGSI KOMPRESI GAMBAR OTOMATIS (CANVAS API)
+      // -------------------------------------------------------------
+      compressImage(file, maxWidth = 1200, maxHeight = 1200, quality = 0.75) {
+        return new Promise((resolve, reject) => {
+          const image = new Image();
+          const reader = new FileReader();
+
+          reader.onload = (e) => {
+            image.src = e.target.result;
+          };
+
+          image.onload = () => {
+            let width = image.width;
+            let height = image.height;
+
+            // Hitung rasio dimensi agar tidak gepeng
+            if (width > height) {
+              if (width > maxWidth) {
+                height = Math.round((height * maxWidth) / width);
+                width = maxWidth;
+              }
+            } else {
+              if (height > maxHeight) {
+                width = Math.round((width * maxHeight) / height);
+                height = maxHeight;
+              }
+            }
+
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(image, 0, 0, width, height);
+
+            // Konversi Canvas ke Blob JPEG terkompresi
+            canvas.toBlob(
+              (blob) => {
+                if (blob) {
+                  const compressedFile = new File([blob], `compressed_${Date.now()}.jpg`, {
+                    type: 'image/jpeg',
+                    lastModified: Date.now()
+                  });
+                  resolve(compressedFile);
+                } else {
+                  reject(new Error("Gagal melakukan kompresi gambar."));
+                }
+              },
+              'image/jpeg',
+              quality
+            );
+          };
+
+          image.onerror = (err) => reject(err);
+          reader.readAsDataURL(file);
+        });
+      }
+
+      // INTEGRASI UPLOAD GAMBAR DENGAN AUTO-COMPRESS & AUTO-SAVE KE SUPABASE
       async uploadImageToStorage(fileInputId, targetFieldId) {
         const fileInput = document.getElementById(fileInputId);
-        const file = fileInput.files[0];
+        const originalFile = fileInput.files[0];
         const qId = document.getElementById('edit-soal-id').value;
 
-        if (!file) {
+        if (!originalFile) {
           alert("Silakan pilih file gambar dari perangkat Anda terlebih dahulu.");
           return;
         }
@@ -1381,26 +1440,28 @@
         }
 
         try {
+          // A. Jalankan Kompresi Gambar terlebih dahulu
+          const compressedFile = await this.compressImage(originalFile);
+
           const targetElem = document.getElementById(targetFieldId);
-          const fileExt = file.name.split('.').pop();
-          const fileName = `img_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
+          const fileName = `img_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.jpg`;
           const filePath = `${fileName}`;
 
-          // 1. Upload Berkas ke Storage (Bucket: soal-images)
+          // B. Upload File Terkompresi ke Supabase Storage (Bucket: soal-images)
           const { data: uploadData, error: uploadError } = await supabaseClient.storage
             .from('soal-images')
-            .upload(filePath, file, { cacheControl: '3600', upsert: true });
+            .upload(filePath, compressedFile, { cacheControl: '3600', upsert: true });
 
           if (uploadError) throw uploadError;
 
-          // 2. Dapatkan Public URL Gambar
+          // C. Dapatkan Public URL Gambar
           const { data: publicUrlData } = supabaseClient.storage
             .from('soal-images')
             .getPublicUrl(filePath);
 
           const publicUrl = publicUrlData.publicUrl;
 
-          // 3. Masukkan tag img ke input/textarea
+          // D. Masukkan tag img ke input/textarea
           if (targetFieldId === 'edit-soal-html') {
             const imgHtml = `<br><img src="${publicUrl}" alt="Gambar Soal" class="my-2 rounded border max-h-48">`;
             if (targetElem.value.includes('<img')) {
@@ -1412,7 +1473,7 @@
             targetElem.value += ` <img src="${publicUrl}" alt="Gambar Opsi" class="inline-block max-h-24 my-1 rounded border">`;
           }
 
-          // 4. AUTO-SAVE LANGSUNG KE TABEL BANK_SOAL SUPABASE
+          // E. AUTO-SAVE LANGSUNG KE TABEL BANK_SOAL SUPABASE
           if (qId) {
             const mapel = document.getElementById('edit-soal-mapel').value;
             const kelas = document.getElementById('edit-soal-kelas').value;
@@ -1434,7 +1495,10 @@
             await this.fetchBankSoalFromSupabase();
           }
 
-          alert("Gambar berhasil diunggah ke Storage dan otomatis tersimpan ke soal!");
+          const originalSizeKB = (originalFile.size / 1024).toFixed(1);
+          const compressedSizeKB = (compressedFile.size / 1024).toFixed(1);
+
+          alert(`Gambar berhasil dikompres & diunggah!\nUkuran awal: ${originalSizeKB} KB → Terkompres: ${compressedSizeKB} KB`);
           fileInput.value = '';
 
         } catch (err) {
