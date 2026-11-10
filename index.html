@@ -430,11 +430,11 @@
     </main>
   </div>
 
-  <!-- MODAL EDIT SOAL & GAMBAR DENGAN SUPABASE STORAGE INTEGRATION -->
+  <!-- MODAL EDIT SOAL & GAMBAR (AUTO-SAVE STORAGE INTEGRATION) -->
   <div id="modal-edit-soal" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 overflow-y-auto">
     <div class="bg-white rounded-xl max-w-3xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
       <div class="flex justify-between items-center border-b pb-3">
-        <h3 class="text-md font-bold text-gray-800">Edit Soal & Unggah Gambar (Supabase Storage)</h3>
+        <h3 class="text-md font-bold text-gray-800">Edit Soal & Upload Gambar (Supabase Storage)</h3>
         <button onclick="app.closeEditModal()" class="text-gray-500 hover:text-gray-700 text-lg font-bold">&times;</button>
       </div>
 
@@ -459,7 +459,7 @@
 
         <!-- UPLOAD GAMBAR SOAL KE SUPABASE STORAGE -->
         <div class="bg-blue-50 border border-blue-200 p-3 rounded space-y-2">
-          <label class="block font-bold text-blue-900">Upload / Ganti Gambar Soal (Supabase Storage)</label>
+          <label class="block font-bold text-blue-900">Upload Berkas Gambar Soal (Supabase Storage)</label>
           <div class="flex items-center gap-2">
             <input type="file" id="edit-soal-img-file" accept="image/*" class="border bg-white p-1 rounded text-xs max-w-xs">
             <button type="button" onclick="app.uploadImageToStorage('edit-soal-img-file', 'edit-soal-html')" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded font-bold transition">
@@ -479,7 +479,7 @@
               <input type="text" id="edit-opsi-a" required class="w-full border px-2 py-1 rounded">
               <div class="flex items-center gap-2 pt-1">
                 <input type="file" id="edit-opsi-a-img" accept="image/*" class="text-[10px] bg-white border p-0.5 rounded">
-                <button type="button" onclick="app.uploadImageToStorage('edit-opsi-a-img', 'edit-opsi-a')" class="bg-gray-700 text-white text-[10px] px-2 py-0.5 rounded font-bold">
+                <button type="button" onclick="app.uploadImageToStorage('edit-opsi-a-img', 'edit-opsi-a')" class="bg-gray-700 hover:bg-gray-800 text-white text-[10px] px-2 py-0.5 rounded font-bold">
                   Upload Gambar Opsi A
                 </button>
               </div>
@@ -491,7 +491,7 @@
               <input type="text" id="edit-opsi-b" required class="w-full border px-2 py-1 rounded">
               <div class="flex items-center gap-2 pt-1">
                 <input type="file" id="edit-opsi-b-img" accept="image/*" class="text-[10px] bg-white border p-0.5 rounded">
-                <button type="button" onclick="app.uploadImageToStorage('edit-opsi-b-img', 'edit-opsi-b')" class="bg-gray-700 text-white text-[10px] px-2 py-0.5 rounded font-bold">
+                <button type="button" onclick="app.uploadImageToStorage('edit-opsi-b-img', 'edit-opsi-b')" class="bg-gray-700 hover:bg-gray-800 text-white text-[10px] px-2 py-0.5 rounded font-bold">
                   Upload Gambar Opsi B
                 </button>
               </div>
@@ -503,7 +503,7 @@
               <input type="text" id="edit-opsi-c" required class="w-full border px-2 py-1 rounded">
               <div class="flex items-center gap-2 pt-1">
                 <input type="file" id="edit-opsi-c-img" accept="image/*" class="text-[10px] bg-white border p-0.5 rounded">
-                <button type="button" onclick="app.uploadImageToStorage('edit-opsi-c-img', 'edit-opsi-c')" class="bg-gray-700 text-white text-[10px] px-2 py-0.5 rounded font-bold">
+                <button type="button" onclick="app.uploadImageToStorage('edit-opsi-c-img', 'edit-opsi-c')" class="bg-gray-700 hover:bg-gray-800 text-white text-[10px] px-2 py-0.5 rounded font-bold">
                   Upload Gambar Opsi C
                 </button>
               </div>
@@ -515,7 +515,7 @@
               <input type="text" id="edit-opsi-d" required class="w-full border px-2 py-1 rounded">
               <div class="flex items-center gap-2 pt-1">
                 <input type="file" id="edit-opsi-d-img" accept="image/*" class="text-[10px] bg-white border p-0.5 rounded">
-                <button type="button" onclick="app.uploadImageToStorage('edit-opsi-d-img', 'edit-opsi-d')" class="bg-gray-700 text-white text-[10px] px-2 py-0.5 rounded font-bold">
+                <button type="button" onclick="app.uploadImageToStorage('edit-opsi-d-img', 'edit-opsi-d')" class="bg-gray-700 hover:bg-gray-800 text-white text-[10px] px-2 py-0.5 rounded font-bold">
                   Upload Gambar Opsi D
                 </button>
               </div>
@@ -527,7 +527,7 @@
               <input type="text" id="edit-opsi-e" required class="w-full border px-2 py-1 rounded">
               <div class="flex items-center gap-2 pt-1">
                 <input type="file" id="edit-opsi-e-img" accept="image/*" class="text-[10px] bg-white border p-0.5 rounded">
-                <button type="button" onclick="app.uploadImageToStorage('edit-opsi-e-img', 'edit-opsi-e')" class="bg-gray-700 text-white text-[10px] px-2 py-0.5 rounded font-bold">
+                <button type="button" onclick="app.uploadImageToStorage('edit-opsi-e-img', 'edit-opsi-e')" class="bg-gray-700 hover:bg-gray-800 text-white text-[10px] px-2 py-0.5 rounded font-bold">
                   Upload Gambar Opsi E
                 </button>
               </div>
@@ -548,7 +548,7 @@
 
         <div class="flex justify-end gap-2 border-t pt-3">
           <button type="button" onclick="app.closeEditModal()" class="bg-gray-400 hover:bg-gray-500 text-white font-bold px-4 py-2 rounded">Batal</button>
-          <button type="submit" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2 rounded">Simpan Perubahan</button>
+          <button type="submit" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2 rounded">Simpan Perubahan Teks</button>
         </div>
       </form>
     </div>
@@ -701,7 +701,6 @@
         if (selectKelasBank) selectKelasBank.innerHTML = `<option value="ALL">Semua Kelas</option>` + kelasOpts;
       }
 
-      // MONITORING & STATISTIK REALTIME
       async refreshMonitoringData() {
         await this.fetchHasilUjianFromSupabase();
         this.renderMonitoringTable();
@@ -1282,7 +1281,7 @@
       async fetchBankSoalFromSupabase() {
         if (!supabaseClient) return;
         try {
-          const { data } = await supabaseClient.from('bank_soal').select('*');
+          const { data } = await supabaseClient.from('bank_soal').select('*').order('id', { ascending: true });
           this.questions = data || [];
           this.renderBankSoalList();
         } catch (err) {
@@ -1365,58 +1364,81 @@
         document.getElementById('modal-edit-soal').classList.add('hidden');
       }
 
-      // INTEGRASI UTAMA UPLOAD GAMBAR KE SUPABASE STORAGE
+      // INTEGRASI UPLOAD GAMBAR DENGAN AUTO-SAVE KE SUPABASE DATABASE
       async uploadImageToStorage(fileInputId, targetFieldId) {
         const fileInput = document.getElementById(fileInputId);
         const file = fileInput.files[0];
+        const qId = document.getElementById('edit-soal-id').value;
 
         if (!file) {
-          alert("Silakan pilih file gambar terlebih dahulu.");
+          alert("Silakan pilih file gambar dari perangkat Anda terlebih dahulu.");
           return;
         }
 
         if (!supabaseClient) {
-          alert("Koneksi Supabase tidak aktif. Menggunakan mode fallback lokal.");
+          alert("Koneksi Supabase tidak aktif.");
           return;
         }
 
         try {
+          const targetElem = document.getElementById(targetFieldId);
           const fileExt = file.name.split('.').pop();
           const fileName = `img_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
           const filePath = `${fileName}`;
 
-          // Upload ke Bucket 'soal-images'
-          const { data, error } = await supabaseClient.storage
+          // 1. Upload Berkas ke Storage (Bucket: soal-images)
+          const { data: uploadData, error: uploadError } = await supabaseClient.storage
             .from('soal-images')
             .upload(filePath, file, { cacheControl: '3600', upsert: true });
 
-          if (error) throw error;
+          if (uploadError) throw uploadError;
 
-          // Dapatkan Public URL Gambar
+          // 2. Dapatkan Public URL Gambar
           const { data: publicUrlData } = supabaseClient.storage
             .from('soal-images')
             .getPublicUrl(filePath);
 
           const publicUrl = publicUrlData.publicUrl;
-          const targetElem = document.getElementById(targetFieldId);
 
+          // 3. Masukkan tag img ke input/textarea
           if (targetFieldId === 'edit-soal-html') {
-            // Jika target adalah Soal HTML
+            const imgHtml = `<br><img src="${publicUrl}" alt="Gambar Soal" class="my-2 rounded border max-h-48">`;
             if (targetElem.value.includes('<img')) {
-              targetElem.value = targetElem.value.replace(/<img[^>]*>/g, `<img src="${publicUrl}" alt="Gambar Soal" class="my-2 rounded border max-h-48">`);
+              targetElem.value = targetElem.value.replace(/<img[^>]*>/g, imgHtml);
             } else {
-              targetElem.value += `<br><img src="${publicUrl}" alt="Gambar Soal" class="my-2 rounded border max-h-48">`;
+              targetElem.value += imgHtml;
             }
           } else {
-            // Jika target adalah Opsi Jawaban (A-E)
             targetElem.value += ` <img src="${publicUrl}" alt="Gambar Opsi" class="inline-block max-h-24 my-1 rounded border">`;
           }
 
-          alert("Gambar berhasil diunggah ke Supabase Storage!");
-          fileInput.value = ''; // Reset file input
+          // 4. AUTO-SAVE LANGSUNG KE TABEL BANK_SOAL SUPABASE
+          if (qId) {
+            const mapel = document.getElementById('edit-soal-mapel').value;
+            const kelas = document.getElementById('edit-soal-kelas').value;
+            const soal_html = document.getElementById('edit-soal-html').value;
+            const opsi_a = document.getElementById('edit-opsi-a').value;
+            const opsi_b = document.getElementById('edit-opsi-b').value;
+            const opsi_c = document.getElementById('edit-opsi-c').value;
+            const opsi_d = document.getElementById('edit-opsi-d').value;
+            const opsi_e = document.getElementById('edit-opsi-e').value;
+            const kunci_jawaban = document.getElementById('edit-soal-kunci').value;
+
+            const { error: dbError } = await supabaseClient
+              .from('bank_soal')
+              .update({ mapel, kelas, soal_html, opsi_a, opsi_b, opsi_c, opsi_d, opsi_e, kunci_jawaban })
+              .eq('id', parseInt(qId));
+
+            if (dbError) throw dbError;
+
+            await this.fetchBankSoalFromSupabase();
+          }
+
+          alert("Gambar berhasil diunggah ke Storage dan otomatis tersimpan ke soal!");
+          fileInput.value = '';
 
         } catch (err) {
-          alert(`Gagal mengunggah gambar ke Storage: ${err.message}`);
+          alert(`Gagal mengunggah gambar: ${err.message}`);
         }
       }
 
@@ -1441,7 +1463,7 @@
               .eq('id', parseInt(qId));
 
             if (error) throw error;
-            alert("Soal & Gambar berhasil diperbarui di Supabase!");
+            alert("Perubahan teks soal berhasil diperbarui di Supabase!");
             await this.fetchBankSoalFromSupabase();
             this.closeEditModal();
           } catch (err) {
@@ -1451,7 +1473,7 @@
           const index = this.questions.findIndex((q, idx) => (q.id || idx) == qId);
           if (index !== -1) {
             this.questions[index] = { ...this.questions[index], mapel, kelas, soal_html, opsi_a, opsi_b, opsi_c, opsi_d, opsi_e, kunci_jawaban };
-            alert("Soal berhasil diperbarui di memori lokal.");
+            alert("Perubahan disimpan di memori lokal.");
             this.renderBankSoalList();
             this.closeEditModal();
           }
