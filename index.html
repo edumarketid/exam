@@ -343,12 +343,12 @@
           <div id="upload-log" class="hidden border rounded p-4 bg-gray-900 text-green-400 font-mono text-xs max-h-48 overflow-y-auto"></div>
         </div>
 
-        <!-- TAB: BANK SOAL & EDITOR GAMBAR SUPABASE STORAGE -->
+        <!-- TAB: BANK SOAL & EDITOR GAMBAR SUPABASE STORAGE (MODE ACCORDION RAPI) -->
         <div id="tab-bank-soal" class="hidden bg-white p-6 rounded-lg shadow border space-y-6">
           <div class="flex flex-wrap justify-between items-center border-b pb-4 gap-3 print:hidden">
             <div>
               <h3 class="font-bold text-md text-gray-800">Bank Soal, Editor & Cetak Berkas Ujian</h3>
-              <p class="text-xs text-gray-500">Edit teks soal, unggah gambar ke Supabase Storage, dan cetak naskah soal.</p>
+              <p class="text-xs text-gray-500">Klik nama Mata Pelajaran untuk membuka dan mengedit butir soal di dalamnya.</p>
             </div>
             <div class="flex flex-wrap items-center gap-2">
               <select id="bank-filter-kelas" onchange="app.renderBankSoalList()" class="border px-3 py-1.5 rounded text-xs font-semibold bg-gray-50"></select>
@@ -359,7 +359,8 @@
             </div>
           </div>
 
-          <div id="bank-soal-list" class="space-y-4 print:hidden"></div>
+          <!-- CONTAINER ACCORDION MAPEL BANK SOAL -->
+          <div id="bank-soal-list" class="space-y-3 print:hidden"></div>
 
           <div id="print-soal-area" class="hidden print:block space-y-4">
             <div class="text-center border-b-2 border-black pb-3">
@@ -438,7 +439,7 @@
     </main>
   </div>
 
-  <!-- MODAL EDIT SOAL & GAMBAR (AUTO-SAVE & AUTO-COMPRESS STORAGE INTEGRATION) -->
+  <!-- MODAL EDIT SOAL & GAMBAR -->
   <div id="modal-edit-soal" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 overflow-y-auto">
     <div class="bg-white rounded-xl max-w-3xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
       <div class="flex justify-between items-center border-b pb-3">
@@ -585,6 +586,7 @@
         this.answers = {};
         this.pressedKeys = {};
         this.timerInterval = null;
+        this.openAccordionMapel = {}; // Pelacak status buka/tutup accordion mapel
 
         this.students = [];
         this.kelasOptions = [];
@@ -693,7 +695,6 @@
         if (selectMapelRekap) selectMapelRekap.innerHTML = `<option value="ALL">Semua Mapel</option>` + mapelOpts;
         if (selectMapelBank) selectMapelBank.innerHTML = `<option value="ALL">Semua Mapel</option>` + mapelOpts;
 
-        // POPULATE CHECKBOXES MULTI-SELECT KELAS TARGET DI TAB UPLOAD SOAL
         const containerKelasCheckbox = document.getElementById('container-upload-kelas-checkboxes');
         if (containerKelasCheckbox) {
           containerKelasCheckbox.innerHTML = this.kelasOptions.map(k => `
@@ -704,7 +705,6 @@
           `).join('');
         }
 
-        // POPULATE DROPDOWN TUNGGAL KELAS (JADWAL, REKAP, BANK, MONITORING)
         const selectKelasJadwal = document.getElementById('jadwal-kelas');
         const selectKelasKartu = document.getElementById('filter-kelas-kartu');
         const selectKelasRekap = document.getElementById('rekap-filter-kelas');
@@ -1241,12 +1241,10 @@
         this.showScreen('login');
       }
 
-      // PROSES UPLOAD BERKAS HTML DENGAN MULTI-SELECT KELAS TARGET
       async processHTMLUpload(e) {
         e.preventDefault();
         const mapel = document.getElementById('select-upload-mapel').value;
         
-        // Ambil semua kelas yang dicentang
         const selectedKelasNodes = document.querySelectorAll('input[name="upload-kelas-target"]:checked');
         const selectedKelasList = Array.from(selectedKelasNodes).map(cb => cb.value);
 
@@ -1278,7 +1276,6 @@
 
           const parsedQuestions = [];
           
-          // Loop untuk setiap kelas target yang dicentang
           selectedKelasList.forEach((kelasTarget) => {
             soalElements.forEach((el) => {
               const kunci = el.getAttribute('data-kunci') || 'A';
@@ -1288,7 +1285,7 @@
               const opsiItems = el.querySelectorAll('.opsi-jawaban li');
               parsedQuestions.push({
                 mapel: mapel,
-                kelas: kelasTarget, // Disimpan untuk masing-masing kelas target
+                kelas: kelasTarget,
                 soal_html: soalHtml,
                 opsi_a: opsiItems[0] ? opsiItems[0].innerHTML.trim() : '',
                 opsi_b: opsiItems[1] ? opsiItems[1].innerHTML.trim() : '',
@@ -1329,6 +1326,14 @@
         }
       }
 
+      // -------------------------------------------------------------
+      // TAMPILAN BANK SOAL MODE ACCORDION RAPI (TERLIPAT PER MAPEL)
+      // -------------------------------------------------------------
+      toggleAccordionMapel(mapelKey) {
+        this.openAccordionMapel[mapelKey] = !this.openAccordionMapel[mapelKey];
+        this.renderBankSoalList();
+      }
+
       renderBankSoalList() {
         const container = document.getElementById('bank-soal-list');
         const filterKelas = document.getElementById('bank-filter-kelas')?.value || 'ALL';
@@ -1346,38 +1351,82 @@
           return;
         }
 
-        filtered.forEach((q, idx) => {
-          const qId = q.id || idx;
-          const item = document.createElement('div');
-          item.className = "border p-4 rounded-lg bg-gray-50 space-y-3 text-xs";
-          item.innerHTML = `
-            <div class="flex justify-between items-start gap-4 border-b pb-2">
-              <div>
-                <span class="font-bold text-blue-800">[${q.kelas}] ${q.mapel}</span>
-                <span class="ml-2 font-bold text-emerald-800">Kunci: ${q.kunci_jawaban}</span>
+        // Kelompokkan Soal Berdasarkan Nama Mata Pelajaran
+        const groupedByMapel = {};
+        filtered.forEach(q => {
+          if (!groupedByMapel[q.mapel]) {
+            groupedByMapel[q.mapel] = [];
+          }
+          groupedByMapel[q.mapel].push(q);
+        });
+
+        // Loop Membuat Kartu Accordion Per Mata Pelajaran
+        Object.keys(groupedByMapel).forEach((mapelName) => {
+          const mapelQuestions = groupedByMapel[mapelName];
+          const isOpen = !!this.openAccordionMapel[mapelName];
+          const daftarKelasUnique = [...new Set(mapelQuestions.map(q => q.kelas))].join(', ');
+
+          const mapelCard = document.createElement('div');
+          mapelCard.className = "border rounded-lg bg-white overflow-hidden shadow-sm transition";
+
+          // Header Accordion (Nama Mapel & Info Soal)
+          mapelCard.innerHTML = `
+            <div onclick="app.toggleAccordionMapel('${mapelName.replace(/'/g, "\\'")}')" class="p-4 bg-gray-50 hover:bg-blue-50 cursor-pointer flex justify-between items-center transition border-b">
+              <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded bg-blue-600 text-white font-bold flex items-center justify-center text-xs">
+                  ${isOpen ? '▼' : '►'}
+                </div>
+                <div>
+                  <h4 class="font-bold text-sm text-gray-800">${mapelName}</h4>
+                  <p class="text-[11px] text-gray-500 mt-0.5">
+                    Target Kelas: <strong class="text-blue-800">${daftarKelasUnique}</strong> | Total: <strong class="text-emerald-700">${mapelQuestions.length} Butir Soal</strong>
+                  </p>
+                </div>
               </div>
-              <div class="flex gap-2">
-                <button onclick="app.openEditModal(${qId})" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-2.5 py-1 rounded text-[10px] flex items-center gap-1">
-                  ✏️ Edit Soal & Gambar
-                </button>
-                <button onclick="app.deleteSoal(${qId})" class="bg-red-500 hover:bg-red-600 text-white font-bold px-2.5 py-1 rounded text-[10px]">
-                  Hapus
-                </button>
-              </div>
+              <span class="text-xs font-semibold text-blue-600 bg-blue-100 px-2.5 py-1 rounded-full">
+                ${isOpen ? 'Tutup Naskah Soal' : 'Buka Naskah Soal'}
+              </span>
             </div>
 
-            <div class="font-sans space-y-2">
-              <div class="font-medium">${q.soal_html}</div>
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-1 text-gray-700 font-sans pt-1">
-                <div><strong>A.</strong> ${q.opsi_a}</div>
-                <div><strong>B.</strong> ${q.opsi_b}</div>
-                <div><strong>C.</strong> ${q.opsi_c}</div>
-                <div><strong>D.</strong> ${q.opsi_d}</div>
-                <div class="md:col-span-2"><strong>E.</strong> ${q.opsi_e}</div>
+            <!-- Isi Naskah Soal (Tampil jika Accordion Buka) -->
+            <div class="${isOpen ? 'block' : 'hidden'} p-4 space-y-4 bg-white">
+              <div class="grid grid-cols-1 gap-4">
+                ${mapelQuestions.map((q, idx) => {
+                  const qId = q.id || idx;
+                  return `
+                    <div class="border p-3.5 rounded-lg bg-gray-50 space-y-3 text-xs">
+                      <div class="flex justify-between items-start gap-4 border-b pb-2">
+                        <div>
+                          <span class="font-bold text-blue-800">[Kelas: ${q.kelas}]</span>
+                          <span class="ml-2 font-bold text-emerald-800">Kunci Jawaban: ${q.kunci_jawaban}</span>
+                        </div>
+                        <div class="flex gap-2">
+                          <button onclick="app.openEditModal(${qId})" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-2.5 py-1 rounded text-[10px] flex items-center gap-1">
+                            ✏️ Edit Soal & Gambar
+                          </button>
+                          <button onclick="app.deleteSoal(${qId})" class="bg-red-500 hover:bg-red-600 text-white font-bold px-2.5 py-1 rounded text-[10px]">
+                            Hapus
+                          </button>
+                        </div>
+                      </div>
+
+                      <div class="font-sans space-y-2">
+                        <div class="font-medium text-gray-900">${q.soal_html}</div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-1 text-gray-700 font-sans pt-1">
+                          <div><strong>A.</strong> ${q.opsi_a}</div>
+                          <div><strong>B.</strong> ${q.opsi_b}</div>
+                          <div><strong>C.</strong> ${q.opsi_c}</div>
+                          <div><strong>D.</strong> ${q.opsi_d}</div>
+                          <div class="md:col-span-2"><strong>E.</strong> ${q.opsi_e}</div>
+                        </div>
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
               </div>
             </div>
           `;
-          container.appendChild(item);
+          container.appendChild(mapelCard);
         });
       }
 
