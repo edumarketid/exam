@@ -11,7 +11,7 @@ const MapelModule = {
     container.innerHTML = '';
 
     if (State.mapelList.length === 0) {
-      container.innerHTML = `<p class="text-xs text-red-500 italic">Belum ada data mata pelajaran di Supabase (atau DB offline).</p>`;
+      container.innerHTML = `<p class="text-xs text-gray-500 italic">Belum ada data mata pelajaran di Supabase.</p>`;
       return;
     }
 
@@ -49,7 +49,7 @@ const MapelModule = {
 
     try {
       await DB.insertMapel(namaMapel);
-      alert(`Mata pelajaran "${namaMapel}" berhasil ditambahkan!`);
+      alert(`Mata pelajaran "${namaMapel}" berhasil ditambahkan ke Supabase!`);
       input.value = '';
       await this.loadAndRender();
     } catch (err) {
