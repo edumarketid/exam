@@ -18,6 +18,9 @@
   <!-- Supabase JS SDK -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
+  <!-- PapaParse for CSV Parsing -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.min.js"></script>
+
   <!-- External Configuration File -->
   <script src="./config.js"></script>
 
@@ -25,6 +28,23 @@
     .no-select {
       user-select: none;
       -webkit-user-select: none;
+    }
+    @media print {
+      body * {
+        visibility: hidden;
+      }
+      #print-area, #print-area * {
+        visibility: visible;
+      }
+      #print-area {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+      }
+      .page-break {
+        page-break-after: always;
+      }
     }
   </style>
 </head>
@@ -34,7 +54,7 @@
   <div id="app" class="min-h-screen flex flex-col">
 
     <!-- NAVIGATION BAR -->
-    <header class="bg-blue-700 text-white shadow-md">
+    <header class="bg-blue-700 text-white shadow-md print:hidden">
       <div class="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
         <div class="flex items-center space-x-3">
           <div class="w-10 h-10 bg-white text-blue-700 font-bold flex items-center justify-center rounded-lg shadow">
@@ -69,7 +89,7 @@
     </header>
 
     <!-- MAIN CONTENT VIEW -->
-    <main class="flex-grow max-w-7xl w-full mx-auto p-4">
+    <main class="flex-grow max-w-7xl w-full mx-auto p-4 print:p-0">
 
       <!-- SCREEN 1: LOGIN PAGE -->
       <section id="screen-login" class="max-w-md mx-auto mt-12 bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
@@ -100,84 +120,142 @@
 
       <!-- SCREEN 2: ADMIN DASHBOARD -->
       <section id="screen-admin" class="hidden space-y-6">
-        <div class="flex justify-between items-center bg-white p-4 rounded-lg shadow border">
+        <div class="flex flex-wrap justify-between items-center bg-white p-4 rounded-lg shadow border gap-3">
           <h2 class="text-lg font-bold text-gray-800">Dashboard Pengelolaan Ujian</h2>
-          <div class="flex gap-2">
+          <div class="flex flex-wrap gap-2">
             <button onclick="app.switchAdminTab('bank-soal')" class="px-3 py-1.5 text-xs rounded bg-blue-600 text-white font-medium">Input & Bank Soal</button>
-            <button onclick="app.switchAdminTab('siswa')" class="px-3 py-1.5 text-xs rounded bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium">Data Siswa</button>
+            <button onclick="app.switchAdminTab('siswa')" class="px-3 py-1.5 text-xs rounded bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium">Data & Kartu Siswa</button>
             <button onclick="app.switchAdminTab('hasil')" class="px-3 py-1.5 text-xs rounded bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium">Hasil & Nilai</button>
             <button onclick="app.switchAdminTab('sql')" class="px-3 py-1.5 text-xs rounded bg-emerald-600 text-white font-medium">Skema SQL</button>
           </div>
         </div>
 
-        <!-- TAB: BANK SOAL HTML INPUT -->
-        <div id="tab-bank-soal" class="bg-white p-6 rounded-lg shadow border space-y-6">
-          <h3 class="font-bold text-md text-gray-800 border-b pb-2">Form Input Soal Berbasis HTML</h3>
-          <form onsubmit="app.saveSoal(event)" class="space-y-4">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label class="block text-xs font-bold text-gray-600 mb-1">Mata Pelajaran</label>
-                <input type="text" id="soal-mapel" required class="w-full border px-3 py-2 rounded text-sm" placeholder="Contoh: Perencanaan & Pengalamatan Jaringan">
-              </div>
-              <div>
-                <label class="block text-xs font-bold text-gray-600 mb-1">Kelas Target</label>
-                <select id="soal-kelas" class="w-full border px-3 py-2 rounded text-sm">
-                  <option value="X TKJ">X TKJ</option>
-                  <option value="XI TKJ" selected>XI TKJ</option>
-                  <option value="XII TKJ">XII TKJ</option>
-                  <option value="XI PHL">XI PHL</option>
-                </select>
-              </div>
-              <div>
-                <label class="block text-xs font-bold text-gray-600 mb-1">Kunci Jawaban</label>
-                <select id="soal-kunci" class="w-full border px-3 py-2 rounded text-sm font-bold text-blue-700">
-                  <option value="A">A</option>
-                  <option value="B">B</option>
-                  <option value="C">C</option>
-                  <option value="D">D</option>
-                  <option value="E">E</option>
-                </select>
-              </div>
+        <!-- TAB: BANK SOAL INPUT & MASS UPLOAD -->
+        <div id="tab-bank-soal" class="bg-white p-6 rounded-lg shadow border space-y-8">
+          
+          <!-- SEKSI UPLOAD SOAL MASSAL (CSV / JSON) -->
+          <div class="bg-blue-50 border border-blue-200 p-5 rounded-lg">
+            <h3 class="font-bold text-md text-blue-900 mb-2 flex items-center gap-2">
+              <svg class="w-5 h-5 text-blue-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+              Upload Massal Bank Soal Berbasis File (CSV / JSON)
+            </h3>
+            <p class="text-xs text-blue-700 mb-4">
+              Unggah berkas soal massal sekaligus. Mendukung format kode HTML penuh untuk rumus, gambar <code>&lt;img&gt;</code>, tabel <code>&lt;table&gt;</code>, dan format teks miring/tebal.
+            </p>
+            
+            <div class="flex flex-wrap items-center gap-3">
+              <input type="file" id="file-upload-soal" accept=".csv, .json" class="text-xs border border-blue-300 bg-white p-2 rounded max-w-xs">
+              <button onclick="app.uploadMassalSoal()" class="bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold px-4 py-2 rounded shadow transition">
+                Proses & Simpan Ke Database
+              </button>
+              <button onclick="app.downloadTemplateSoalCSV()" class="bg-gray-600 hover:bg-gray-700 text-white text-xs font-semibold px-3 py-2 rounded shadow transition">
+                Unduh Template CSV Soal
+              </button>
             </div>
+          </div>
 
+          <!-- SEKSI FORM INPUT SOAL SATUAN -->
+          <div class="space-y-4">
+            <h3 class="font-bold text-md text-gray-800 border-b pb-2">Form Input Soal Berbasis HTML (Satuan)</h3>
+            <form onsubmit="app.saveSoal(event)" class="space-y-4">
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label class="block text-xs font-bold text-gray-600 mb-1">Mata Pelajaran</label>
+                  <input type="text" id="soal-mapel" required class="w-full border px-3 py-2 rounded text-sm" placeholder="Contoh: Perencanaan & Pengalamatan Jaringan">
+                </div>
+                <div>
+                  <label class="block text-xs font-bold text-gray-600 mb-1">Kelas Target</label>
+                  <select id="soal-kelas" class="w-full border px-3 py-2 rounded text-sm">
+                    <option value="X TKJ">X TKJ</option>
+                    <option value="XI TKJ" selected>XI TKJ</option>
+                    <option value="XII TKJ">XII TKJ</option>
+                    <option value="XI PHL">XI PHL</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs font-bold text-gray-600 mb-1">Kunci Jawaban</label>
+                  <select id="soal-kunci" class="w-full border px-3 py-2 rounded text-sm font-bold text-blue-700">
+                    <option value="A">A</option>
+                    <option value="B">B</option>
+                    <option value="C">C</option>
+                    <option value="D">D</option>
+                    <option value="E">E</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-gray-600 mb-1">Konten Soal (Format HTML)</label>
+                <textarea id="soal-html" rows="4" required class="w-full font-mono text-xs border px-3 py-2 rounded focus:ring-2 focus:ring-blue-500" placeholder="<p>Toko Najma Komputer ingin alokasi IP <b>192.168.1.1/24</b>. Berapa subnet mask-nya?</p>"></textarea>
+              </div>
+
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-semibold text-gray-600">Opsi A (HTML)</label>
+                  <input type="text" id="soal-opsi-a" required class="w-full border px-3 py-1.5 rounded text-xs" placeholder="255.255.255.0">
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-gray-600">Opsi B (HTML)</label>
+                  <input type="text" id="soal-opsi-b" required class="w-full border px-3 py-1.5 rounded text-xs" placeholder="255.255.0.0">
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-gray-600">Opsi C (HTML)</label>
+                  <input type="text" id="soal-opsi-c" required class="w-full border px-3 py-1.5 rounded text-xs" placeholder="255.0.0.0">
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-gray-600">Opsi D (HTML)</label>
+                  <input type="text" id="soal-opsi-d" required class="w-full border px-3 py-1.5 rounded text-xs" placeholder="255.255.255.128">
+                </div>
+                <div class="md:col-span-2">
+                  <label class="block text-xs font-semibold text-gray-600">Opsi E (HTML)</label>
+                  <input type="text" id="soal-opsi-e" required class="w-full border px-3 py-1.5 rounded text-xs" placeholder="255.255.255.192">
+                </div>
+              </div>
+
+              <div class="flex gap-3">
+                <button type="submit" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded text-xs font-bold transition">Simpan Soal ke Database</button>
+                <button type="button" onclick="app.previewSoalHTML()" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded text-xs font-bold transition">Preview Render</button>
+              </div>
+            </form>
+
+            <!-- Container Live Preview -->
+            <div id="preview-container" class="hidden border rounded p-4 bg-gray-50 mt-4">
+              <h4 class="font-bold text-xs text-gray-500 uppercase mb-2">Live Preview Tampilan Soal Siswa:</h4>
+              <div id="preview-content" class="bg-white p-4 rounded border text-sm"></div>
+            </div>
+          </div>
+
+          <!-- SEKSI DAFTAR BANK SOAL -->
+          <div class="space-y-3 pt-4 border-t">
+            <h3 class="font-bold text-md text-gray-800">Daftar Soal Tersimpan (<span id="total-soal-count">0</span>)</h3>
+            <div id="bank-soal-list" class="space-y-3 max-h-96 overflow-y-auto pr-2"></div>
+          </div>
+        </div>
+
+        <!-- TAB: DATA SISWA & GENERATE KARTU UJIAN -->
+        <div id="tab-siswa" class="hidden bg-white p-6 rounded-lg shadow border space-y-6">
+          <div class="flex flex-wrap justify-between items-center border-b pb-4 gap-3">
             <div>
-              <label class="block text-xs font-bold text-gray-600 mb-1">Konten Soal (Format HTML)</label>
-              <textarea id="soal-html" rows="4" required class="w-full font-mono text-xs border px-3 py-2 rounded focus:ring-2 focus:ring-blue-500" placeholder="<p>Berapakah subnet mask /24?</p>"></textarea>
+              <h3 class="font-bold text-md text-gray-800">Manajemen Data & Kartu Ujian Siswa</h3>
+              <p class="text-xs text-gray-500">Impor data siswa dari berkas CSV serta cetak kartu login ujian peserta.</p>
             </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <label class="block text-xs font-semibold text-gray-600">Opsi A (HTML)</label>
-                <input type="text" id="soal-opsi-a" required class="w-full border px-3 py-1.5 rounded text-xs" placeholder="255.255.255.0">
-              </div>
-              <div>
-                <label class="block text-xs font-semibold text-gray-600">Opsi B (HTML)</label>
-                <input type="text" id="soal-opsi-b" required class="w-full border px-3 py-1.5 rounded text-xs" placeholder="255.255.0.0">
-              </div>
-              <div>
-                <label class="block text-xs font-semibold text-gray-600">Opsi C (HTML)</label>
-                <input type="text" id="soal-opsi-c" required class="w-full border px-3 py-1.5 rounded text-xs" placeholder="255.0.0.0">
-              </div>
-              <div>
-                <label class="block text-xs font-semibold text-gray-600">Opsi D (HTML)</label>
-                <input type="text" id="soal-opsi-d" required class="w-full border px-3 py-1.5 rounded text-xs" placeholder="255.255.255.128">
-              </div>
-              <div class="md:col-span-2">
-                <label class="block text-xs font-semibold text-gray-600">Opsi E (HTML)</label>
-                <input type="text" id="soal-opsi-e" required class="w-full border px-3 py-1.5 rounded text-xs" placeholder="255.255.255.192">
-              </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <select id="filter-kelas-kartu" class="border px-3 py-1.5 rounded text-xs font-semibold">
+                <option value="ALL">Semua Kelas</option>
+                <option value="XI PHL">XI PHL</option>
+                <option value="XI APPL">XI APPL</option>
+                <option value="XI TKJ">XI TKJ</option>
+              </select>
+              <button onclick="app.printCards()" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-1.5 rounded shadow transition flex items-center gap-1">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+                Cetak Semua Kartu Ujian (PDF)
+              </button>
             </div>
+          </div>
 
-            <div class="flex gap-3">
-              <button type="submit" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded text-xs font-bold transition">Simpan Soal ke Database</button>
-              <button type="button" onclick="app.previewSoalHTML()" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded text-xs font-bold transition">Preview Render</button>
-            </div>
-          </form>
-
-          <!-- Container Live Preview -->
-          <div id="preview-container" class="hidden border rounded p-4 bg-gray-50">
-            <h4 class="font-bold text-xs text-gray-500 uppercase mb-2">Live Preview Tampilan Soal Siswa:</h4>
-            <div id="preview-content" class="bg-white p-4 rounded border text-sm"></div>
+          <!-- Draf Kartu Ujian Siap Cetak -->
+          <div id="print-area">
+            <div id="cards-container" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
           </div>
         </div>
 
@@ -303,12 +381,21 @@ CREATE TABLE IF NOT EXISTS hasil_ujian (
         this.currentQuestionIdx = 0;
         this.answers = {};
         this.deferredPrompt = null;
-        this.pressedKeys = {}; // Tracker tombol keyboard yang ditekan
+        this.pressedKeys = {};
         
-        // Data Soal Default
+        // Sample Data Siswa awal dari CSV
+        this.students = [
+          { id_siswa: 'S001', nisn: '105947253', nama: 'Mawar Fikasari', kelas: 'XI PHL', status: 'Aktif', ttl: 'Waha, 23 Mei 2010', user: 'mawar', pass: 'smk123' },
+          { id_siswa: 'S002', nisn: '86882762', nama: 'Noviar Reskikah', kelas: 'XI PHL', status: 'Aktif', ttl: 'Ambon, 25 November 2008', user: 'noviar', pass: 'smk123' },
+          { id_siswa: 'S003', nisn: '111831846', nama: 'Wa Ode Elvi', kelas: 'XI PHL', status: 'Aktif', ttl: 'Waha, 14 Maret 2011', user: 'waode', pass: 'smk123' }
+        ];
+
+        // Bank Soal Default
         this.questions = [
           {
             id: 1,
+            mapel: 'Perencanaan dan Pengalamatan Jaringan',
+            kelas: 'XI TKJ',
             soal_html: '<p>Toko Najma Komputer ingin membangun jaringan lokal dengan alokasi IP address <code>192.168.10.0/24</code>. Berapakah subnet mask yang harus digunakan?</p>',
             opsi_a: '255.255.255.0',
             opsi_b: '255.255.0.0',
@@ -326,11 +413,13 @@ CREATE TABLE IF NOT EXISTS hasil_ujian (
         this.setupPWA();
         this.updateDBStatus();
         this.setupSecurityListeners();
+        this.renderBankSoalList();
+        this.renderCards();
       }
 
       updateDBStatus() {
         const badge = document.getElementById('db-status-badge');
-        if (supabaseClient) {
+        if (typeof supabaseClient !== 'undefined' && supabaseClient) {
           badge.textContent = "Database Connected";
           badge.className = "px-2.5 py-1 text-xs rounded-full bg-emerald-600 text-white font-medium";
         } else {
@@ -340,7 +429,6 @@ CREATE TABLE IF NOT EXISTS hasil_ujian (
       }
 
       setupPWA() {
-        // Event Listener PWA Install
         window.addEventListener('beforeinstallprompt', (e) => {
           e.preventDefault();
           this.deferredPrompt = e;
@@ -359,7 +447,6 @@ CREATE TABLE IF NOT EXISTS hasil_ujian (
           }
         });
 
-        // Register Service Worker
         if ('serviceWorker' in navigator) {
           navigator.serviceWorker.register('./sw.js')
             .then(reg => console.log('SW Registered:', reg.scope))
@@ -367,7 +454,6 @@ CREATE TABLE IF NOT EXISTS hasil_ujian (
         }
       }
 
-      // LOGIN HANDLER
       handleLogin(e) {
         e.preventDefault();
         const u = document.getElementById('login-username').value.trim();
@@ -377,7 +463,6 @@ CREATE TABLE IF NOT EXISTS hasil_ujian (
           this.currentUser = { role: 'admin', username: 'admin' };
           this.showScreen('admin');
         } else {
-          // Login Siswa Simulasi
           this.currentUser = { role: 'siswa', username: u, nama: 'Siswa SMKN 1 Wakatobi' };
           this.startExam();
         }
@@ -401,13 +486,12 @@ CREATE TABLE IF NOT EXISTS hasil_ujian (
       }
 
       switchAdminTab(tabName) {
-        ['bank-soal', 'sql'].forEach(t => {
+        ['bank-soal', 'siswa', 'hasil', 'sql'].forEach(t => {
           document.getElementById(`tab-${t}`)?.classList.add('hidden');
         });
         document.getElementById(`tab-${tabName}`)?.classList.remove('hidden');
       }
 
-      // PROSES EXAM & SECURITY
       startExam() {
         this.showScreen('exam');
         this.examActive = true;
@@ -425,25 +509,22 @@ CREATE TABLE IF NOT EXISTS hasil_ujian (
       }
 
       setupSecurityListeners() {
-        // 1. Deteksi Keluar Fullscreen
         document.addEventListener('fullscreenchange', () => {
           if (!document.fullscreenElement && this.examActive) {
             this.handleViolation("Anda keluar dari mode Fullscreen!");
           }
         });
 
-        // 2. Deteksi Perpindahan Tab / Aplikasi
         document.addEventListener('visibilitychange', () => {
           if (document.hidden && this.examActive) {
             this.handleViolation("Anda membuka tab atau aplikasi lain!");
           }
         });
 
-        // 3. Deteksi Kombinasi Rahasia Keluar (Ctrl + C + B) & Penanganan Keydown
         window.addEventListener('keydown', (e) => {
           this.pressedKeys[e.key.toLowerCase()] = true;
 
-          // Kombinasi Keluar: Ctrl + c + b
+          // Shortcut Rahasia Keluar Pengawas: Ctrl + C + B
           if (this.examActive && e.ctrlKey && this.pressedKeys['c'] && this.pressedKeys['b']) {
             e.preventDefault();
             if (confirm("Kombinasi Pengawas Ditekan (Ctrl+C+B).\nApakah Anda yakin ingin keluar dari mode ujian?")) {
@@ -452,7 +533,6 @@ CREATE TABLE IF NOT EXISTS hasil_ujian (
             return;
           }
 
-          // Blokir Tombol DevTools (F12 atau Ctrl+Shift+I)
           if (this.examActive && (e.key === 'F12' || (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'i'))) {
             e.preventDefault();
             this.handleViolation("Dilarang membuka Developer Tools!");
@@ -464,7 +544,6 @@ CREATE TABLE IF NOT EXISTS hasil_ujian (
         });
       }
 
-      // Prosedur Keluar Paksa via Shortcut Pengawas (Ctrl + C + B)
       forceExitExam() {
         this.examActive = false;
         if (document.exitFullscreen) {
@@ -479,11 +558,13 @@ CREATE TABLE IF NOT EXISTS hasil_ujian (
 
         this.violations++;
 
-        if (this.violations >= CONFIG.MAX_VIOLATIONS) {
+        const max = typeof CONFIG !== 'undefined' ? CONFIG.MAX_VIOLATIONS : 2;
+
+        if (this.violations >= max) {
           alert(`PELANGGARAN HUKUMAN! ${reason}\n\nUjian Anda dihentikan secara otomatis dan jawaban Anda dikirimkan.`);
           this.finishExam(true);
         } else {
-          document.getElementById('warning-text').textContent = `${reason} (Peringatan ${this.violations} dari ${CONFIG.MAX_VIOLATIONS})`;
+          document.getElementById('warning-text').textContent = `${reason} (Peringatan ${this.violations} dari ${max})`;
           document.getElementById('modal-warning').classList.remove('hidden');
         }
       }
@@ -570,12 +651,11 @@ CREATE TABLE IF NOT EXISTS hasil_ujian (
         this.showScreen('login');
       }
 
-      // PREVIEW SOAL HTML
+      // FITUR PREVIEW & BANK SOAL
       previewSoalHTML() {
         const htmlContent = document.getElementById('soal-html').value;
         const container = document.getElementById('preview-container');
         const content = document.getElementById('preview-content');
-        
         content.innerHTML = htmlContent;
         container.classList.remove('hidden');
       }
@@ -592,19 +672,158 @@ CREATE TABLE IF NOT EXISTS hasil_ujian (
         const opsi_e = document.getElementById('soal-opsi-e').value;
         const kunci_jawaban = document.getElementById('soal-kunci').value;
 
-        const newSoal = {
-          id: Date.now(),
-          mapel, kelas, soal_html, opsi_a, opsi_b, opsi_c, opsi_d, opsi_e, kunci_jawaban
-        };
-
+        const newSoal = { id: Date.now(), mapel, kelas, soal_html, opsi_a, opsi_b, opsi_c, opsi_d, opsi_e, kunci_jawaban };
         this.questions.push(newSoal);
-        alert("Soal berhasil disimpan ke Bank Soal!");
+        
+        alert("Soal berhasil disimpan!");
         e.target.reset();
         document.getElementById('preview-container').classList.add('hidden');
+        this.renderBankSoalList();
+      }
+
+      // UPLOAD MASSAL SOAL (CSV / JSON)
+      uploadMassalSoal() {
+        const fileInput = document.getElementById('file-upload-soal');
+        const file = fileInput.files[0];
+
+        if (!file) {
+          alert("Silakan pilih file CSV atau JSON terlebih dahulu.");
+          return;
+        }
+
+        const reader = new FileReader();
+
+        if (file.name.endsWith('.json')) {
+          reader.onload = (e) => {
+            try {
+              const data = JSON.parse(e.target.result);
+              if (Array.isArray(data)) {
+                this.questions.push(...data);
+                alert(`Berhasil mengunggah ${data.length} soal dari file JSON!`);
+                this.renderBankSoalList();
+              }
+            } catch (err) {
+              alert("Gagal membaca file JSON. Pastikan format valid.");
+            }
+          };
+          reader.readAsText(file);
+        } else {
+          // Parsing CSV via PapaParse
+          Papa.parse(file, {
+            header: true,
+            skipEmptyLines: true,
+            complete: (results) => {
+              if (results.data && results.data.length > 0) {
+                const parsedSoal = results.data.map((row, i) => ({
+                  id: Date.now() + i,
+                  mapel: row.mapel || 'Mata Pelajaran',
+                  kelas: row.kelas || 'Umum',
+                  soal_html: row.soal_html || '',
+                  opsi_a: row.opsi_a || '',
+                  opsi_b: row.opsi_b || '',
+                  opsi_c: row.opsi_c || '',
+                  opsi_d: row.opsi_d || '',
+                  opsi_e: row.opsi_e || '',
+                  kunci_jawaban: (row.kunci_jawaban || 'A').toUpperCase()
+                }));
+
+                this.questions.push(...parsedSoal);
+                alert(`Berhasil mengunggah ${parsedSoal.length} soal dari file CSV!`);
+                this.renderBankSoalList();
+              }
+            }
+          });
+        }
+      }
+
+      downloadTemplateSoalCSV() {
+        const csvContent = "data:text/csv;charset=utf-8,mapel,kelas,soal_html,opsi_a,opsi_b,opsi_c,opsi_d,opsi_e,kunci_jawaban\nPerencanaan Jaringan,XI TKJ,<p>Berapa subnet mask /24?</p>,255.255.255.0,255.255.0.0,255.0.0.0,255.255.255.128,255.255.255.192,A";
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", "template_soal_exam_wakatobi.csv");
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+
+      renderBankSoalList() {
+        const container = document.getElementById('bank-soal-list');
+        document.getElementById('total-soal-count').textContent = this.questions.length;
+        container.innerHTML = '';
+
+        this.questions.forEach((q, idx) => {
+          const item = document.createElement('div');
+          item.className = "border p-3 rounded bg-gray-50 flex justify-between items-start gap-4 text-xs";
+          item.innerHTML = `
+            <div>
+              <span class="font-bold text-blue-700">[${q.kelas}] ${q.mapel}</span>
+              <div class="mt-1 font-sans">${q.soal_html}</div>
+              <div class="text-gray-500 mt-1">Kunci: <strong class="text-emerald-700">${q.kunci_jawaban}</strong></div>
+            </div>
+            <button onclick="app.deleteSoal(${idx})" class="bg-red-500 text-white px-2 py-1 rounded text-[10px]">Hapus</button>
+          `;
+          container.appendChild(item);
+        });
+      }
+
+      deleteSoal(idx) {
+        if (confirm("Hapus soal ini dari bank soal?")) {
+          this.questions.splice(idx, 1);
+          this.renderBankSoalList();
+        }
+      }
+
+      // GENERATOR KARTU UJIAN
+      renderCards() {
+        const container = document.getElementById('cards-container');
+        container.innerHTML = '';
+
+        this.students.forEach((s) => {
+          const card = document.createElement('div');
+          card.className = "border-2 border-blue-800 rounded-lg p-4 bg-white shadow-sm space-y-3 relative overflow-hidden";
+          card.innerHTML = `
+            <div class="flex items-center justify-between border-b-2 border-blue-800 pb-2">
+              <div class="flex items-center gap-2">
+                <div class="w-8 h-8 bg-blue-700 text-white font-bold text-xs flex items-center justify-center rounded">CBT</div>
+                <div>
+                  <h4 class="font-bold text-xs leading-tight text-blue-900">KARTU PESERTA UJIAN SUMATIF</h4>
+                  <p class="text-[10px] text-gray-500">SMK Negeri 1 Wakatobi - TA 2026/2027</p>
+                </div>
+              </div>
+              <span class="text-[10px] font-bold bg-blue-100 text-blue-800 px-2 py-0.5 rounded">${s.kelas}</span>
+            </div>
+
+            <div class="grid grid-cols-3 gap-2 text-xs">
+              <div class="col-span-2 space-y-1">
+                <div><span class="text-gray-500 text-[10px] block">Nama Peserta:</span><strong class="text-gray-800">${s.nama}</strong></div>
+                <div><span class="text-gray-500 text-[10px] block">NISN / TTL:</span><span>${s.nisn} / ${s.ttl}</span></div>
+                <div class="pt-1 flex gap-4">
+                  <div><span class="text-gray-500 text-[10px] block">Username:</span><code class="bg-blue-50 text-blue-800 px-1.5 py-0.5 rounded font-bold">${s.user}</code></div>
+                  <div><span class="text-gray-500 text-[10px] block">Password:</span><code class="bg-blue-50 text-blue-800 px-1.5 py-0.5 rounded font-bold">${s.pass}</code></div>
+                </div>
+              </div>
+              <div class="flex flex-col items-center justify-center border-l pl-2">
+                <img src="https://api.qrserver.com/v1/create-qr-code/?size=70x70&data=${s.nisn}" alt="QR" class="w-16 h-16 border p-0.5 rounded">
+                <span class="text-[9px] text-gray-400 mt-1">${s.id_siswa}</span>
+              </div>
+            </div>
+
+            <div class="border-t pt-2 flex justify-between items-end text-[9px] text-gray-500">
+              <div>Wakatobi, November 2026<br>Panitia Pelaksana</div>
+              <div class="text-right font-bold text-gray-700">ExamSMKN1Wakatobi</div>
+            </div>
+          `;
+          container.appendChild(card);
+        });
+      }
+
+      printCards() {
+        window.print();
       }
     }
 
-    // Inisialisasi Aplikasi
+    // Inisialisasi Aplikasi Utama
     const app = new ExamApp();
   </script>
 </body>
