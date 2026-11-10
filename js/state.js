@@ -10,5 +10,7 @@ const State = {
   violations: 0,
   examActive: false,
   currentQuestionIdx: 0,
-  answers: {}
+  answers: {},
+  pressedKeys: {},
+  timerInterval: null
 };
