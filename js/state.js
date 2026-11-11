@@ -1,16 +1,14 @@
 const State = {
-  currentUser: null,
   mapelList: [],
-  kelasOptions: [],
   students: [],
   questions: [],
-  hasilUjianList: [],
-  jadwalList: JSON.parse(localStorage.getItem('EXAM_JADWAL_LIST')) || [],
+  schedules: [],
+  examResults: [],
+  kelasOptions: [],
   openAccordionMapel: {},
-  violations: 0,
-  examActive: false,
-  currentQuestionIdx: 0,
-  answers: {},
-  pressedKeys: {},
-  timerInterval: null
+  currentStudent: null,
+  activeExam: null
 };
+
+// Pastikan terdaftar di window agar bisa diakses oleh seluruh modul (supabase.js, soal.js, dll)
+window.State = State;
