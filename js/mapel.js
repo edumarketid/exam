@@ -1,14 +1,11 @@
 const MapelModule = {
   async loadAndRender() {
     try {
-      console.log("[MapelModule] Menarik data mapel dari Supabase...");
       State.mapelList = await DB.fetchMapel();
-      console.log("[MapelModule] Data mapel diterima:", State.mapelList);
-      
       this.renderTabList();
       this.populateDropdowns();
     } catch (err) {
-      console.error("[MapelModule] Error saat render mapel:", err.message);
+      console.error("[MapelModule] Error:", err.message);
     }
   },
 
@@ -24,10 +21,10 @@ const MapelModule = {
 
     State.mapelList.forEach((m, idx) => {
       const div = document.createElement('div');
-      div.className = "flex justify-between items-center p-3 border rounded bg-gray-50 text-xs shadow-sm";
+      div.className = "flex justify-between items-center p-3 border rounded bg-gray-50 text-xs shadow-sm mb-2";
       div.innerHTML = `
         <span class="font-bold text-gray-800">${idx + 1}. ${m}</span>
-        <button onclick="MapelModule.handleDelete('${m.replace(/'/g, "\\'")}')" class="bg-red-600 hover:bg-red-700 text-white text-[10px] px-2.5 py-1 rounded font-bold transition">
+        <button onclick="MapelModule.handleDelete('${m.replace(/'/g, "\\'")}')" class="bg-red-600 hover:bg-red-700 text-white text-[10px] px-2.5 py-1 rounded font-bold">
           Hapus Mapel
         </button>
       `;
@@ -44,7 +41,6 @@ const MapelModule = {
     if (!State.mapelList || State.mapelList.length === 0) return;
 
     const opts = State.mapelList.map(m => `<option value="${m}">${m}</option>`).join('');
-    
     if (selectUpload) selectUpload.innerHTML = opts;
     if (selectJadwal) selectJadwal.innerHTML = opts;
     if (selectRekap) selectRekap.innerHTML = `<option value="ALL">Semua Mapel</option>` + opts;
@@ -59,7 +55,7 @@ const MapelModule = {
 
     try {
       await DB.insertMapel(namaMapel);
-      alert(`Mata pelajaran "${namaMapel}" berhasil ditambahkan ke Supabase!`);
+      alert(`Mata pelajaran "${namaMapel}" berhasil ditambahkan!`);
       input.value = '';
       await this.loadAndRender();
     } catch (err) {
@@ -79,5 +75,4 @@ const MapelModule = {
   }
 };
 
-// WAJIB: Daftarkan ke window agar dibaca app.js
 window.MapelModule = MapelModule;
