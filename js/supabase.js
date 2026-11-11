@@ -39,6 +39,7 @@ const DB = {
     });
   },
 
+  // --- MODUL MAPEL ---
   async fetchMapel() {
     const client = await this.getClient();
     if (!client) return [];
@@ -82,6 +83,59 @@ const DB = {
     return true;
   },
 
+  // --- MODUL GURU & PENGAWAS ---
+  async fetchGuru() {
+    const client = await this.getClient();
+    if (!client) return [];
+    try {
+      const { data, error } = await client.from('guru').select('*').order('id_guru', { ascending: true });
+      if (error) {
+        console.warn("[DB Helper] Gagal fetch tabel guru:", error.message);
+        return [];
+      }
+      return (data || []).map(g => ({
+        id_guru: g.id_guru || g.ID_GURU || g.id,
+        nama_guru: g.nama_guru || g.NAMA_GURU || g.nama || '-',
+        nip: String(g.nip || g.NIP || '-').trim(),
+        no_hp: String(g.no_hp || g.NO_HP || g.telepon || '').trim(),
+        password: String(g.password || g.PASSWORD || 'guru123').trim(),
+        jabatan: g.jabatan || g.JABATAN || 'Guru Mata Pelajaran',
+        mapel_diampu: g.mapel_diampu || g.MAPEL_DIAMPU || '-',
+        kelas_diampu: g.kelas_diampu || g.KELAS_DIAMPU || '-',
+        status_kepegawaian: g.status_kepegawaian || g.STATUS_KEPEGAWAIAN || 'PNS',
+        status: g.status || g.STATUS || 'Aktif'
+      }));
+    } catch (err) {
+      console.error("[DB Helper] Error fetchGuru:", err.message);
+      return [];
+    }
+  },
+
+  async insertGuru(payload) {
+    const client = await this.getClient();
+    if (!client) throw new Error("Database tidak terhubung.");
+    const { data, error } = await client.from('guru').insert([payload]);
+    if (error) throw error;
+    return data;
+  },
+
+  async updateGuru(id_guru, payload) {
+    const client = await this.getClient();
+    if (!client) throw new Error("Database tidak terhubung.");
+    const { data, error } = await client.from('guru').update(payload).eq('id_guru', id_guru);
+    if (error) throw error;
+    return data;
+  },
+
+  async deleteGuru(id_guru) {
+    const client = await this.getClient();
+    if (!client) throw new Error("Database tidak terhubung.");
+    const { error } = await client.from('guru').delete().eq('id_guru', id_guru);
+    if (error) throw error;
+    return true;
+  },
+
+  // --- MODUL SISWA ---
   async fetchSiswa() {
     const client = await this.getClient();
     if (!client) return [];
@@ -97,13 +151,13 @@ const DB = {
         const akun = dataAkun.find(a => a.ID_SISWA === (s.ID_SISWA || s.id_siswa));
         return {
           id_siswa: s.ID_SISWA || s.id_siswa || s.id,
-          nisn: s.NISN || s.nisn || '-',
+          nisn: String(s.NISN || s.nisn || '-').trim(),
           nama: s.NAMA_SISWA || s.nama_siswa || s.nama || '-',
           kelas: s.KELAS || s.kelas || '-',
           status: s.STATUS || s.status || 'Aktif',
           ttl: s.TTL || s.ttl || '-',
-          user: akun ? akun.username : (s.NISN || s.nisn || 'user'),
-          pass: akun ? akun.password : 'smk123'
+          user: String(akun ? akun.username : (s.NISN || s.nisn || 'user')).trim(),
+          pass: String(akun ? akun.password : 'smk123').trim()
         };
       });
     } catch (err) {
@@ -111,6 +165,7 @@ const DB = {
     }
   },
 
+  // --- MODUL BANK SOAL ---
   async fetchBankSoal() {
     const client = await this.getClient();
     if (!client) return [];
@@ -123,6 +178,7 @@ const DB = {
     }
   },
 
+  // --- MODUL JADWAL UJIAN ---
   async fetchSchedules() {
     const client = await this.getClient();
     if (!client) return [];
@@ -143,19 +199,16 @@ const DB = {
     }
   },
 
-  // Mendapatkan Jadwal Aktif yang Sesuai dengan Kelas & Waktu Sekarang
   async fetchActiveScheduleForStudent(kelasSiswa) {
     const schedules = await this.fetchSchedules();
     if (!schedules || schedules.length === 0) return null;
 
     const now = new Date();
-    // Format YYYY-MM-DD lokal
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const day = String(now.getDate()).padStart(2, '0');
     const currentDateStr = `${year}-${month}-${day}`;
 
-    // Format HH:MM lokal
     const hours = String(now.getHours()).padStart(2, '0');
     const minutes = String(now.getMinutes()).padStart(2, '0');
     const currentTimeStr = `${hours}:${minutes}`;
@@ -163,10 +216,10 @@ const DB = {
     console.log(`[DB Check Jadwal] Kelas: ${kelasSiswa} | Tgl Sekarang: ${currentDateStr} | Jam Sekarang: ${currentTimeStr}`);
 
     const activeSchedule = schedules.find(j => {
-      const matchKelas = String(j.kelas).trim().toUpperCase() === String(kelasSiswa).trim().toUpperCase();
+      const listOfKelasTarget = String(j.kelas).toUpperCase().split(',').map(k => k.trim());
+      const matchKelas = listOfKelasTarget.includes(String(kelasSiswa).trim().toUpperCase());
       const matchTanggal = String(j.tanggal).trim() === currentDateStr;
       
-      // Sanitasi Waktu Jam Mulai & Jam Selesai
       const jamMulaiClean = String(j.jamMulai).substring(0, 5);
       const jamSelesaiClean = String(j.jamSelesai).substring(0, 5);
       
@@ -178,6 +231,7 @@ const DB = {
     return activeSchedule || null;
   },
 
+  // --- MODUL HASIL UJIAN ---
   async fetchHasilUjian() {
     const client = await this.getClient();
     if (!client) return [];
@@ -231,44 +285,6 @@ const DB = {
       return dataFb;
     }
     return data;
-  }
-
-
-  // --- MODUL GURU SUPABASE ---
-  async fetchGuru() {
-    const client = await this.getClient();
-    if (!client) return [];
-    try {
-      const { data, error } = await client.from('guru').select('*').order('id_guru', { ascending: true });
-      if (error) return [];
-      return data || [];
-    } catch (err) {
-      return [];
-    }
-  },
-
-  async insertGuru(payload) {
-    const client = await this.getClient();
-    if (!client) throw new Error("Database tidak terhubung.");
-    const { data, error } = await client.from('guru').insert([payload]);
-    if (error) throw error;
-    return data;
-  },
-
-  async updateGuru(id_guru, payload) {
-    const client = await this.getClient();
-    if (!client) throw new Error("Database tidak terhubung.");
-    const { data, error } = await client.from('guru').update(payload).eq('id_guru', id_guru);
-    if (error) throw error;
-    return data;
-  },
-
-  async deleteGuru(id_guru) {
-    const client = await this.getClient();
-    if (!client) throw new Error("Database tidak terhubung.");
-    const { error } = await client.from('guru').delete().eq('id_guru', id_guru);
-    if (error) throw error;
-    return true;
   }
 };
 
