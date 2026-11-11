@@ -2,6 +2,15 @@ const SoalModule = {
   async loadAndRender() {
     try {
       console.log("[SoalModule] Menarik data Bank Soal dari Supabase...");
+      
+      // 1. Pastikan data mapel & siswa tersedia di State
+      if (!State.mapelList || State.mapelList.length === 0) {
+        State.mapelList = await DB.fetchMapel();
+      }
+      if (!State.siswaList || State.siswaList.length === 0) {
+        State.siswaList = await DB.fetchSiswa();
+      }
+
       const rawBank = await DB.fetchBankSoal();
       
       // Normalisasi data dari berbagai variasi nama kolom Supabase
@@ -20,6 +29,9 @@ const SoalModule = {
 
       console.log("[SoalModule] Bank Soal berhasil dimuat:", State.questions.length, "butir");
       
+      // Populate Seluruh Komponen Form Upload & Filter
+      this.populateUploadMapelDropdown();
+      this.renderUploadKelasCheckboxes();
       this.populateFilterDropdowns();
       this.renderBankSoalList();
     } catch (err) {
@@ -27,6 +39,87 @@ const SoalModule = {
     }
   },
 
+  // --- POPULATE FORM UNGGAH SOAL HTML ---
+  populateUploadMapelDropdown() {
+    const selectUploadMapel = document.getElementById('select-upload-mapel');
+    if (!selectUploadMapel) return;
+
+    let html = `<option value="">-- Pilih Mata Pelajaran --</option>`;
+    
+    // Ambil daftar mapel dari tabel mapel & bank soal
+    const mapelSet = new Set(State.mapelList || []);
+    if (State.questions) {
+      State.questions.forEach(q => { if (q.mapel) mapelSet.add(q.mapel); });
+    }
+
+    // PRIVILEGE FILTER: Jika login sebagai GURU, tampilkan hanya mapel diampunya
+    if (State.currentUser && State.currentUser.role === 'guru') {
+      const mapelGuru = String(State.currentUser.mapel_diampu || '').trim().toUpperCase();
+      Array.from(mapelSet).forEach(m => {
+        if (String(m).trim().toUpperCase().includes(mapelGuru) || mapelGuru.includes(String(m).trim().toUpperCase())) {
+          html += `<option value="${m}">${m}</option>`;
+        }
+      });
+    } else {
+      Array.from(mapelSet).forEach(m => {
+        html += `<option value="${m}">${m}</option>`;
+      });
+    }
+
+    selectUploadMapel.innerHTML = html;
+  },
+
+  renderUploadKelasCheckboxes() {
+    const container = document.getElementById('container-upload-kelas-checkboxes');
+    if (!container) return;
+
+    // Ekstrak kelas unik dari data siswa dan bank soal
+    const kelasSet = new Set();
+
+    if (State.siswaList && State.siswaList.length > 0) {
+      State.siswaList.forEach(s => {
+        if (s.kelas && s.kelas !== '-') kelasSet.add(String(s.kelas).trim());
+      });
+    }
+
+    if (State.questions && State.questions.length > 0) {
+      State.questions.forEach(q => {
+        if (q.kelas && q.kelas !== '-') {
+          const splitK = String(q.kelas).split(',');
+          splitK.forEach(k => kelasSet.add(k.trim()));
+        }
+      });
+    }
+
+    const sortedKelas = Array.from(kelasSet).filter(Boolean).sort();
+
+    if (sortedKelas.length === 0) {
+      container.innerHTML = `
+        <div class="col-span-4 p-2 text-center text-xs text-amber-700 bg-amber-50 rounded">
+          Belum ada data kelas (Pastikan data siswa di Supabase terisi).
+        </div>`;
+      return;
+    }
+
+    let html = '';
+    sortedKelas.forEach(k => {
+      html += `
+        <label class="flex items-center space-x-2 p-2 rounded hover:bg-blue-100/60 cursor-pointer text-xs font-semibold text-blue-950 border border-blue-100 bg-white">
+          <input type="checkbox" value="${k}" class="chk-upload-kelas rounded text-blue-600 focus:ring-blue-500">
+          <span>${k}</span>
+        </label>
+      `;
+    });
+
+    container.innerHTML = html;
+  },
+
+  toggleSelectAllKelas(checked) {
+    const checkboxes = document.querySelectorAll('.chk-upload-kelas');
+    checkboxes.forEach(cb => cb.checked = checked);
+  },
+
+  // --- POPULATE FILTER DROPDOWN Halaman Bank Soal ---
   populateFilterDropdowns() {
     const filterMapel = document.getElementById('bank-filter-mapel');
     const filterKelas = document.getElementById('bank-filter-kelas');
@@ -375,16 +468,16 @@ const SoalModule = {
   },
 
   // --- UNGGAH NASKAH SOAL HTML ---
-  toggleSelectAllKelas(checked) {
-    const checkboxes = document.querySelectorAll('.chk-upload-kelas');
-    checkboxes.forEach(cb => cb.checked = checked);
-  },
-
   async processHTMLUpload(e) {
     e.preventDefault();
     const mapelSelect = document.getElementById('select-upload-mapel').value;
     const selectedKelasNodes = document.querySelectorAll('.chk-upload-kelas:checked');
     const selectedKelas = Array.from(selectedKelasNodes).map(cb => cb.value);
+
+    if (!mapelSelect) {
+      alert("Silakan pilih Mata Pelajaran!");
+      return;
+    }
 
     if (selectedKelas.length === 0) {
       alert("Silakan centang minimal 1 kelas target!");
