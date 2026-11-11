@@ -113,7 +113,15 @@ const SoalModule = {
     container.innerHTML = '';
     let filtered = State.questions || [];
 
-    // Filter Fleksibel: Memeriksa apakah kelas target mengandung string filter
+    // PRIVILEGE FILTER: Jika yang login adalah GURU, hanya tampilkan soal mapel diampunya
+    if (State.currentUser && State.currentUser.role === 'guru') {
+      const mapelGuru = State.currentUser.mapel_diampu;
+      filtered = filtered.filter(q => 
+        String(q.mapel).trim().toUpperCase() === String(mapelGuru).trim().toUpperCase()
+      );
+    }
+
+    // Filter Dropdown Tampilan
     if (filterKelas !== 'ALL') {
       filtered = filtered.filter(q => 
         String(q.kelas).toUpperCase().split(',').map(k => k.trim()).includes(filterKelas.toUpperCase())
@@ -125,12 +133,14 @@ const SoalModule = {
 
     if (filtered.length === 0) {
       container.innerHTML = `
-        <div class="text-xs text-amber-700 bg-amber-50 border border-amber-200 p-4 rounded-lg text-center">
-          <p class="font-bold">Tidak ada soal yang cocok dengan filter saat ini.</p>
-          <p class="text-[11px] text-amber-600 mt-1">Coba sesuaikan filter Kelas atau Mapel di bagian atas.</p>
+        <div class="text-xs text-amber-700 bg-amber-50 border border-amber-200 p-4 rounded-xl text-center">
+          <p class="font-bold">Tidak ada soal yang tersedia untuk akun ini.</p>
         </div>`;
       return;
     }
+    
+    // ... Sisa fungsi renderBankSoalList() tetap sama ...
+  }
 
     // Kelompokkan naskah master berdasarkan kombinasi Mapel + Paket Kelas
     const groupedByMapelAndKelas = {};
