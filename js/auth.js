@@ -10,15 +10,9 @@ const AuthModule = {
       RekapModule.refreshMonitoringData();
       RekapModule.renderRekapNilai();
     } else {
-      const matchStudent = State.students.find(s => s.user === u && s.pass === p);
+      const matchStudent = (State.students || []).find(s => s.user === u && s.pass === p);
       if (matchStudent) {
-        const activeJadwal = JadwalModule.validateJadwalSiswa(matchStudent.kelas);
-        if (!activeJadwal && State.jadwalList.length > 0) {
-          alert(`MAAF! Ujian untuk kelas ${matchStudent.kelas} belum dibuka atau jam akses telah berakhir.`);
-          return;
-        }
-
-        State.currentUser = { role: 'siswa', ...matchStudent, jadwalActive: activeJadwal };
+        State.currentUser = { role: 'siswa', ...matchStudent };
         ExamModule.startExam();
       } else {
         alert("Username atau Password Salah!");
@@ -39,3 +33,5 @@ const AuthModule = {
     App.showScreen('login');
   }
 };
+
+window.AuthModule = AuthModule;
