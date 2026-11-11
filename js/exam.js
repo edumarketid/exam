@@ -13,7 +13,6 @@ const ExamModule = {
     });
   },
 
-  // Algoritma Pengacak Soal (Fisher-Yates Shuffle)
   shuffleArray(array) {
     const arr = [...array];
     for (let i = arr.length - 1; i > 0; i--) {
@@ -24,16 +23,28 @@ const ExamModule = {
   },
 
   async startExam() {
-    App.showScreen('exam');
-    State.examActive = true;
-    State.violations = 0;
-    State.currentQuestionIdx = 0;
-    State.answers = {};
-
+    State.examActive = false;
     const student = State.currentUser;
-    document.getElementById('exam-student-info').textContent = `Peserta: ${student.nama} (${student.kelas})`;
+
+    if (!student || !student.kelas) {
+      alert("Data siswa tidak valid.");
+      AuthModule.logout();
+      return;
+    }
 
     try {
+      // 1. Periksa Jadwal Ujian Aktif di Supabase untuk Kelas Siswa Ini
+      const activeSchedule = await DB.fetchActiveScheduleForStudent(student.kelas);
+
+      if (!activeSchedule) {
+        alert(`TIDAK ADA JADWAL UJIAN AKTIF!\n\nHai ${student.nama}, saat ini tidak ada jadwal ujian yang aktif untuk kelas ${student.kelas}.\n\nPastikan tanggal, jam pelaksanaan, dan status jadwal sudah diatur oleh panitia/guru.`);
+        AuthModule.logout();
+        return;
+      }
+
+      console.log("[ExamModule] Jadwal Ujian Aktif Ditemukan:", activeSchedule);
+
+      // 2. Ambil Bank Soal Khusus untuk Mapel & Kelas yang Terjadwal
       const client = await DB.getClient();
       if (!client) throw new Error("Koneksi database tidak tersedia.");
 
@@ -53,22 +64,29 @@ const ExamModule = {
         kunci_jawaban: q.kunci_jawaban || q.KUNCI_JAWABAN || 'A'
       }));
 
-      // Filter berdasarkan kelas siswa
+      // Filter presisi: Hanya soal dengan Mapel TERJADWAL dan Kelas SISWA
       const filtered = allQuestions.filter(q => 
+        String(q.mapel).trim().toUpperCase() === String(activeSchedule.mapel).trim().toUpperCase() &&
         String(q.kelas).trim().toUpperCase() === String(student.kelas).trim().toUpperCase()
       );
 
       if (filtered.length === 0) {
-        alert(`Belum ada naskah soal yang tersedia untuk kelas ${student.kelas}. Silakan hubungi pengawas.`);
+        alert(`Jadwal Ujian "${activeSchedule.mapel}" terdeteksi AKTIF, namun berkas naskah soal belum diunggah oleh guru mapel.\n\nSilakan hubungi pengawas.`);
         AuthModule.logout();
         return;
       }
 
-      // ACAK URUTAN SOAL KHUSUS UNTUK SISWA INI
-      State.questions = this.shuffleArray(filtered);
+      // 3. Set Up Layar Ujian & Acak Soal per Siswa
+      App.showScreen('exam');
+      State.examActive = true;
+      State.violations = 0;
+      State.currentQuestionIdx = 0;
+      State.answers = {};
 
-      const mapelName = State.questions[0].mapel;
-      document.getElementById('exam-mapel-title').textContent = `Ujian Sumatif: ${mapelName}`;
+      document.getElementById('exam-student-info').textContent = `Peserta: ${student.nama} (${student.kelas})`;
+      document.getElementById('exam-mapel-title').textContent = `Ujian Sumatif: ${activeSchedule.mapel}`;
+
+      State.questions = this.shuffleArray(filtered);
 
       this.renderQuestionNav();
       this.renderCurrentQuestion();
@@ -81,10 +99,12 @@ const ExamModule = {
         console.warn("Fullscreen tidak dapat diaktifkan otomatis.");
       }
 
-      this.startTimer(45);
+      // Jalankan Timer Sesuai Durasi Jadwal
+      const durasiUjian = parseInt(activeSchedule.durasi) || 45;
+      this.startTimer(durasiUjian);
 
     } catch (err) {
-      alert("Gagal memuat soal ujian: " + err.message);
+      alert("Gagal memuat ujian: " + err.message);
       AuthModule.logout();
     }
   },
