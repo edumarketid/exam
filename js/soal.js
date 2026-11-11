@@ -91,30 +91,38 @@ const SoalModule = {
       return;
     }
 
-    // GROUPING DATA BERDASARKAN NAMA MAPEL
-    const groupedByMapel = {};
+    // GROUPING DATA BERDASARKAN KOMBINASI (MAPEL + KELAS)
+    const groupedByMapelKelas = {};
     filtered.forEach(q => {
       const mapelName = q.mapel || 'Tanpa Mapel';
-      if (!groupedByMapel[mapelName]) {
-        groupedByMapel[mapelName] = [];
+      const kelasName = q.kelas || 'Semua Kelas';
+      const groupKey = `${mapelName}___${kelasName}`;
+      
+      if (!groupedByMapelKelas[groupKey]) {
+        groupedByMapelKelas[groupKey] = {
+          mapel: mapelName,
+          kelas: kelasName,
+          soalList: []
+        };
       }
-      groupedByMapel[mapelName].push(q);
+      groupedByMapelKelas[groupKey].soalList.push(q);
     });
 
-    let mapelIdx = 0;
+    let groupIdx = 0;
 
-    // RENDER ACCORDION GROUP PER MAPEL
-    Object.keys(groupedByMapel).forEach(mapelName => {
-      mapelIdx++;
-      const listSoalMapel = groupedByMapel[mapelName];
-      const safeMapelId = `mapel-group-${mapelIdx}`;
+    // RENDER ACCORDION GROUP PER (MAPEL + KELAS)
+    Object.keys(groupedByMapelKelas).forEach(key => {
+      groupIdx++;
+      const groupData = groupedByMapelKelas[key];
+      const listSoalGroup = groupData.soalList;
+      const safeGroupId = `group-mk-${groupIdx}`;
 
-      const mapelBox = document.createElement('div');
-      mapelBox.className = "bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-4 transition hover:border-ocean-300";
+      const groupBox = document.createElement('div');
+      groupBox.className = "bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-4 transition hover:border-ocean-300";
 
       let innerSoalHtml = '';
 
-      listSoalMapel.forEach((q, idx) => {
+      listSoalGroup.forEach((q, idx) => {
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = q.soal_html;
         const plainText = (tempDiv.textContent || tempDiv.innerText || '').trim();
@@ -127,7 +135,6 @@ const SoalModule = {
             <div class="p-3 bg-slate-50 flex flex-wrap justify-between items-center gap-2 cursor-pointer border-b border-slate-100" onclick="SoalModule.toggleSoalDetail(${q.id})">
               <div class="flex items-center space-x-2 flex-1 min-w-0">
                 <span class="bg-ocean-700 text-white font-extrabold text-[11px] px-2 py-0.5 rounded">Soal #${idx + 1}</span>
-                <span class="bg-purple-50 text-purple-800 font-bold text-[11px] px-2 py-0.5 rounded border border-purple-200">Kelas: ${q.kelas}</span>
                 <span class="text-xs text-slate-700 font-medium truncate ml-1">${snippetText}</span>
               </div>
               
@@ -157,43 +164,48 @@ const SoalModule = {
         `;
       });
 
-      // KARTU MAPEL UTAMA (ACCORDION PER MAPEL - DEFAULT TERLIPAT)
-      mapelBox.innerHTML = `
-        <div class="p-4 bg-ocean-900 text-white flex justify-between items-center cursor-pointer select-none" onclick="SoalModule.toggleMapelGroup('${safeMapelId}')">
+      // KARTU UTAMA DENGAN HEADER MAPEL + KELAS
+      groupBox.innerHTML = `
+        <div class="p-4 bg-ocean-900 text-white flex justify-between items-center cursor-pointer select-none" onclick="SoalModule.toggleMapelGroup('${safeGroupId}')">
           <div class="flex items-center space-x-3">
             <div class="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center font-bold text-teal-300">
               <i class="fa-solid fa-book-open"></i>
             </div>
             <div>
-              <h4 class="font-bold text-sm tracking-wide text-white">${mapelName}</h4>
-              <p class="text-[11px] text-ocean-200">Total: ${listSoalMapel.length} Butir Soal Tersebar</p>
+              <div class="flex items-center gap-2">
+                <h4 class="font-bold text-sm tracking-wide text-white">${groupData.mapel}</h4>
+                <span class="bg-purple-500/30 text-purple-200 text-[10px] px-2 py-0.5 rounded-full font-bold border border-purple-400/40">
+                  Kelas: ${groupData.kelas}
+                </span>
+              </div>
+              <p class="text-[11px] text-ocean-200 mt-0.5">Total: ${listSoalGroup.length} Butir Soal Tersebar</p>
             </div>
           </div>
 
           <div class="flex items-center space-x-2">
             <span class="bg-teal-500/20 text-teal-300 text-xs px-3 py-1 rounded-full font-bold border border-teal-500/30">
-              ${listSoalMapel.length} Soal
+              ${listSoalGroup.length} Soal
             </span>
-            <button id="btn-mapel-icon-${safeMapelId}" class="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition">
+            <button id="btn-mapel-icon-${safeGroupId}" class="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition">
               <i class="fa-solid fa-chevron-down text-xs"></i>
             </button>
           </div>
         </div>
 
-        <!-- CONTAINER DAFTAR SOAL DI DALAM MAPEL (DEFAULT TERLIPAT / HIDDEN) -->
-        <div id="${safeMapelId}" class="hidden p-4 bg-slate-100 space-y-2 border-t border-slate-200">
+        <!-- CONTAINER DAFTAR SOAL DI DALAM GROUP (DEFAULT TERLIPAT / HIDDEN) -->
+        <div id="${safeGroupId}" class="hidden p-4 bg-slate-100 space-y-2 border-t border-slate-200">
           ${innerSoalHtml}
         </div>
       `;
 
-      container.appendChild(mapelBox);
+      container.appendChild(groupBox);
     });
   },
 
-  // TOGGLE ACCORDION GROUP MAPEL
-  toggleMapelGroup(mapelGroupId) {
-    const groupEl = document.getElementById(mapelGroupId);
-    const iconBtn = document.getElementById(`btn-mapel-icon-${mapelGroupId}`);
+  // TOGGLE ACCORDION GROUP (MAPEL + KELAS)
+  toggleMapelGroup(groupId) {
+    const groupEl = document.getElementById(groupId);
+    const iconBtn = document.getElementById(`btn-mapel-icon-${groupId}`);
 
     if (!groupEl) return;
 
