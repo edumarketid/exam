@@ -2,24 +2,8 @@ const SoalModule = {
   async loadAndRender() {
     try {
       console.log("[SoalModule] Menarik bank soal dari Supabase...");
-      const rawQuestions = await DB.fetchBankSoal();
-      console.log("[SoalModule] Raw Data dari Supabase:", rawQuestions);
-
-      // Normalisasi nama kolom agar tahan terhadap perbedaan huruf besar/kecil (Upper/Lowercase)
-      State.questions = (rawQuestions || []).map(q => ({
-        id: q.id || q.ID,
-        mapel: q.mapel || q.MAPEL || q.nama_mapel || q.NAMA_MAPEL || 'Lainnya',
-        kelas: q.kelas || q.KELAS || 'Umum',
-        soal_html: q.soal_html || q.SOAL_HTML || q.soal || q.SOAL || '',
-        opsi_a: q.opsi_a || q.OPSI_A || '',
-        opsi_b: q.opsi_b || q.OPSI_B || '',
-        opsi_c: q.opsi_c || q.OPSI_C || '',
-        opsi_d: q.opsi_d || q.OPSI_D || '',
-        opsi_e: q.opsi_e || q.OPSI_E || '',
-        kunci_jawaban: q.kunci_jawaban || q.KUNCI_JAWABAN || q.kunci || q.KUNCI || 'A'
-      }));
-
-      console.log("[SoalModule] Data soal berhasil dinormalisasi:", State.questions.length, "butir");
+      State.questions = await DB.fetchBankSoal();
+      console.log("[SoalModule] Data bank soal diterima:", State.questions.length, "butir");
       this.renderBankSoalList();
     } catch (err) {
       console.error("[SoalModule] Error saat render bank soal:", err.message);
@@ -128,13 +112,13 @@ const SoalModule = {
     if (!container) return;
 
     container.innerHTML = '';
-    let filtered = State.questions || [];
+    let filtered = State.questions;
 
     if (filterKelas !== 'ALL') filtered = filtered.filter(q => q.kelas === filterKelas);
     if (filterMapel !== 'ALL') filtered = filtered.filter(q => q.mapel === filterMapel);
 
-    if (filtered.length === 0) {
-      container.innerHTML = `<div class="text-xs text-amber-600 italic p-4 text-center border rounded bg-amber-50">Belum ada data soal di Supabase (atau tidak ada yang cocok dengan filter).</div>`;
+    if (!filtered || filtered.length === 0) {
+      container.innerHTML = `<div class="text-xs text-amber-600 italic p-4 text-center border rounded">Tidak ada soal ditemukan di Supabase.</div>`;
       return;
     }
 
@@ -146,11 +130,11 @@ const SoalModule = {
 
     Object.keys(groupedByMapel).forEach((mapelName) => {
       const mapelQuestions = groupedByMapel[mapelName];
-      const isOpen = State.openAccordionMapel[mapelName] !== false; // Default terbuka jika baru dimuat
+      const isOpen = !!State.openAccordionMapel[mapelName];
       const daftarKelasUnique = [...new Set(mapelQuestions.map(q => q.kelas))].join(', ');
 
       const mapelCard = document.createElement('div');
-      mapelCard.className = "border rounded-lg bg-white overflow-hidden shadow-sm transition mb-3";
+      mapelCard.className = "border rounded-lg bg-white overflow-hidden shadow-sm transition";
 
       mapelCard.innerHTML = `
         <div class="p-4 bg-gray-50 hover:bg-blue-50 flex justify-between items-center transition border-b">
@@ -408,4 +392,5 @@ const SoalModule = {
   }
 };
 
+// WAJIB: Daftarkan ke window agar bisa dipanggil app.js
 window.SoalModule = SoalModule;
