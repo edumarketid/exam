@@ -12,45 +12,21 @@ const App = {
 
     try {
       const client = await DB.getClient();
-
-      if (!client) {
-        console.warn("[App] Supabase offline atau CONFIG belum valid.");
-        if (badge) {
-          badge.textContent = "Offline / Config Error";
-          badge.className = "px-2.5 py-1 text-xs rounded-full bg-amber-600 text-white font-medium";
-        }
-        return;
-      }
-
       this.updateDBStatus(client);
 
-      // Eksekusi tiap modul secara independen tanpa mematikan modul lain jika terjadi galat
-      if (window.MapelModule) {
-        try { await MapelModule.loadAndRender(); } catch (e) { console.error("[App] Err Mapel:", e.message); }
-      }
+      // Pemanggilan aman per modul
+      if (window.MapelModule) try { await MapelModule.loadAndRender(); } catch (e) {}
+      if (window.SiswaModule) try { await SiswaModule.loadAndRender(); } catch (e) {}
+      if (window.SoalModule) try { await SoalModule.loadAndRender(); } catch (e) {}
+      if (window.JadwalModule) try { await JadwalModule.loadAndRender(); } catch (e) {}
+      if (window.RekapModule) try { await RekapModule.refreshMonitoringData(); } catch (e) {}
 
-      if (window.SiswaModule) {
-        try { await SiswaModule.loadAndRender(); } catch (e) { console.error("[App] Err Siswa:", e.message); }
-      }
-
-      if (window.SoalModule) {
-        try { await SoalModule.loadAndRender(); } catch (e) { console.error("[App] Err Soal:", e.message); }
-      }
-
-      if (window.JadwalModule) {
-        try { await JadwalModule.loadAndRender(); } catch (e) { console.error("[App] Err Jadwal:", e.message); }
-      }
-
-      if (window.RekapModule) {
-        try { await RekapModule.refreshMonitoringData(); } catch (e) { console.error("[App] Err Rekap:", e.message); }
-      }
-
-      console.log("[App] Seluruh modul berhasil diinisialisasi.");
+      console.log("[App] Aplikasi Siap Digunakan.");
     } catch (err) {
-      console.error("[App] Terjadi kesalahan kritis:", err.message);
+      console.error("[App] Kesalahan kritis:", err.message);
       if (badge) {
-        badge.textContent = "Error DB";
-        badge.className = "px-2.5 py-1 text-xs rounded-full bg-red-600 text-white font-medium";
+        badge.textContent = "Offline / Config Error";
+        badge.className = "px-2.5 py-1 text-xs rounded-full bg-amber-600 text-white font-medium";
       }
     }
   },
@@ -58,7 +34,6 @@ const App = {
   updateDBStatus(client) {
     const badge = document.getElementById('db-status-badge');
     if (!badge) return;
-    
     if (client) {
       badge.textContent = "Database Connected";
       badge.className = "px-2.5 py-1 text-xs rounded-full bg-emerald-600 text-white font-medium";
@@ -69,12 +44,6 @@ const App = {
   },
 
   setupPWA() {
-    window.addEventListener('beforeinstallprompt', (e) => {
-      e.preventDefault();
-      const installBtn = document.getElementById('pwa-install-btn');
-      if (installBtn) installBtn.classList.remove('hidden');
-    });
-
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js').catch(err => console.error(err));
     }
@@ -102,4 +71,5 @@ const App = {
   }
 };
 
+window.App = App;
 window.addEventListener('load', () => App.init());
