@@ -1,141 +1,203 @@
 const JadwalModule = {
   async loadAndRender() {
     try {
-      console.log("[JadwalModule] Menarik data jadwal dari Supabase...");
-      State.schedules = await DB.fetchSchedules();
-      console.log("[JadwalModule] Data jadwal diterima:", State.schedules.length, "entri");
+      console.log("[JadwalModule] Memuat data jadwal ujian & kelas target...");
       
-      this.populateJadwalForm();
+      // 1. Pastikan data mapel & siswa sudah dimuat ke State
+      if (!State.mapelList || State.mapelList.length === 0) {
+        State.mapelList = await DB.fetchMapel();
+      }
+      if (!State.siswaList || State.siswaList.length === 0) {
+        State.siswaList = await DB.fetchSiswa();
+      }
+
+      // 2. Fetch jadwal dari Supabase
+      State.schedules = await DB.fetchSchedules();
+
+      // 3. Populate dropdown mapel & checkbox kelas target
+      this.renderMapelDropdown();
+      this.renderKelasCheckboxes();
       this.renderJadwalList();
+
     } catch (err) {
-      console.error("[JadwalModule] Error:", err.message);
+      console.error("[JadwalModule] Error load jadwal:", err.message);
     }
   },
 
-  populateJadwalForm() {
+  renderMapelDropdown() {
     const selectMapel = document.getElementById('jadwal-mapel');
-    const containerKelas = document.getElementById('container-jadwal-kelas-checkboxes');
+    if (!selectMapel) return;
 
-    // Populasikan Dropdown Mapel dari State
-    if (selectMapel && State.mapelList && State.mapelList.length > 0) {
-      selectMapel.innerHTML = State.mapelList.map(m => `<option value="${m}">${m}</option>`).join('');
+    let html = `<option value="">-- Pilih Mata Pelajaran --</option>`;
+    
+    // Ambil gabungan mapel dari tabel mapel & bank soal
+    const mapelSet = new Set(State.mapelList || []);
+    if (State.questions) {
+      State.questions.forEach(q => { if (q.mapel) mapelSet.add(q.mapel); });
     }
 
-    // Populasikan Checkbox Multi-Kelas Target dari State
-    if (containerKelas) {
-      if (State.kelasOptions && State.kelasOptions.length > 0) {
-        containerKelas.innerHTML = State.kelasOptions.map(k => `
-          <label class="flex items-center gap-2 text-xs font-medium cursor-pointer bg-white p-2 border rounded hover:bg-purple-100 transition shadow-sm">
-            <input type="checkbox" name="jadwal-kelas-target" value="${k}" class="rounded text-purple-700 focus:ring-purple-500">
-            <span class="font-bold text-gray-800">${k}</span>
-          </label>
-        `).join('');
-      } else {
-        containerKelas.innerHTML = `<p class="text-xs text-purple-600 italic col-span-full">Belum ada data kelas (Data siswa belum dimuat).</p>`;
-      }
+    // PRIVILEGE FILTER: Jika login sebagai GURU, tampilkan hanya mapel diampunya
+    if (State.currentUser && State.currentUser.role === 'guru') {
+      const mapelGuru = String(State.currentUser.mapel_diampu || '').trim().toUpperCase();
+      Array.from(mapelSet).forEach(m => {
+        if (String(m).trim().toUpperCase().includes(mapelGuru) || mapelGuru.includes(String(m).trim().toUpperCase())) {
+          html += `<option value="${m}">${m}</option>`;
+        }
+      });
+    } else {
+      // Admin dapat melihat seluruh mapel
+      Array.from(mapelSet).forEach(m => {
+        html += `<option value="${m}">${m}</option>`;
+      });
     }
+
+    selectMapel.innerHTML = html;
+  },
+
+  renderKelasCheckboxes() {
+    const container = document.getElementById('container-jadwal-kelas-checkboxes');
+    if (!container) return;
+
+    // Ekstrak daftar kelas unik dari data siswa & bank soal
+    const kelasSet = new Set();
+
+    if (State.siswaList && State.siswaList.length > 0) {
+      State.siswaList.forEach(s => {
+        if (s.kelas && s.kelas !== '-') kelasSet.add(String(s.kelas).trim());
+      });
+    }
+
+    if (State.questions && State.questions.length > 0) {
+      State.questions.forEach(q => {
+        if (q.kelas && q.kelas !== '-') {
+          const splitK = String(q.kelas).split(',');
+          splitK.forEach(k => kelasSet.add(k.trim()));
+        }
+      });
+    }
+
+    const sortedKelas = Array.from(kelasSet).filter(Boolean).sort();
+
+    if (sortedKelas.length === 0) {
+      container.innerHTML = `
+        <div class="col-span-4 p-2 text-center text-xs text-amber-700 bg-amber-50 rounded">
+          Belum ada data kelas (Pastikan data siswa di Supabase terisi).
+        </div>`;
+      return;
+    }
+
+    let html = '';
+    sortedKelas.forEach((k, idx) => {
+      html += `
+        <label class="flex items-center space-x-2 p-2 rounded hover:bg-purple-100/50 cursor-pointer text-xs font-semibold text-purple-950 border border-purple-100">
+          <input type="checkbox" value="${k}" class="chk-jadwal-kelas rounded text-purple-700 focus:ring-purple-500">
+          <span>${k}</span>
+        </label>
+      `;
+    });
+
+    container.innerHTML = html;
   },
 
   toggleSelectAllKelasJadwal(checked) {
-    const checkboxes = document.querySelectorAll('input[name="jadwal-kelas-target"]');
+    const checkboxes = document.querySelectorAll('.chk-jadwal-kelas');
     checkboxes.forEach(cb => cb.checked = checked);
+  },
+
+  renderJadwalList() {
+    const container = document.getElementById('jadwal-list-container');
+    if (!container) return;
+
+    if (!State.schedules || State.schedules.length === 0) {
+      container.innerHTML = `
+        <div class="p-4 text-center text-xs text-slate-500 bg-slate-50 rounded-xl border">
+          Belum ada jadwal ujian yang diaktifkan.
+        </div>`;
+      return;
+    }
+
+    let html = '';
+    State.schedules.forEach((j) => {
+      html += `
+        <div class="p-4 rounded-xl border bg-white shadow-sm flex flex-wrap justify-between items-center gap-3 hover:border-purple-300 transition">
+          <div class="space-y-1">
+            <div class="flex items-center space-x-2">
+              <span class="font-bold text-sm text-slate-800">${j.mapel}</span>
+              <span class="bg-purple-100 text-purple-800 font-bold text-xs px-2.5 py-0.5 rounded-full border border-purple-200">
+                Target: ${j.kelas}
+              </span>
+            </div>
+            <div class="text-xs text-slate-500 flex items-center space-x-3">
+              <span>📅 Tanggal: <strong>${j.tanggal}</strong></span>
+              <span>⏰ Waktu: <strong>${j.jamMulai} - ${j.jamSelesai} WITA</strong> (${j.durasi} Menit)</span>
+            </div>
+          </div>
+
+          <button onclick="JadwalModule.deleteJadwal(${j.id})" class="text-rose-600 hover:text-rose-800 font-bold text-xs bg-rose-50 hover:bg-rose-100 px-3 py-1.5 rounded-lg border border-rose-200 transition">
+            🗑️ Hapus Jadwal
+          </button>
+        </div>
+      `;
+    });
+
+    container.innerHTML = html;
   },
 
   async saveJadwalUjian(e) {
     e.preventDefault();
-    const mapel = document.getElementById('jadwal-mapel')?.value;
-    const selectedKelasNodes = document.querySelectorAll('input[name="jadwal-kelas-target"]:checked');
-    const selectedKelasList = Array.from(selectedKelasNodes).map(cb => cb.value);
 
-    const tanggal = document.getElementById('jadwal-tanggal')?.value;
-    const durasi = parseInt(document.getElementById('jadwal-durasi')?.value || 45);
-    const jamMulai = document.getElementById('jadwal-jam-mulai')?.value;
-    const jamSelesai = document.getElementById('jadwal-jam-selesai')?.value;
+    const mapel = document.getElementById('jadwal-mapel').value;
+    const tanggal = document.getElementById('jadwal-tanggal').value;
+    const durasi = parseInt(document.getElementById('jadwal-durasi').value) || 45;
+    const jamMulai = document.getElementById('jadwal-jam-mulai').value;
+    const jamSelesai = document.getElementById('jadwal-jam-selesai').value;
+
+    const checkedNodes = document.querySelectorAll('.chk-jadwal-kelas:checked');
+    const selectedKelas = Array.from(checkedNodes).map(cb => cb.value);
 
     if (!mapel) {
       alert("Silakan pilih Mata Pelajaran!");
       return;
     }
 
-    if (selectedKelasList.length === 0) {
-      alert("Silakan centang/pilih minimal 1 Kelas Target!");
+    if (selectedKelas.length === 0) {
+      alert("Silakan centang minimal 1 Kelas Target!");
       return;
     }
 
-    if (!tanggal || !jamMulai || !jamSelesai) {
-      alert("Mohon lengkapi Tanggal, Jam Mulai, dan Jam Selesai!");
-      return;
-    }
-
-    // Buat objek payload array untuk setiap kelas yang dicentang
-    const payloadJadwal = selectedKelasList.map(kelasTarget => ({
+    const payload = {
       mapel: mapel,
-      kelas: kelasTarget,
+      kelas: selectedKelas.join(', '),
       tanggal: tanggal,
       durasi: durasi,
       jam_mulai: jamMulai,
       jam_selesai: jamSelesai
-    }));
+    };
 
-    const client = await DB.getClient();
-    if (client) {
-      try {
-        const { error } = await client.from('jadwal_ujian').insert(payloadJadwal);
-        if (error) throw error;
+    try {
+      const client = await DB.getClient();
+      const { data, error } = await client.from('jadwal_ujian').insert([payload]);
+      if (error) throw error;
 
-        alert(`Berhasil mengaktifkan Jadwal Ujian ${mapel} untuk ${selectedKelasList.length} kelas target!\n\nKelas Target: ${selectedKelasList.join(', ')}`);
-        await this.loadAndRender();
-      } catch (err) {
-        alert("Gagal menyimpan jadwal ke Supabase: " + err.message);
-      }
+      alert(`Berhasil mengaktifkan jadwal ujian "${mapel}" untuk kelas (${selectedKelas.join(', ')})!`);
+      await this.loadAndRender();
+    } catch (err) {
+      alert("Gagal menyimpan jadwal ujian: " + err.message);
     }
-  },
-
-  renderJadwalList() {
-    const container = document.getElementById('jadwal-list-container');
-    if (!container) return;
-    container.innerHTML = '';
-
-    const list = State.schedules || [];
-
-    if (list.length === 0) {
-      container.innerHTML = `
-        <div class="p-4 border rounded-lg bg-purple-50 text-purple-800 text-xs text-center italic">
-          Belum ada jadwal ujian yang aktif di Supabase. Silakan pilih mapel dan centang kelas target di atas.
-        </div>`;
-      return;
-    }
-
-    list.forEach((j, idx) => {
-      const card = document.createElement('div');
-      card.className = "flex justify-between items-center p-3 border rounded-lg bg-purple-50 text-xs shadow-sm mb-2 transition hover:bg-purple-100";
-      card.innerHTML = `
-        <div>
-          <span class="font-bold text-purple-900 block text-sm">[Kelas: ${j.kelas}] ${j.mapel}</span>
-          <div class="text-gray-600 mt-1">
-            🗓️ Tanggal: <strong>${j.tanggal}</strong> | ⏰ Jam: <strong>${j.jamMulai} - ${j.jamSelesai}</strong> (${j.durasi} Menit)
-          </div>
-        </div>
-        <button onclick="JadwalModule.deleteJadwal(${j.id || idx})" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded font-bold text-[11px] shadow">
-          Hapus Jadwal
-        </button>
-      `;
-      container.appendChild(card);
-    });
   },
 
   async deleteJadwal(id) {
-    if (!confirm("Apakah Anda yakin ingin menghapus jadwal ujian ini dari Supabase?")) return;
-    const client = await DB.getClient();
-    if (client) {
-      try {
-        const { error } = await client.from('jadwal_ujian').delete().eq('id', id);
-        if (error) throw error;
-        alert("Jadwal ujian berhasil dihapus.");
-        await this.loadAndRender();
-      } catch (err) {
-        alert("Gagal menghapus jadwal: " + err.message);
-      }
+    if (!confirm("Apakah Anda yakin ingin menghapus jadwal ujian ini?")) return;
+
+    try {
+      const client = await DB.getClient();
+      const { error } = await client.from('jadwal_ujian').delete().eq('id', id);
+      if (error) throw error;
+
+      alert("Jadwal ujian berhasil dihapus!");
+      await this.loadAndRender();
+    } catch (err) {
+      alert("Gagal menghapus jadwal: " + err.message);
     }
   }
 };
