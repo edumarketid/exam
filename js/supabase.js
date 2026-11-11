@@ -112,10 +112,22 @@ const DB = {
     const client = await this.getClient();
     if (!client) return [];
     try {
-      const { data, error } = await client.from('jadwal_ujian').select('*');
-      if (error) return [];
-      return data || [];
+      const { data, error } = await client.from('jadwal_ujian').select('*').order('id', { ascending: false });
+      if (error) {
+        console.warn("[DB Helper] Gagal fetch jadwal_ujian:", error.message);
+        return [];
+      }
+      return (data || []).map(j => ({
+        id: j.id || j.ID,
+        mapel: j.mapel || j.MAPEL || j.nama_mapel || j.NAMA_MAPEL || '-',
+        kelas: j.kelas || j.KELAS || '-',
+        tanggal: j.tanggal || j.TANGGAL || '-',
+        durasi: j.durasi || j.DURASI || 45,
+        jamMulai: j.jam_mulai || j.JAM_MULAI || j.jamMulai || '07:30',
+        jamSelesai: j.jam_selesai || j.JAM_SELESAI || j.jamSelesai || '09:00'
+      }));
     } catch (err) {
+      console.error("[DB Helper] Error fetchSchedules:", err.message);
       return [];
     }
   },
