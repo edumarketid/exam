@@ -232,6 +232,44 @@ const DB = {
     }
     return data;
   }
+
+
+  // --- MODUL GURU SUPABASE ---
+  async fetchGuru() {
+    const client = await this.getClient();
+    if (!client) return [];
+    try {
+      const { data, error } = await client.from('guru').select('*').order('id_guru', { ascending: true });
+      if (error) return [];
+      return data || [];
+    } catch (err) {
+      return [];
+    }
+  },
+
+  async insertGuru(payload) {
+    const client = await this.getClient();
+    if (!client) throw new Error("Database tidak terhubung.");
+    const { data, error } = await client.from('guru').insert([payload]);
+    if (error) throw error;
+    return data;
+  },
+
+  async updateGuru(id_guru, payload) {
+    const client = await this.getClient();
+    if (!client) throw new Error("Database tidak terhubung.");
+    const { data, error } = await client.from('guru').update(payload).eq('id_guru', id_guru);
+    if (error) throw error;
+    return data;
+  },
+
+  async deleteGuru(id_guru) {
+    const client = await this.getClient();
+    if (!client) throw new Error("Database tidak terhubung.");
+    const { error } = await client.from('guru').delete().eq('id_guru', id_guru);
+    if (error) throw error;
+    return true;
+  }
 };
 
 window.DB = DB;
