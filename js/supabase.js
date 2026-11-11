@@ -28,9 +28,9 @@ const DB = {
             try {
               window.supabaseClient = supabase.createClient(url, key);
               this.client = window.supabaseClient;
-              console.log("[DB Helper] Berhasil membuat koneksi Supabase.");
+              console.log("[DB Helper] Klien Supabase Siap.");
             } catch (e) {
-              console.error("[DB Helper] Error koneksi:", e.message);
+              console.error("[DB Helper] Inisialisasi Klien Gagal:", e.message);
             }
           }
           clearInterval(interval);
@@ -38,8 +38,8 @@ const DB = {
           return;
         }
 
-        if (attempts >= 25) {
-          console.warn("[DB Helper] Timeout koneksi ke Supabase.");
+        if (attempts >= 20) {
+          console.warn("[DB Helper] Timeout menunggu SDK Supabase / CONFIG.");
           clearInterval(interval);
           resolve(null);
         }
@@ -49,16 +49,16 @@ const DB = {
 
   async fetchMapel() {
     const client = await this.getClient();
-    if (!client) {
-      console.warn("[DB Helper] Client Supabase offline / tidak siap.");
-      return [];
-    }
+    if (!client) return [];
     try {
-      const { data, error } = await client.from('mapel').select('nama_mapel').order('id', { ascending: true });
-      if (error) throw error;
-      return data ? data.map(m => m.nama_mapel).filter(Boolean) : [];
+      const { data, error } = await client.from('mapel').select('*').order('id', { ascending: true });
+      if (error) {
+        console.warn("[DB Warn] Tabel mapel error/kosong:", error.message);
+        return [];
+      }
+      return data ? data.map(m => m.nama_mapel || m.mapel || m.nama || Object.values(m)[1]).filter(Boolean) : [];
     } catch (err) {
-      console.error("[DB Error] Gagal narik tabel mapel:", err.message);
+      console.error("[DB Error] fetchMapel:", err.message);
       return [];
     }
   },
@@ -84,24 +84,34 @@ const DB = {
     if (!client) return [];
     try {
       const { data: dataSiswa, error: errSiswa } = await client.from('siswa').select('*');
-      if (errSiswa) throw errSiswa;
-      const { data: dataAkun } = await client.from('akun_siswa').select('*');
+      if (errSiswa) {
+        console.warn("[DB Warn] Tabel siswa error/kosong:", errSiswa.message);
+        return [];
+      }
       
-      return dataSiswa.map(s => {
-        const akun = dataAkun?.find(a => a.ID_SISWA === s.ID_SISWA);
+      let dataAkun = [];
+      try {
+        const { data } = await client.from('akun_siswa').select('*');
+        dataAkun = data || [];
+      } catch (e) {
+        console.warn("[DB Warn] Tabel akun_siswa belum ada/akses dibatasi.");
+      }
+
+      return (dataSiswa || []).map(s => {
+        const akun = dataAkun.find(a => a.ID_SISWA === (s.ID_SISWA || s.id_siswa));
         return {
-          id_siswa: s.ID_SISWA,
-          nisn: s.NISN,
-          nama: s.NAMA_SISWA,
-          kelas: s.KELAS,
-          status: s.STATUS,
-          ttl: s.TTL || '-',
-          user: akun ? akun.username : s.NISN,
+          id_siswa: s.ID_SISWA || s.id_siswa || s.id,
+          nisn: s.NISN || s.nisn || '-',
+          nama: s.NAMA_SISWA || s.nama_siswa || s.nama || '-',
+          kelas: s.KELAS || s.kelas || '-',
+          status: s.STATUS || s.status || 'Aktif',
+          ttl: s.TTL || s.ttl || '-',
+          user: akun ? akun.username : (s.NISN || s.nisn || 'user'),
           pass: akun ? akun.password : 'smk123'
         };
       });
     } catch (err) {
-      console.error("[DB Error] Gagal ambil siswa:", err.message);
+      console.error("[DB Error] fetchSiswa:", err.message);
       return [];
     }
   },
@@ -111,35 +121,29 @@ const DB = {
     if (!client) return [];
     try {
       const { data, error } = await client.from('bank_soal').select('*').order('id', { ascending: true });
-      if (error) throw error;
+      if (error) {
+        console.warn("[DB Warn] Tabel bank_soal error/kosong:", error.message);
+        return [];
+      }
       return data || [];
     } catch (err) {
-      console.error("[DB Error] Gagal ambil bank soal:", err.message);
+      console.error("[DB Error] fetchBankSoal:", err.message);
       return [];
     }
   },
 
-  async fetchHasilUjian() {
-    const client = await this.getClient();
-    if (!client) return [];
-    try {
-      const { data, error } = await client.from('hasil_ujian').select('*').order('waktu_selesai', { ascending: false });
-      if (error) throw error;
-      return data || [];
-    } catch (err) {
-      console.error("[DB Error] Gagal ambil hasil ujian:", err.message);
-      return [];
-    }
-  }
   async fetchSchedules() {
     const client = await this.getClient();
     if (!client) return [];
     try {
       const { data, error } = await client.from('jadwal_ujian').select('*');
-      if (error) throw error;
+      if (error) {
+        console.warn("[DB Warn] Tabel jadwal_ujian error/kosong:", error.message);
+        return [];
+      }
       return data || [];
     } catch (err) {
-      console.error("[DB Error] Gagal ambil jadwal:", err.message);
+      console.error("[DB Error] fetchSchedules:", err.message);
       return [];
     }
   },
@@ -149,10 +153,13 @@ const DB = {
     if (!client) return [];
     try {
       const { data, error } = await client.from('hasil_ujian').select('*').order('waktu_selesai', { ascending: false });
-      if (error) throw error;
+      if (error) {
+        console.warn("[DB Warn] Tabel hasil_ujian error/kosong:", error.message);
+        return [];
+      }
       return data || [];
     } catch (err) {
-      console.error("[DB Error] Gagal ambil hasil ujian:", err.message);
+      console.error("[DB Error] fetchHasilUjian:", err.message);
       return [];
     }
   }
