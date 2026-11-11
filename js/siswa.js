@@ -1,18 +1,14 @@
 const SiswaModule = {
   async loadAndRender() {
     try {
-      console.log("[SiswaModule] Menarik data siswa dari Supabase...");
       State.students = await DB.fetchSiswa();
-      console.log("[SiswaModule] Data siswa diterima:", State.students.length, "orang");
-
       if (State.students.length > 0) {
         State.kelasOptions = [...new Set(State.students.map(item => item.kelas))].filter(Boolean);
       }
-      
       this.populateKelasDropdowns();
       this.renderCards();
     } catch (err) {
-      console.error("[SiswaModule] Error saat render siswa:", err.message);
+      console.error("[SiswaModule] Error:", err.message);
     }
   },
 
@@ -92,5 +88,4 @@ const SiswaModule = {
   printCards() { window.print(); }
 };
 
-// WAJIB: Daftarkan ke window agar bisa dipanggil app.js
 window.SiswaModule = SiswaModule;
