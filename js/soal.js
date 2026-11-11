@@ -164,7 +164,7 @@ const SoalModule = {
         `;
       });
 
-      // KARTU UTAMA DENGAN HEADER MAPEL + KELAS
+      // KARTU UTAMA DENGAN HEADER MAPEL + KELAS & TOMBOL CETAK NASKAH
       groupBox.innerHTML = `
         <div class="p-4 bg-ocean-900 text-white flex justify-between items-center cursor-pointer select-none" onclick="SoalModule.toggleMapelGroup('${safeGroupId}')">
           <div class="flex items-center space-x-3">
@@ -182,11 +182,19 @@ const SoalModule = {
             </div>
           </div>
 
-          <div class="flex items-center space-x-2">
-            <span class="bg-teal-500/20 text-teal-300 text-xs px-3 py-1 rounded-full font-bold border border-teal-500/30">
+          <div class="flex items-center space-x-2" onclick="event.stopPropagation()">
+            <!-- TOMBOL CETAK NASKAH SOAL RESMI -->
+            <button onclick="SoalModule.printNaskahSoal('${encodeURIComponent(groupData.mapel)}', '${encodeURIComponent(groupData.kelas)}')" 
+                    class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg shadow transition flex items-center gap-1.5">
+              <i class="fa-solid fa-print"></i>
+              <span>Cetak Soal</span>
+            </button>
+
+            <span class="bg-teal-500/20 text-teal-300 text-xs px-3 py-1.5 rounded-full font-bold border border-teal-500/30 hidden sm:inline-block">
               ${listSoalGroup.length} Soal
             </span>
-            <button id="btn-mapel-icon-${safeGroupId}" class="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition">
+
+            <button id="btn-mapel-icon-${safeGroupId}" onclick="SoalModule.toggleMapelGroup('${safeGroupId}')" class="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition">
               <i class="fa-solid fa-chevron-down text-xs"></i>
             </button>
           </div>
@@ -200,6 +208,136 @@ const SoalModule = {
 
       container.appendChild(groupBox);
     });
+  },
+
+  // --- FITUR CETAK NASKAH SOAL RESMI DENGAN KOP DARI SUPABASE STORAGE ---
+  async printNaskahSoal(encodedMapel, encodedKelas) {
+    const mapel = decodeURIComponent(encodedMapel);
+    const kelas = decodeURIComponent(encodedKelas);
+
+    const questionsToPrint = (State.questions || []).filter(q => 
+      String(q.mapel).trim().toUpperCase() === mapel.trim().toUpperCase() &&
+      String(q.kelas).trim().toUpperCase() === kelas.trim().toUpperCase()
+    );
+
+    if (questionsToPrint.length === 0) {
+      alert("Tidak ada butir soal yang ditemukan untuk dicetak.");
+      return;
+    }
+
+    // Cari data guru pengampu berdasarkan mapel
+    let namaGuru = "Guru Mata Pelajaran";
+    let nipGuru = "-";
+
+    try {
+      const listGuru = await DB.fetchGuru();
+      const foundGuru = listGuru.find(g => String(g.mapel_diampu).trim().toUpperCase() === mapel.trim().toUpperCase());
+      if (foundGuru) {
+        namaGuru = foundGuru.nama_guru;
+        nipGuru = foundGuru.nip;
+      } else if (State.currentUser && State.currentUser.role === 'guru') {
+        namaGuru = State.currentUser.nama_guru;
+        nipGuru = State.currentUser.nip;
+      }
+    } catch (e) {}
+
+    const kopUrl = "https://nbwpnhshhpfqtmbwewgk.supabase.co/storage/v1/object/public/media-sekolah/kop_sekolah.png";
+    const tglSekarang = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+
+    const printWindow = window.open('', '_blank');
+
+    let printHtml = `
+      <!DOCTYPE html>
+      <html lang="id">
+      <head>
+        <meta charset="UTF-8">
+        <title>NASKAH SOAL UJIAN - ${mapel} (${kelas})</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <style>
+          @page { size: A4 portrait; margin: 12mm; }
+          body { font-family: 'Inter', sans-serif; color: #0f172a; font-size: 11pt; }
+          .soal-block { page-break-inside: avoid; }
+        </style>
+      </head>
+      <body class="p-4 bg-white" onload="window.print()">
+        
+        <!-- KOP SURAT GAMBAR SUPABASE BUCKET 'media-sekolah' -->
+        <div class="mb-4 border-b-4 border-double border-slate-900 pb-2 text-center">
+          <img src="${kopUrl}" alt="Kop Surat SMKN 1 Wakatobi" class="w-full max-h-32 object-contain mx-auto" 
+               onerror="this.style.display='none'; document.getElementById('fallback-header').style.display='block';">
+          
+          <div id="fallback-header" class="hidden text-center">
+            <h1 class="font-extrabold text-sm uppercase text-slate-900">PEMERINTAH PROVINSI SULAWESI TENGGARA</h1>
+            <h2 class="font-bold text-base uppercase text-slate-900">DINAS PENDIDIKAN DAN KEBUDAYAAN</h2>
+            <h3 class="font-black text-lg uppercase text-blue-900">SMK NEGERI 1 WAKATOBI</h3>
+            <p class="text-[10px] text-slate-600 italic">Desa Numana, Kec. Wangi-Wangi Selatan, Kab. Wakatobi, Sulawesi Tenggara</p>
+          </div>
+        </div>
+
+        <!-- HEADER PETUNJUK NASKAH SOAL -->
+        <div class="border border-slate-800 rounded-lg p-3 mb-6 bg-slate-50 text-xs">
+          <div class="grid grid-cols-2 gap-2">
+            <div><strong>Mata Pelajaran:</strong> ${mapel}</div>
+            <div><strong>Satuan Pendidikan:</strong> SMK Negeri 1 Wakatobi</div>
+            <div><strong>Kelas Target:</strong> ${kelas}</div>
+            <div><strong>Bentuk Soal:</strong> Pilihan Ganda (A - E)</div>
+            <div><strong>Jumlah Soal:</strong> ${questionsToPrint.length} Butir</div>
+            <div><strong>Tahun Ajaran:</strong> 2026/2027</div>
+          </div>
+        </div>
+
+        <h4 class="font-bold text-center text-sm uppercase mb-4 tracking-wide border-b pb-1">NASKAH BUTIR SOAL UJIAN SUMATIF</h4>
+
+        <!-- DAFTAR NASKAH SOAL -->
+        <div class="space-y-5">
+    `;
+
+    questionsToPrint.forEach((q, idx) => {
+      printHtml += `
+        <div class="soal-block space-y-2 border-b border-slate-200 pb-3">
+          <div class="flex items-start gap-2">
+            <span class="font-bold">${idx + 1}.</span>
+            <div class="flex-1 leading-relaxed text-justify">${q.soal_html}</div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pl-6 text-xs mt-2">
+            <div><strong>A.</strong> ${q.opsi_a}</div>
+            <div><strong>B.</strong> ${q.opsi_b}</div>
+            <div><strong>C.</strong> ${q.opsi_c}</div>
+            <div><strong>D.</strong> ${q.opsi_d}</div>
+            <div class="sm:col-span-2"><strong>E.</strong> ${q.opsi_e}</div>
+          </div>
+        </div>
+      `;
+    });
+
+    printHtml += `
+        </div>
+
+        <!-- TANDA TANGAN RESMI -->
+        <div class="flex justify-between items-end text-xs pt-8 border-t border-slate-300 mt-6 page-break-inside-avoid">
+          <div class="text-center w-56">
+            <p>Mengetahui,</p>
+            <p class="font-bold">Proktor / Panitia CBT</p>
+            <div class="h-16"></div>
+            <p class="font-bold underline">TIM IT SMKN 1 Wakatobi</p>
+            <p class="text-[10px] text-slate-500">NIP. -</p>
+          </div>
+
+          <div class="text-center w-64">
+            <p>Wangi-Wangi Selatan, ${tglSekarang}</p>
+            <p class="font-bold">Guru Mata Pelajaran / Pembuat Soal</p>
+            <div class="h-16"></div>
+            <p class="font-bold underline">${namaGuru}</p>
+            <p class="text-[10px] text-slate-500">NIP. ${nipGuru}</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.write(printHtml);
+    printWindow.document.close();
   },
 
   // TOGGLE ACCORDION GROUP (MAPEL + KELAS)
