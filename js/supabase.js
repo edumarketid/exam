@@ -131,4 +131,29 @@ const DB = {
       return [];
     }
   }
+  async fetchSchedules() {
+    const client = await this.getClient();
+    if (!client) return [];
+    try {
+      const { data, error } = await client.from('jadwal_ujian').select('*');
+      if (error) throw error;
+      return data || [];
+    } catch (err) {
+      console.error("[DB Error] Gagal ambil jadwal:", err.message);
+      return [];
+    }
+  },
+
+  async fetchHasilUjian() {
+    const client = await this.getClient();
+    if (!client) return [];
+    try {
+      const { data, error } = await client.from('hasil_ujian').select('*').order('waktu_selesai', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    } catch (err) {
+      console.error("[DB Error] Gagal ambil hasil ujian:", err.message);
+      return [];
+    }
+  }
 };
