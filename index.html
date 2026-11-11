@@ -276,12 +276,12 @@
     </main>
   </div>
 
-  <!-- MODAL EDIT SOAL & UPLOAD GAMBAR -->
+  <!-- MODAL EDIT SOAL & UPLOAD GAMBAR (SOAL + OPSI A-E) -->
   <div id="modal-edit-soal" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 overflow-y-auto">
-    <div class="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-4">
+    <div class="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-4">
       <div class="flex justify-between items-center border-b pb-3">
         <h3 class="font-bold text-md text-blue-900 flex items-center gap-2">
-          ✏️ Edit Naskah Soal & Sisipkan Gambar (Supabase Storage)
+          ✏️ Edit Naskah Soal & Sisipkan Gambar (Soal & Opsi A-E)
         </h3>
         <button onclick="SoalModule.closeEditModal()" class="text-gray-400 hover:text-red-600 font-bold text-lg">&times;</button>
       </div>
@@ -300,6 +300,7 @@
           </div>
         </div>
 
+        <!-- AREA SOAL & GAMBAR SOAL -->
         <div>
           <div class="flex justify-between items-center mb-1">
             <label class="block font-bold text-gray-700">Konten Teks Soal (HTML Enabled)</label>
@@ -313,29 +314,81 @@
           <textarea id="edit-soal-html" rows="4" required class="w-full border p-2.5 rounded font-mono text-xs focus:ring-2 focus:ring-blue-500"></textarea>
         </div>
 
-        <div class="space-y-2 border-t pt-3">
-          <label class="block font-bold text-gray-700">Opsi Jawaban A - E:</label>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-            <div>
-              <span class="font-bold text-blue-800">A.</span>
-              <input type="text" id="edit-opsi-a" required class="w-full border px-2.5 py-1.5 rounded mt-0.5">
+        <!-- AREA OPSI JAWABAN A-E DENGAN UPLOAD GAMBAR PER OPSI -->
+        <div class="space-y-3 border-t pt-3">
+          <label class="block font-bold text-gray-800 text-sm">Opsi Jawaban A - E:</label>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            
+            <!-- OPSI A -->
+            <div class="border p-2.5 rounded bg-gray-50 space-y-1.5">
+              <div class="flex justify-between items-center">
+                <span class="font-bold text-blue-800">Opsi A:</span>
+                <div class="flex items-center gap-1">
+                  <input type="file" id="input-img-opsi-a" accept="image/*" class="text-[9px] w-36">
+                  <button type="button" onclick="SoalModule.uploadImageToStorage('input-img-opsi-a', 'edit-opsi-a')" class="bg-emerald-600 text-white font-bold px-2 py-0.5 rounded text-[9px]">
+                    + Gambar
+                  </button>
+                </div>
+              </div>
+              <textarea id="edit-opsi-a" rows="2" required class="w-full border p-2 rounded text-xs"></textarea>
             </div>
-            <div>
-              <span class="font-bold text-blue-800">B.</span>
-              <input type="text" id="edit-opsi-b" required class="w-full border px-2.5 py-1.5 rounded mt-0.5">
+
+            <!-- OPSI B -->
+            <div class="border p-2.5 rounded bg-gray-50 space-y-1.5">
+              <div class="flex justify-between items-center">
+                <span class="font-bold text-blue-800">Opsi B:</span>
+                <div class="flex items-center gap-1">
+                  <input type="file" id="input-img-opsi-b" accept="image/*" class="text-[9px] w-36">
+                  <button type="button" onclick="SoalModule.uploadImageToStorage('input-img-opsi-b', 'edit-opsi-b')" class="bg-emerald-600 text-white font-bold px-2 py-0.5 rounded text-[9px]">
+                    + Gambar
+                  </button>
+                </div>
+              </div>
+              <textarea id="edit-opsi-b" rows="2" required class="w-full border p-2 rounded text-xs"></textarea>
             </div>
-            <div>
-              <span class="font-bold text-blue-800">C.</span>
-              <input type="text" id="edit-opsi-c" required class="w-full border px-2.5 py-1.5 rounded mt-0.5">
+
+            <!-- OPSI C -->
+            <div class="border p-2.5 rounded bg-gray-50 space-y-1.5">
+              <div class="flex justify-between items-center">
+                <span class="font-bold text-blue-800">Opsi C:</span>
+                <div class="flex items-center gap-1">
+                  <input type="file" id="input-img-opsi-c" accept="image/*" class="text-[9px] w-36">
+                  <button type="button" onclick="SoalModule.uploadImageToStorage('input-img-opsi-c', 'edit-opsi-c')" class="bg-emerald-600 text-white font-bold px-2 py-0.5 rounded text-[9px]">
+                    + Gambar
+                  </button>
+                </div>
+              </div>
+              <textarea id="edit-opsi-c" rows="2" required class="w-full border p-2 rounded text-xs"></textarea>
             </div>
-            <div>
-              <span class="font-bold text-blue-800">D.</span>
-              <input type="text" id="edit-opsi-d" required class="w-full border px-2.5 py-1.5 rounded mt-0.5">
+
+            <!-- OPSI D -->
+            <div class="border p-2.5 rounded bg-gray-50 space-y-1.5">
+              <div class="flex justify-between items-center">
+                <span class="font-bold text-blue-800">Opsi D:</span>
+                <div class="flex items-center gap-1">
+                  <input type="file" id="input-img-opsi-d" accept="image/*" class="text-[9px] w-36">
+                  <button type="button" onclick="SoalModule.uploadImageToStorage('input-img-opsi-d', 'edit-opsi-d')" class="bg-emerald-600 text-white font-bold px-2 py-0.5 rounded text-[9px]">
+                    + Gambar
+                  </button>
+                </div>
+              </div>
+              <textarea id="edit-opsi-d" rows="2" required class="w-full border p-2 rounded text-xs"></textarea>
             </div>
-            <div class="md:col-span-2">
-              <span class="font-bold text-blue-800">E.</span>
-              <input type="text" id="edit-opsi-e" required class="w-full border px-2.5 py-1.5 rounded mt-0.5">
+
+            <!-- OPSI E -->
+            <div class="border p-2.5 rounded bg-gray-50 space-y-1.5 md:col-span-2">
+              <div class="flex justify-between items-center">
+                <span class="font-bold text-blue-800">Opsi E:</span>
+                <div class="flex items-center gap-1">
+                  <input type="file" id="input-img-opsi-e" accept="image/*" class="text-[9px] w-36">
+                  <button type="button" onclick="SoalModule.uploadImageToStorage('input-img-opsi-e', 'edit-opsi-e')" class="bg-emerald-600 text-white font-bold px-2 py-0.5 rounded text-[9px]">
+                    + Gambar
+                  </button>
+                </div>
+              </div>
+              <textarea id="edit-opsi-e" rows="2" required class="w-full border p-2 rounded text-xs"></textarea>
             </div>
+
           </div>
         </div>
 
