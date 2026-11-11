@@ -8,18 +8,182 @@ const ExamModule = {
 
     document.addEventListener('visibilitychange', () => {
       if (document.hidden && State.examActive) {
-        this.handleViolation("Anda membuka tab lain!");
+        this.handleViolation("Anda membuka tab lain / meninggalkan layar ujian!");
       }
     });
   },
 
-  startExam() {
+  async startExam() {
     App.showScreen('exam');
     State.examActive = true;
     State.violations = 0;
-    document.getElementById('exam-mapel-title').textContent = "Ujian Penilaian Sumatif";
-    document.getElementById('exam-student-info').textContent = `Peserta: ${State.currentUser.nama} (${State.currentUser.kelas})`;
-    this.startTimer(45);
+    State.currentQuestionIdx = 0;
+    State.answers = {};
+
+    const student = State.currentUser;
+    document.getElementById('exam-student-info').textContent = `Peserta: ${student.nama} (${student.kelas})`;
+
+    // 1. Ambil Bank Soal dari Supabase berdasarkan Kelas Siswa
+    try {
+      const client = await DB.getClient();
+      if (!client) throw new Error("Koneksi database tidak tersedia.");
+
+      const { data, error } = await client.from('bank_soal').select('*');
+      if (error) throw error;
+
+      // Filter soal berdasarkan kelas siswa (Case-Insensitive)
+      const allQuestions = (data || []).map(q => ({
+        id: q.id || q.ID,
+        mapel: q.mapel || q.MAPEL || q.nama_mapel || 'Lainnya',
+        kelas: q.kelas || q.KELAS || 'Umum',
+        soal_html: q.soal_html || q.SOAL_HTML || q.soal || '',
+        opsi_a: q.opsi_a || q.OPSI_A || '',
+        opsi_b: q.opsi_b || q.OPSI_B || '',
+        opsi_c: q.opsi_c || q.OPSI_C || '',
+        opsi_d: q.opsi_d || q.OPSI_D || '',
+        opsi_e: q.opsi_e || q.OPSI_E || '',
+        kunci_jawaban: q.kunci_jawaban || q.KUNCI_JAWABAN || 'A'
+      }));
+
+      State.questions = allQuestions.filter(q => 
+        String(q.kelas).trim().toUpperCase() === String(student.kelas).trim().toUpperCase()
+      );
+
+      if (State.questions.length === 0) {
+        alert(`Belum ada naskah soal yang tersedia untuk kelas ${student.kelas}. Silakan hubungi pengawas.`);
+        AuthModule.logout();
+        return;
+      }
+
+      const mapelName = State.questions[0].mapel;
+      document.getElementById('exam-mapel-title').textContent = `Ujian Sumatif: ${mapelName}`;
+
+      // 2. Render Navigasi & Soal Pertama
+      this.renderQuestionNav();
+      this.renderCurrentQuestion();
+
+      // 3. Minta Mode Fullscreen & Jalankan Timer (45 Menit)
+      try {
+        if (document.documentElement.requestFullscreen) {
+          await document.documentElement.requestFullscreen();
+        }
+      } catch (e) {
+        console.warn("Fullscreen tidak dapat diaktifkan otomatis.");
+      }
+
+      this.startTimer(45);
+
+    } catch (err) {
+      alert("Gagal memuat soal ujian: " + err.message);
+      AuthModule.logout();
+    }
+  },
+
+  renderQuestionNav() {
+    const container = document.getElementById('exam-nav-numbers');
+    if (!container) return;
+    container.innerHTML = '';
+
+    State.questions.forEach((q, idx) => {
+      const isAnswered = !!State.answers[idx];
+      const isCurrent = idx === State.currentQuestionIdx;
+
+      let btnClass = "w-9 h-9 font-bold text-xs rounded border transition flex items-center justify-center ";
+      if (isCurrent) {
+        btnClass += "bg-blue-600 text-white border-blue-700 ring-2 ring-blue-400";
+      } else if (isAnswered) {
+        btnClass += "bg-emerald-600 text-white border-emerald-700";
+      } else {
+        btnClass += "bg-gray-100 text-gray-800 border-gray-300 hover:bg-gray-200";
+      }
+
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = btnClass;
+      btn.textContent = idx + 1;
+      btn.onclick = () => this.jumpToQuestion(idx);
+      container.appendChild(btn);
+    });
+  },
+
+  renderCurrentQuestion() {
+    const q = State.questions[State.currentQuestionIdx];
+    if (!q) return;
+
+    document.getElementById('exam-question-number').textContent = `Soal No. ${State.currentQuestionIdx + 1} dari ${State.questions.length}`;
+    document.getElementById('exam-question-body').innerHTML = q.soal_html;
+
+    const selectedAns = State.answers[State.currentQuestionIdx] || '';
+
+    const containerOpsi = document.getElementById('exam-options-container');
+    containerOpsi.innerHTML = '';
+
+    const listOpsi = [
+      { key: 'A', text: q.opsi_a },
+      { key: 'B', text: q.opsi_b },
+      { key: 'C', text: q.opsi_c },
+      { key: 'D', text: q.opsi_d },
+      { key: 'E', text: q.opsi_e }
+    ];
+
+    listOpsi.forEach(opsi => {
+      if (!opsi.text) return; // Lewati jika opsi kosong
+
+      const isSelected = selectedAns === opsi.key;
+      const label = document.createElement('label');
+      label.className = `flex items-start p-3 border-2 rounded-lg cursor-pointer transition ${
+        isSelected ? 'border-blue-600 bg-blue-50 text-blue-900 font-semibold' : 'border-gray-200 hover:bg-gray-50 text-gray-800'
+      }`;
+
+      label.innerHTML = `
+        <input type="radio" name="option-choice" value="${opsi.key}" ${isSelected ? 'checked' : ''} 
+               onchange="ExamModule.saveAnswer('${opsi.key}')" class="mt-0.5 text-blue-600 focus:ring-blue-500">
+        <div class="ml-3 text-xs">
+          <strong class="mr-1">${opsi.key}.</strong> ${opsi.text}
+        </div>
+      `;
+      containerOpsi.appendChild(label);
+    });
+
+    // Update Tombol Navigasi Depan/Belakang
+    const btnPrev = document.getElementById('btn-prev-soal');
+    const btnNext = document.getElementById('btn-next-soal');
+    
+    if (btnPrev) btnPrev.disabled = State.currentQuestionIdx === 0;
+    if (btnNext) {
+      if (State.currentQuestionIdx === State.questions.length - 1) {
+        btnNext.textContent = "Selesai & Kirim Ujian";
+        btnNext.className = "bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-5 py-2 rounded shadow";
+      } else {
+        btnNext.textContent = "Soal Berikutnya ►";
+        btnNext.className = "bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-5 py-2 rounded shadow";
+      }
+    }
+  },
+
+  saveAnswer(choice) {
+    State.answers[State.currentQuestionIdx] = choice;
+    this.renderQuestionNav();
+  },
+
+  jumpToQuestion(idx) {
+    State.currentQuestionIdx = idx;
+    this.renderQuestionNav();
+    this.renderCurrentQuestion();
+  },
+
+  prevQuestion() {
+    if (State.currentQuestionIdx > 0) {
+      this.jumpToQuestion(State.currentQuestionIdx - 1);
+    }
+  },
+
+  nextQuestion() {
+    if (State.currentQuestionIdx < State.questions.length - 1) {
+      this.jumpToQuestion(State.currentQuestionIdx + 1);
+    } else {
+      this.confirmFinishExam();
+    }
   },
 
   startTimer(durationMinutes) {
@@ -30,11 +194,13 @@ const ExamModule = {
     State.timerInterval = setInterval(() => {
       const minutes = Math.floor(timer / 60);
       const seconds = timer % 60;
-      timerDisplay.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+      if (timerDisplay) {
+        timerDisplay.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+      }
       if (--timer < 0) {
         clearInterval(State.timerInterval);
-        alert("Waktu Ujian Habis!");
-        this.finishExam(false);
+        alert("Waktu Ujian Habis! Jawaban Anda akan dikirim secara otomatis.");
+        this.submitExamResults(false);
       }
     }, 1000);
   },
@@ -42,24 +208,75 @@ const ExamModule = {
   handleViolation(reason) {
     if (!State.examActive) return;
     State.violations++;
+    
     if (State.violations >= CONFIG.MAX_VIOLATIONS) {
-      alert(`PELANGGARAN HUKUMAN! ${reason}`);
-      this.finishExam(true);
+      alert(`PELANGGARAN HUKUMAN! ${reason}\n\nAnda telah didiskualifikasi dari ujian.`);
+      this.submitExamResults(true);
     } else {
-      document.getElementById('warning-text').textContent = `${reason} (Peringatan ${State.violations} dari ${CONFIG.MAX_VIOLATIONS})`;
-      document.getElementById('modal-warning').classList.remove('hidden');
+      const warnText = document.getElementById('warning-text');
+      if (warnText) warnText.textContent = `${reason} (Peringatan ${State.violations} dari ${CONFIG.MAX_VIOLATIONS})`;
+      const modalWarn = document.getElementById('modal-warning');
+      if (modalWarn) modalWarn.classList.remove('hidden');
     }
   },
 
   closeWarningModal() {
-    document.getElementById('modal-warning').classList.add('hidden');
+    const modalWarn = document.getElementById('modal-warning');
+    if (modalWarn) modalWarn.classList.add('hidden');
   },
 
-  finishExam(isDisqualified = false) {
+  confirmFinishExam() {
+    const totalSoal = State.questions.length;
+    const dijawab = Object.keys(State.answers).length;
+
+    if (confirm(`Apakah Anda yakin ingin menyelesaikan ujian?\n\nSoal Terjawab: ${dijawab} dari ${totalSoal} butir.`)) {
+      this.submitExamResults(false);
+    }
+  },
+
+  async submitExamResults(isDisqualified = false) {
     State.examActive = false;
     clearInterval(State.timerInterval);
-    alert(isDisqualified ? "Status: DIDISKUALIFIKASI" : "Ujian Selesai!");
-    App.showScreen('login');
+
+    if (document.fullscreenElement && document.exitFullscreen) {
+      document.exitFullscreen().catch(e => {});
+    }
+
+    // Hitung Skor Nilai
+    let skorBenar = 0;
+    State.questions.forEach((q, idx) => {
+      const userChoice = State.answers[idx];
+      if (userChoice && userChoice.toUpperCase() === q.kunci_jawaban.toUpperCase()) {
+        skorBenar++;
+      }
+    });
+
+    const totalSoal = State.questions.length;
+    const nilaiAkhir = totalSoal > 0 ? Math.round((skorBenar / totalSoal) * 100) : 0;
+    const student = State.currentUser;
+
+    const payloadHasil = {
+      ID_SISWA: student.id_siswa,
+      nama_siswa: student.nama,
+      kelas: student.kelas,
+      mapel: State.questions[0]?.mapel || 'Mata Pelajaran',
+      nilai: isDisqualified ? 0 : nilaiAkhir,
+      jumlah_pelanggaran: State.violations,
+      status_selesai: isDisqualified ? 'DIDISKUALIFIKASI' : 'SELESAI',
+      waktu_selesai: new Date().toISOString()
+    };
+
+    const client = await DB.getClient();
+    if (client) {
+      try {
+        await client.from('hasil_ujian').insert([payloadHasil]);
+      } catch (err) {
+        console.error("Gagal simpan nilai ke Supabase:", err.message);
+      }
+    }
+
+    alert(isDisqualified ? "Status Ujian: DIDISKUALIFIKASI" : `Ujian Selesai!\nNilai Akhir Anda: ${nilaiAkhir}`);
+    AuthModule.logout();
   }
 };
 
