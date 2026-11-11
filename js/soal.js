@@ -368,17 +368,16 @@ const SoalModule = {
     if (!container) return;
 
     container.innerHTML = '';
-    let filtered = State.questions || [];
+    let filtered = State.questions;
 
     if (filterKelas !== 'ALL') filtered = filtered.filter(q => q.kelas === filterKelas);
     if (filterMapel !== 'ALL') filtered = filtered.filter(q => q.mapel === filterMapel);
 
-    // Update Meta Informasi Cetak Naskah
     document.getElementById('print-soal-meta').textContent = `Mata Pelajaran: ${filterMapel} | Kelas Target: ${filterKelas} | Alokasi Waktu: 45 Menit`;
 
     filtered.forEach((q, idx) => {
       const item = document.createElement('div');
-      item.className = "border-b pb-4 space-y-2 page-break-inside-avoid";
+      item.className = "border-b pb-4 space-y-2";
       item.innerHTML = `
         <div class="flex gap-2 font-bold">
           <span>${idx + 1}.</span>
@@ -396,8 +395,6 @@ const SoalModule = {
     });
 
     window.print();
-  }
-
   },
 
   async deleteSoal(id) {
