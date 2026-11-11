@@ -1,14 +1,18 @@
 const State = {
+  currentUser: null,
   mapelList: [],
   students: [],
   questions: [],
   schedules: [],
-  examResults: [],
+  hasilUjianList: [],
   kelasOptions: [],
   openAccordionMapel: {},
-  currentStudent: null,
-  activeExam: null
+  violations: 0,
+  examActive: false,
+  currentQuestionIdx: 0,
+  answers: {},
+  pressedKeys: {},
+  timerInterval: null
 };
 
-// Pastikan terdaftar di window agar bisa diakses oleh seluruh modul (supabase.js, soal.js, dll)
 window.State = State;
