@@ -27,26 +27,26 @@ const ExamModule = {
     const student = State.currentUser;
 
     if (!student || !student.kelas) {
-      alert("Data siswa tidak valid.");
+      alert("Data profil siswa tidak ditemukan.");
       AuthModule.logout();
       return;
     }
 
     try {
-      // 1. Periksa Jadwal Ujian Aktif di Supabase
+      // 1. Memeriksa Jadwal Ujian Aktif di Supabase
       const activeSchedule = await DB.fetchActiveScheduleForStudent(student.kelas);
 
       if (!activeSchedule) {
-        alert(`TIDAK ADA JADWAL UJIAN AKTIF!\n\nHai ${student.nama}, saat ini tidak ada jadwal ujian yang aktif untuk kelas ${student.kelas}.\n\nPastikan tanggal, jam pelaksanaan, dan status jadwal sudah diatur oleh panitia/guru.`);
+        alert(`TIDAK ADA JADWAL UJIAN AKTIF!\n\nHai ${student.nama}, saat ini tidak ada jadwal ujian yang aktif untuk kelas ${student.kelas}.\n\nPastikan tanggal, jam pelaksanaan, dan status jadwal sudah diatur oleh proktor/guru.`);
         AuthModule.logout();
         return;
       }
 
       console.log("[ExamModule] Jadwal Ujian Aktif Ditemukan:", activeSchedule);
 
-      // 2. Ambil Bank Soal Khusus untuk Mapel & Kelas Terjadwal
+      // 2. Ambil Bank Soal Khusus untuk Mapel Terjadwal & Kelas Siswa
       const client = await DB.getClient();
-      if (!client) throw new Error("Koneksi database tidak tersedia.");
+      if (!client) throw new Error("Koneksi database Supabase tidak tersedia.");
 
       const { data, error } = await client.from('bank_soal').select('*');
       if (error) throw error;
@@ -64,7 +64,7 @@ const ExamModule = {
         kunci_jawaban: q.kunci_jawaban || q.KUNCI_JAWABAN || 'A'
       }));
 
-      // Check ketersediaan kelas siswa di dalam daftar kelas master soal
+      // Filter presisi untuk kelas target
       const filtered = allQuestions.filter(q => {
         const matchMapel = String(q.mapel).trim().toUpperCase() === String(activeSchedule.mapel).trim().toUpperCase();
         const listOfKelasTarget = String(q.kelas).toUpperCase().split(',').map(k => k.trim());
@@ -78,7 +78,7 @@ const ExamModule = {
         return;
       }
 
-      // 3. Set Up Layar Ujian & Acak Soal per Siswa
+      // 3. Tampilkan Layar Ujian & Acak Soal per Siswa
       App.showScreen('exam');
       State.examActive = true;
       State.violations = 0;
@@ -119,13 +119,13 @@ const ExamModule = {
       const isAnswered = !!State.answers[idx];
       const isCurrent = idx === State.currentQuestionIdx;
 
-      let btnClass = "w-9 h-9 font-bold text-xs rounded border transition flex items-center justify-center ";
+      let btnClass = "w-9 h-9 font-bold text-xs rounded-lg border transition flex items-center justify-center ";
       if (isCurrent) {
-        btnClass += "bg-blue-600 text-white border-blue-700 ring-2 ring-blue-400";
+        btnClass += "bg-ocean-600 text-white border-ocean-700 ring-2 ring-ocean-400";
       } else if (isAnswered) {
         btnClass += "bg-emerald-600 text-white border-emerald-700";
       } else {
-        btnClass += "bg-gray-100 text-gray-800 border-gray-300 hover:bg-gray-200";
+        btnClass += "bg-slate-100 text-slate-800 border-slate-200 hover:bg-slate-200";
       }
 
       const btn = document.createElement('button');
@@ -162,13 +162,13 @@ const ExamModule = {
 
       const isSelected = selectedAns === opsi.key;
       const label = document.createElement('label');
-      label.className = `flex items-start p-3 border-2 rounded-lg cursor-pointer transition ${
-        isSelected ? 'border-blue-600 bg-blue-50 text-blue-900 font-semibold' : 'border-gray-200 hover:bg-gray-50 text-gray-800'
+      label.className = `flex items-start p-3 border-2 rounded-xl cursor-pointer transition ${
+        isSelected ? 'border-ocean-600 bg-ocean-50 text-ocean-900 font-semibold ring-2 ring-ocean-600/20' : 'border-slate-200 hover:bg-slate-50 text-slate-800'
       }`;
 
       label.innerHTML = `
         <input type="radio" name="option-choice" value="${opsi.key}" ${isSelected ? 'checked' : ''} 
-               onchange="ExamModule.saveAnswer('${opsi.key}')" class="mt-0.5 text-blue-600 focus:ring-blue-500">
+               onchange="ExamModule.saveAnswer('${opsi.key}')" class="mt-0.5 text-ocean-600 focus:ring-ocean-500">
         <div class="ml-3 text-xs">
           <strong class="mr-1">${opsi.key}.</strong> ${opsi.text}
         </div>
@@ -183,10 +183,10 @@ const ExamModule = {
     if (btnNext) {
       if (State.currentQuestionIdx === State.questions.length - 1) {
         btnNext.textContent = "Selesai & Kirim Ujian";
-        btnNext.className = "bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-5 py-2 rounded shadow";
+        btnNext.className = "bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow";
       } else {
         btnNext.textContent = "Soal Berikutnya ►";
-        btnNext.className = "bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-5 py-2 rounded shadow";
+        btnNext.className = "bg-ocean-700 hover:bg-ocean-800 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow";
       }
     }
   },
