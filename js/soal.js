@@ -91,73 +91,122 @@ const SoalModule = {
       return;
     }
 
-    filtered.forEach((q, idx) => {
-      // Membuat preview ringkasan teks soal tanpa tag HTML
-      const tempDiv = document.createElement('div');
-      tempDiv.innerHTML = q.soal_html;
-      const plainText = (tempDiv.textContent || tempDiv.innerText || '').trim();
-      const snippetText = plainText.length > 70 ? plainText.substring(0, 70) + '...' : plainText;
+    // GROUPING DATA BERDASARKAN NAMA MAPEL
+    const groupedByMapel = {};
+    filtered.forEach(q => {
+      const mapelName = q.mapel || 'Tanpa Mapel';
+      if (!groupedByMapel[mapelName]) {
+        groupedByMapel[mapelName] = [];
+      }
+      groupedByMapel[mapelName].push(q);
+    });
 
-      const div = document.createElement('div');
-      div.className = "bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden transition hover:border-ocean-300";
-      
-      div.innerHTML = `
-        <!-- HEADER ROW (ACCORDION TOGGLE) -->
-        <div class="p-4 bg-slate-50/70 flex flex-wrap justify-between items-center gap-3 border-b border-slate-100 cursor-pointer" onclick="SoalModule.toggleSoalDetail(${q.id})">
-          <div class="flex items-center space-x-2.5 flex-1 min-w-0">
-            <span class="bg-ocean-700 text-white font-extrabold text-xs px-2.5 py-1 rounded-lg">#${idx + 1}</span>
-            <span class="bg-ocean-50 text-ocean-800 font-bold text-xs px-2.5 py-1 rounded-lg border border-ocean-200 truncate">${q.mapel}</span>
-            <span class="bg-purple-50 text-purple-800 font-bold text-xs px-2.5 py-1 rounded-lg border border-purple-200 truncate hidden sm:inline-block">Kelas: ${q.kelas}</span>
-            <span class="text-xs text-slate-600 font-medium truncate ml-2">${snippetText}</span>
-          </div>
+    let mapelIdx = 0;
 
-          <div class="flex items-center space-x-2 flex-shrink-0" onclick="event.stopPropagation()">
-            <span class="text-xs font-extrabold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">Kunci: ${q.kunci_jawaban}</span>
-            
-            <button id="btn-toggle-${q.id}" onclick="SoalModule.toggleSoalDetail(${q.id})" class="bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs px-3 py-1 rounded-lg border border-blue-200 transition flex items-center gap-1">
-              <span>👁️ Lihat Soal</span>
-            </button>
+    // RENDER ACCORDION GROUP PER MAPEL
+    Object.keys(groupedByMapel).forEach(mapelName => {
+      mapelIdx++;
+      const listSoalMapel = groupedByMapel[mapelName];
+      const safeMapelId = `mapel-group-${mapelIdx}`;
 
-            <button onclick="SoalModule.openEditModal(${q.id})" class="bg-amber-50 hover:bg-amber-100 text-amber-700 font-bold text-xs px-3 py-1 rounded-lg border border-amber-300 transition">
-              ✏️ Edit
-            </button>
-          </div>
-        </div>
+      const mapelBox = document.createElement('div');
+      mapelBox.className = "bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-4 transition hover:border-ocean-300";
 
-        <!-- DETAIL BODY (COLLAPSIBLE / DEFAULT HIDDEN) -->
-        <div id="detail-soal-${q.id}" class="hidden p-5 space-y-4 bg-white border-t border-slate-100 transition-all duration-300">
-          <div class="text-xs text-slate-800 leading-relaxed font-medium space-y-2">
-            <div class="font-bold text-slate-500 mb-1 uppercase tracking-wider text-[10px]">Teks Pertanyaan / Studi Kasus:</div>
-            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">${q.soal_html}</div>
-          </div>
+      let innerSoalHtml = '';
 
-          <div class="space-y-2 pt-1">
-            <div class="font-bold text-slate-500 uppercase tracking-wider text-[10px]">Pilihan Jawaban (A - E):</div>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-              <div class="p-2.5 rounded-xl border ${q.kunci_jawaban === 'A' ? 'bg-emerald-50 border-emerald-300 font-bold text-emerald-900 ring-1 ring-emerald-400' : 'bg-slate-50 border-slate-200 text-slate-700'}">
-                <strong>A.</strong> ${q.opsi_a}
+      listSoalMapel.forEach((q, idx) => {
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = q.soal_html;
+        const plainText = (tempDiv.textContent || tempDiv.innerText || '').trim();
+        const snippetText = plainText.length > 60 ? plainText.substring(0, 60) + '...' : plainText;
+
+        innerSoalHtml += `
+          <!-- BUTIR SOAL ITEM -->
+          <div class="border border-slate-200 rounded-xl overflow-hidden bg-white mb-2">
+            <!-- HEADER BUTIR SOAL -->
+            <div class="p-3 bg-slate-50 flex flex-wrap justify-between items-center gap-2 cursor-pointer border-b border-slate-100" onclick="SoalModule.toggleSoalDetail(${q.id})">
+              <div class="flex items-center space-x-2 flex-1 min-w-0">
+                <span class="bg-ocean-700 text-white font-extrabold text-[11px] px-2 py-0.5 rounded">Soal #${idx + 1}</span>
+                <span class="bg-purple-50 text-purple-800 font-bold text-[11px] px-2 py-0.5 rounded border border-purple-200">Kelas: ${q.kelas}</span>
+                <span class="text-xs text-slate-700 font-medium truncate ml-1">${snippetText}</span>
               </div>
-              <div class="p-2.5 rounded-xl border ${q.kunci_jawaban === 'B' ? 'bg-emerald-50 border-emerald-300 font-bold text-emerald-900 ring-1 ring-emerald-400' : 'bg-slate-50 border-slate-200 text-slate-700'}">
-                <strong>B.</strong> ${q.opsi_b}
+              
+              <div class="flex items-center space-x-1.5 flex-shrink-0" onclick="event.stopPropagation()">
+                <span class="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">Kunci: ${q.kunci_jawaban}</span>
+                <button id="btn-toggle-${q.id}" onclick="SoalModule.toggleSoalDetail(${q.id})" class="bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-[11px] px-2.5 py-1 rounded border border-blue-200 transition">
+                  👁️ Buka
+                </button>
+                <button onclick="SoalModule.openEditModal(${q.id})" class="bg-amber-50 hover:bg-amber-100 text-amber-700 font-bold text-[11px] px-2.5 py-1 rounded border border-amber-300 transition">
+                  ✏️ Edit
+                </button>
               </div>
-              <div class="p-2.5 rounded-xl border ${q.kunci_jawaban === 'C' ? 'bg-emerald-50 border-emerald-300 font-bold text-emerald-900 ring-1 ring-emerald-400' : 'bg-slate-50 border-slate-200 text-slate-700'}">
-                <strong>C.</strong> ${q.opsi_c}
-              </div>
-              <div class="p-2.5 rounded-xl border ${q.kunci_jawaban === 'D' ? 'bg-emerald-50 border-emerald-300 font-bold text-emerald-900 ring-1 ring-emerald-400' : 'bg-slate-50 border-slate-200 text-slate-700'}">
-                <strong>D.</strong> ${q.opsi_d}
-              </div>
-              <div class="p-2.5 rounded-xl border ${q.kunci_jawaban === 'E' ? 'bg-emerald-50 border-emerald-300 font-bold text-emerald-900 ring-1 ring-emerald-400' : 'bg-slate-50 border-slate-200 text-slate-700'} md:col-span-2">
-                <strong>E.</strong> ${q.opsi_e}
+            </div>
+
+            <!-- DETAIL SOAL (DEFAULT TERLIPAT) -->
+            <div id="detail-soal-${q.id}" class="hidden p-4 space-y-3 bg-white text-xs border-t border-slate-100">
+              <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">${q.soal_html}</div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-2 pt-1">
+                <div class="p-2 rounded-lg border ${q.kunci_jawaban === 'A' ? 'bg-emerald-50 border-emerald-300 font-bold text-emerald-900 ring-1 ring-emerald-400' : 'bg-slate-50 border-slate-200'}"><strong>A.</strong> ${q.opsi_a}</div>
+                <div class="p-2 rounded-lg border ${q.kunci_jawaban === 'B' ? 'bg-emerald-50 border-emerald-300 font-bold text-emerald-900 ring-1 ring-emerald-400' : 'bg-slate-50 border-slate-200'}"><strong>B.</strong> ${q.opsi_b}</div>
+                <div class="p-2 rounded-lg border ${q.kunci_jawaban === 'C' ? 'bg-emerald-50 border-emerald-300 font-bold text-emerald-900 ring-1 ring-emerald-400' : 'bg-slate-50 border-slate-200'}"><strong>C.</strong> ${q.opsi_c}</div>
+                <div class="p-2 rounded-lg border ${q.kunci_jawaban === 'D' ? 'bg-emerald-50 border-emerald-300 font-bold text-emerald-900 ring-1 ring-emerald-400' : 'bg-slate-50 border-slate-200'}"><strong>D.</strong> ${q.opsi_d}</div>
+                <div class="p-2 rounded-lg border ${q.kunci_jawaban === 'E' ? 'bg-emerald-50 border-emerald-300 font-bold text-emerald-900 ring-1 ring-emerald-400' : 'bg-slate-50 border-slate-200'} md:col-span-2"><strong>E.</strong> ${q.opsi_e}</div>
               </div>
             </div>
           </div>
+        `;
+      });
+
+      // KARTU MAPEL UTAMA (ACCORDION PER MAPEL - DEFAULT TERLIPAT)
+      mapelBox.innerHTML = `
+        <div class="p-4 bg-ocean-900 text-white flex justify-between items-center cursor-pointer select-none" onclick="SoalModule.toggleMapelGroup('${safeMapelId}')">
+          <div class="flex items-center space-x-3">
+            <div class="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center font-bold text-teal-300">
+              <i class="fa-solid fa-book-open"></i>
+            </div>
+            <div>
+              <h4 class="font-bold text-sm tracking-wide text-white">${mapelName}</h4>
+              <p class="text-[11px] text-ocean-200">Total: ${listSoalMapel.length} Butir Soal Tersebar</p>
+            </div>
+          </div>
+
+          <div class="flex items-center space-x-2">
+            <span class="bg-teal-500/20 text-teal-300 text-xs px-3 py-1 rounded-full font-bold border border-teal-500/30">
+              ${listSoalMapel.length} Soal
+            </span>
+            <button id="btn-mapel-icon-${safeMapelId}" class="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition">
+              <i class="fa-solid fa-chevron-down text-xs"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- CONTAINER DAFTAR SOAL DI DALAM MAPEL (DEFAULT TERLIPAT / HIDDEN) -->
+        <div id="${safeMapelId}" class="hidden p-4 bg-slate-100 space-y-2 border-t border-slate-200">
+          ${innerSoalHtml}
         </div>
       `;
-      container.appendChild(div);
+
+      container.appendChild(mapelBox);
     });
   },
 
-  // --- LOGIKA ACCORDION BUKA/TUTUP DETAIL SOAL ---
+  // TOGGLE ACCORDION GROUP MAPEL
+  toggleMapelGroup(mapelGroupId) {
+    const groupEl = document.getElementById(mapelGroupId);
+    const iconBtn = document.getElementById(`btn-mapel-icon-${mapelGroupId}`);
+
+    if (!groupEl) return;
+
+    if (groupEl.classList.contains('hidden')) {
+      groupEl.classList.remove('hidden');
+      if (iconBtn) iconBtn.innerHTML = `<i class="fa-solid fa-chevron-up text-xs text-amber-300"></i>`;
+    } else {
+      groupEl.classList.add('hidden');
+      if (iconBtn) iconBtn.innerHTML = `<i class="fa-solid fa-chevron-down text-xs"></i>`;
+    }
+  },
+
+  // TOGGLE BUTIR SOAL INDIVIDUAL
   toggleSoalDetail(id) {
     const detailEl = document.getElementById(`detail-soal-${id}`);
     const btnEl = document.getElementById(`btn-toggle-${id}`);
@@ -166,12 +215,12 @@ const SoalModule = {
 
     if (detailEl.classList.contains('hidden')) {
       detailEl.classList.remove('hidden');
-      btnEl.innerHTML = `<span>🙈 Tutup Soal</span>`;
-      btnEl.className = "bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs px-3 py-1 rounded-lg border border-slate-300 transition flex items-center gap-1";
+      btnEl.innerHTML = `🙈 Tutup`;
+      btnEl.className = "bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-[11px] px-2.5 py-1 rounded border border-slate-300 transition";
     } else {
       detailEl.classList.add('hidden');
-      btnEl.innerHTML = `<span>👁️ Lihat Soal</span>`;
-      btnEl.className = "bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs px-3 py-1 rounded-lg border border-blue-200 transition flex items-center gap-1";
+      btnEl.innerHTML = `👁️ Buka`;
+      btnEl.className = "bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-[11px] px-2.5 py-1 rounded border border-blue-200 transition";
     }
   },
 
