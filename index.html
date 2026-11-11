@@ -118,21 +118,66 @@
 
         <!-- TAB JADWAL -->
         <div id="tab-jadwal" class="hidden bg-white p-6 rounded-lg shadow border space-y-6">
-          <h3 class="font-bold text-md text-gray-800 border-b pb-2">Aktivasi & Roster Waktu Akses Ujian</h3>
-          <form onsubmit="JadwalModule.saveJadwalUjian(event)" class="space-y-4 max-w-2xl bg-purple-50 p-4 rounded-lg border">
+          <h3 class="font-bold text-md text-gray-800 border-b pb-2">Aktivasi & Roster Waktu Akses Ujian Multi-Kelas</h3>
+          
+          <form onsubmit="JadwalModule.saveJadwalUjian(event)" class="space-y-4 max-w-3xl bg-purple-50 p-5 rounded-lg border">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div><label class="block text-xs font-bold text-purple-900 mb-1">Mata Pelajaran</label><select id="jadwal-mapel" required class="w-full border px-3 py-2 rounded text-xs"></select></div>
-              <div><label class="block text-xs font-bold text-purple-900 mb-1">Kelas Target</label><select id="jadwal-kelas" required class="w-full border px-3 py-2 rounded text-xs"></select></div>
-              <div><label class="block text-xs font-bold text-purple-900 mb-1">Tanggal Ujian</label><input type="date" id="jadwal-tanggal" required class="w-full border px-3 py-2 rounded text-xs"></div>
-              <div><label class="block text-xs font-bold text-purple-900 mb-1">Durasi (Menit)</label><input type="number" id="jadwal-durasi" value="45" required class="w-full border px-3 py-2 rounded text-xs"></div>
-              <div><label class="block text-xs font-bold text-purple-900 mb-1">Jam Mulai</label><input type="time" id="jadwal-jam-mulai" required class="w-full border px-3 py-2 rounded text-xs"></div>
-              <div><label class="block text-xs font-bold text-purple-900 mb-1">Jam Selesai</label><input type="time" id="jadwal-jam-selesai" required class="w-full border px-3 py-2 rounded text-xs"></div>
-            </div>
-            <button type="submit" class="bg-purple-700 text-white font-bold text-xs px-4 py-2 rounded">+ Simpan Jadwal</button>
-          </form>
-          <div id="jadwal-list-container" class="space-y-2"></div>
-        </div>
+              
+              <!-- Pilihan Mapel -->
+              <div>
+                <label class="block text-xs font-bold text-purple-900 mb-1">1. Pilih Mata Pelajaran</label>
+                <select id="jadwal-mapel" required class="w-full border px-3 py-2 rounded text-xs bg-white font-medium"></select>
+              </div>
 
+              <!-- Tanggal Ujian -->
+              <div>
+                <label class="block text-xs font-bold text-purple-900 mb-1">2. Tanggal Ujian</label>
+                <input type="date" id="jadwal-tanggal" required class="w-full border px-3 py-2 rounded text-xs bg-white font-medium">
+              </div>
+
+              <!-- Pilihan Multi-Kelas Target -->
+              <div class="md:col-span-2">
+                <div class="flex justify-between items-center mb-1">
+                  <label class="block text-xs font-bold text-purple-900">3. Pilih Kelas Target (Bisa Centang Banyak Kelas)</label>
+                  <div class="space-x-2 text-[11px]">
+                    <button type="button" onclick="JadwalModule.toggleSelectAllKelasJadwal(true)" class="text-purple-700 font-bold hover:underline">Pilih Semua</button>
+                    <span>|</span>
+                    <button type="button" onclick="JadwalModule.toggleSelectAllKelasJadwal(false)" class="text-gray-600 font-bold hover:underline">Batal Semua</button>
+                  </div>
+                </div>
+                <div id="container-jadwal-kelas-checkboxes" class="grid grid-cols-2 md:grid-cols-4 gap-2 border p-3 rounded bg-white max-h-48 overflow-y-auto"></div>
+              </div>
+
+              <!-- Durasi Ujian -->
+              <div>
+                <label class="block text-xs font-bold text-purple-900 mb-1">4. Durasi (Menit)</label>
+                <input type="number" id="jadwal-durasi" value="45" required class="w-full border px-3 py-2 rounded text-xs bg-white font-medium">
+              </div>
+
+              <!-- Jam Waktu Ujian -->
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="block text-xs font-bold text-purple-900 mb-1">Jam Mulai</label>
+                  <input type="time" id="jadwal-jam-mulai" required class="w-full border px-3 py-2 rounded text-xs bg-white font-medium">
+                </div>
+                <div>
+                  <label class="block text-xs font-bold text-purple-900 mb-1">Jam Selesai</label>
+                  <input type="time" id="jadwal-jam-selesai" required class="w-full border px-3 py-2 rounded text-xs bg-white font-medium">
+                </div>
+              </div>
+
+            </div>
+
+            <button type="submit" class="bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs px-5 py-2.5 rounded shadow transition">
+              + Aktifkan Jadwal ke Kelas Target
+            </button>
+          </form>
+
+          <div class="space-y-2">
+            <h4 class="font-bold text-xs text-gray-700 uppercase">Daftar Jadwal Ujian Aktif di Supabase:</h4>
+            <div id="jadwal-list-container" class="space-y-2"></div>
+          </div>
+        </div>
         <!-- TAB REKAP NILAI -->
         <div id="tab-rekap-nilai" class="hidden bg-white p-6 rounded-lg shadow border space-y-6">
           <div class="flex justify-between items-center border-b pb-4">
