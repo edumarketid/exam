@@ -12,34 +12,42 @@ const App = {
 
     try {
       const client = await DB.getClient();
+
+      if (!client) {
+        console.warn("[App] Supabase offline atau CONFIG belum valid.");
+        if (badge) {
+          badge.textContent = "Offline / Config Error";
+          badge.className = "px-2.5 py-1 text-xs rounded-full bg-amber-600 text-white font-medium";
+        }
+        return;
+      }
+
       this.updateDBStatus(client);
 
-      // MEMANGGIL SEMUA MODUL SECARA EKSPLISIT
+      // Eksekusi tiap modul secara independen tanpa mematikan modul lain jika terjadi galat
       if (window.MapelModule) {
-        console.log("[App] Memanggil MapelModule...");
-        await MapelModule.loadAndRender();
+        try { await MapelModule.loadAndRender(); } catch (e) { console.error("[App] Err Mapel:", e.message); }
       }
 
       if (window.SiswaModule) {
-        console.log("[App] Memanggil SiswaModule...");
-        await SiswaModule.loadAndRender();
+        try { await SiswaModule.loadAndRender(); } catch (e) { console.error("[App] Err Siswa:", e.message); }
       }
 
       if (window.SoalModule) {
-        console.log("[App] Memanggil SoalModule...");
-        await SoalModule.loadAndRender();
+        try { await SoalModule.loadAndRender(); } catch (e) { console.error("[App] Err Soal:", e.message); }
+      }
+
+      if (window.JadwalModule) {
+        try { await JadwalModule.loadAndRender(); } catch (e) { console.error("[App] Err Jadwal:", e.message); }
       }
 
       if (window.RekapModule) {
-        console.log("[App] Memanggil RekapModule...");
-        await RekapModule.refreshMonitoringData();
+        try { await RekapModule.refreshMonitoringData(); } catch (e) { console.error("[App] Err Rekap:", e.message); }
       }
 
-      if (window.JadwalModule) JadwalModule.renderJadwalList();
-
-      console.log("[App] Seluruh Modul Siap Digunakan.");
+      console.log("[App] Seluruh modul berhasil diinisialisasi.");
     } catch (err) {
-      console.error("[App] Terjadi kesalahan saat inisialisasi:", err.message);
+      console.error("[App] Terjadi kesalahan kritis:", err.message);
       if (badge) {
         badge.textContent = "Error DB";
         badge.className = "px-2.5 py-1 text-xs rounded-full bg-red-600 text-white font-medium";
@@ -89,6 +97,7 @@ const App = {
     if (tabName === 'monitoring' && window.RekapModule) RekapModule.refreshMonitoringData();
     if (tabName === 'bank-soal' && window.SoalModule) SoalModule.loadAndRender();
     if (tabName === 'siswa' && window.SiswaModule) SiswaModule.loadAndRender();
+    if (tabName === 'jadwal' && window.JadwalModule) JadwalModule.loadAndRender();
     if (tabName === 'mapel' && window.MapelModule) MapelModule.loadAndRender();
   }
 };
