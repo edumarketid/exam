@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SMKN1Wakatobi - CBT System</title>
+  <title>ExamSMKN1Wakatobi - CBT System</title>
   
   <link rel="manifest" href="./manifest.json">
   <meta name="theme-color" content="#2563eb">
@@ -22,14 +22,12 @@
 <body class="bg-gray-100 min-h-screen font-sans text-gray-800 no-select" oncontextmenu="return false;">
 
   <div id="app" class="min-h-screen flex flex-col">
-
-    <!-- NAVIGATION BAR -->
     <header class="bg-blue-700 text-white shadow-md print:hidden">
       <div class="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
         <div class="flex items-center space-x-3">
           <div class="w-10 h-10 bg-white text-blue-700 font-bold flex items-center justify-center rounded-lg shadow">CBT</div>
           <div>
-            <h1 class="font-bold text-lg leading-tight">SMKN 1 Wakatobi</h1>
+            <h1 class="font-bold text-lg leading-tight">ExamSMKN1Wakatobi</h1>
             <p class="text-xs text-blue-200">Penilaian Sumatif Semester Ganjil TA 2026/2027</p>
           </div>
         </div>
@@ -43,14 +41,12 @@
       </div>
     </header>
 
-    <!-- MAIN CONTENT VIEW -->
     <main class="flex-grow max-w-7xl w-full mx-auto p-4 print:p-0">
-
-      <!-- SCREEN 1: LOGIN -->
+      <!-- SCREEN LOGIN -->
       <section id="screen-login" class="max-w-md mx-auto mt-12 bg-white rounded-xl shadow-lg border overflow-hidden">
         <div class="bg-blue-600 p-6 text-center text-white">
-          <h2 class="text-xl font-bold">Portal Ujian Siswa</h2>
-          <p class="text-xs text-blue-100 mt-1">SMKN 1 Wakatobi</p>
+          <h2 class="text-xl font-bold">Portal Ujian Siswa & Guru</h2>
+          <p class="text-xs text-blue-100 mt-1">SMK Negeri 1 Wakatobi</p>
         </div>
         <div class="p-6">
           <form onsubmit="AuthModule.handleLogin(event)" class="space-y-4">
@@ -64,10 +60,13 @@
             </div>
             <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-lg shadow">Masuk Ke Ujian</button>
           </form>
+          <div class="mt-6 pt-4 border-t text-center text-xs text-gray-500">
+            Login Admin: <code class="bg-gray-100 px-1">admin</code> | Pass: <code class="bg-gray-100 px-1">admin122333</code>
+          </div>
         </div>
       </section>
 
-      <!-- SCREEN 2: ADMIN DASHBOARD -->
+      <!-- SCREEN ADMIN DASHBOARD -->
       <section id="screen-admin" class="hidden space-y-6">
         <div class="flex flex-wrap justify-between items-center bg-white p-4 rounded-lg shadow border gap-3 print:hidden">
           <h2 class="text-lg font-bold text-gray-800">Dashboard Pengelolaan Ujian</h2>
@@ -82,41 +81,28 @@
           </div>
         </div>
 
-        <!-- TAB: MONITORING -->
+        <!-- TAB MONITORING -->
         <div id="tab-monitoring" class="bg-white p-6 rounded-lg shadow border space-y-6">
           <div class="flex flex-wrap justify-between items-center border-b pb-4 gap-3">
             <div>
               <h3 class="font-bold text-md text-gray-800">Live Monitoring Ujian & Status Siswa</h3>
-              <p class="text-xs text-gray-500">Pantau siswa yang sedang mengerjakan, melanggar kecurangan, atau selesai.</p>
+              <p class="text-xs text-gray-500">Pantau siswa yang sedang mengerjakan, kecurangan, atau selesai.</p>
             </div>
             <button onclick="RekapModule.refreshMonitoringData()" class="bg-blue-600 text-white text-xs font-bold px-3 py-1.5 rounded">Refresh Status Live</button>
           </div>
           <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div onclick="RekapModule.filterMonitoringStatus('BELUM')" class="cursor-pointer bg-gray-50 border p-4 rounded-xl text-center">
-              <span class="text-xs font-bold text-gray-500 block">Belum Tes</span>
-              <span id="count-stat-belum" class="text-2xl font-black text-gray-700">0</span>
-            </div>
-            <div onclick="RekapModule.filterMonitoringStatus('KERJAKAN')" class="cursor-pointer bg-blue-50 border p-4 rounded-xl text-center">
-              <span class="text-xs font-bold text-blue-800 block">Sedang Mengerjakan</span>
-              <span id="count-stat-kerjakan" class="text-2xl font-black text-blue-600">0</span>
-            </div>
-            <div onclick="RekapModule.filterMonitoringStatus('KECURANGAN')" class="cursor-pointer bg-red-50 border p-4 rounded-xl text-center">
-              <span class="text-xs font-bold text-red-800 block">Kecurangan</span>
-              <span id="count-stat-kecurangan" class="text-2xl font-black text-red-600">0</span>
-            </div>
-            <div onclick="RekapModule.filterMonitoringStatus('SELESAI')" class="cursor-pointer bg-emerald-50 border p-4 rounded-xl text-center">
-              <span class="text-xs font-bold text-emerald-800 block">Selesai Tes</span>
-              <span id="count-stat-selesai" class="text-2xl font-black text-emerald-600">0</span>
-            </div>
+            <div class="bg-gray-50 border p-4 rounded-xl text-center"><span class="text-xs font-bold text-gray-500 block">Belum Tes</span><span id="count-stat-belum" class="text-2xl font-black text-gray-700">0</span></div>
+            <div class="bg-blue-50 border p-4 rounded-xl text-center"><span class="text-xs font-bold text-blue-800 block">Sedang Mengerjakan</span><span id="count-stat-kerjakan" class="text-2xl font-black text-blue-600">0</span></div>
+            <div class="bg-red-50 border p-4 rounded-xl text-center"><span class="text-xs font-bold text-red-800 block">Kecurangan</span><span id="count-stat-kecurangan" class="text-2xl font-black text-red-600">0</span></div>
+            <div class="bg-emerald-50 border p-4 rounded-xl text-center"><span class="text-xs font-bold text-emerald-800 block">Selesai Tes</span><span id="count-stat-selesai" class="text-2xl font-black text-emerald-600">0</span></div>
           </div>
           <div class="space-y-3">
             <div class="flex justify-between items-center">
-              <h4 class="font-bold text-xs text-gray-700 uppercase">Daftar Status Peserta Ujian:</h4>
+              <h4 class="font-bold text-xs text-gray-700 uppercase">Daftar Status Peserta:</h4>
               <div class="flex gap-2">
                 <select id="monitoring-filter-kelas" onchange="RekapModule.renderMonitoringTable()" class="border px-2.5 py-1 rounded text-xs bg-gray-50"></select>
                 <select id="monitoring-filter-status" onchange="RekapModule.renderMonitoringTable()" class="border px-2.5 py-1 rounded text-xs bg-gray-50">
                   <option value="ALL">Semua Status</option>
-                  <option value="KERJAKAN">Sedang Mengerjakan</option>
                   <option value="KECURANGAN">Kecurangan</option>
                   <option value="BELUM">Belum Mulai</option>
                   <option value="SELESAI">Sudah Selesai</option>
@@ -124,24 +110,13 @@
               </div>
             </div>
             <table class="w-full border-collapse border text-xs">
-              <thead>
-                <tr class="bg-gray-800 text-white">
-                  <th class="border p-2">No</th>
-                  <th class="border p-2 text-left">NISN</th>
-                  <th class="border p-2 text-left">Nama Siswa</th>
-                  <th class="border p-2">Kelas</th>
-                  <th class="border p-2">Status Tes</th>
-                  <th class="border p-2">Pelanggaran</th>
-                  <th class="border p-2">Skor Nilai</th>
-                  <th class="border p-2">Aksi Pengawas</th>
-                </tr>
-              </thead>
+              <thead><tr class="bg-gray-800 text-white"><th class="border p-2">No</th><th class="border p-2 text-left">NISN</th><th class="border p-2 text-left">Nama Siswa</th><th class="border p-2">Kelas</th><th class="border p-2">Status Tes</th><th class="border p-2">Pelanggaran</th><th class="border p-2">Skor Nilai</th><th class="border p-2">Aksi</th></tr></thead>
               <tbody id="monitoring-tbody"></tbody>
             </table>
           </div>
         </div>
 
-        <!-- TAB: JADWAL -->
+        <!-- TAB JADWAL -->
         <div id="tab-jadwal" class="hidden bg-white p-6 rounded-lg shadow border space-y-6">
           <h3 class="font-bold text-md text-gray-800 border-b pb-2">Aktivasi & Roster Waktu Akses Ujian</h3>
           <form onsubmit="JadwalModule.saveJadwalUjian(event)" class="space-y-4 max-w-2xl bg-purple-50 p-4 rounded-lg border">
@@ -155,10 +130,10 @@
             </div>
             <button type="submit" class="bg-purple-700 text-white font-bold text-xs px-4 py-2 rounded">+ Simpan Jadwal</button>
           </form>
-          <div id="jadwal-list" class="space-y-2"></div>
+          <div id="jadwal-list-container" class="space-y-2"></div>
         </div>
 
-        <!-- TAB: REKAP NILAI -->
+        <!-- TAB REKAP NILAI -->
         <div id="tab-rekap-nilai" class="hidden bg-white p-6 rounded-lg shadow border space-y-6">
           <div class="flex justify-between items-center border-b pb-4">
             <h3 class="font-bold text-md text-gray-800">Rekapitulasi & Laporan Hasil Ujian</h3>
@@ -168,64 +143,24 @@
               <button onclick="RekapModule.printHasilUjian()" class="bg-emerald-600 text-white text-xs font-bold px-4 py-1.5 rounded">Cetak Nilai (PDF)</button>
             </div>
           </div>
-          <!-- AREA CETAK 1: REKAP HASIL NILAI SISWA (PDF / PRINT) -->
-        <div id="print-area" class="space-y-4">
-          <div class="hidden print:block text-center border-b-2 border-black pb-3 mb-4">
-            <!-- Kop Sekolah dari Supabase Storage -->
-            <img src="https://nbwpnhshhpfqtmbwewgk.supabase.co/storage/v1/object/public/media-sekolah/kop_sekolah.png" 
-                 alt="Kop Sekolah" 
-                 class="w-full max-h-28 object-contain mx-auto mb-2"
-                 onerror="this.style.display='none'; document.getElementById('fallback-header-rekap').classList.remove('hidden');">
-            
-            <!-- Fallback Header jika gambar kop belum diupload di bucket -->
-            <div id="fallback-header-rekap" class="hidden">
-              <h2 class="text-lg font-bold uppercase">PEMERINTAH PROVINSI SULAWESI TENGGARA</h2>
-              <h3 class="text-md font-bold uppercase">SMKN 1 WAKATOBI</h3>
+          <div id="print-area">
+            <div class="hidden print:block text-center border-b-2 border-black pb-3 mb-4">
+              <img src="https://nbwpnhshhpfqtmbwewgk.supabase.co/storage/v1/object/public/media-sekolah/kop_sekolah.png" alt="Kop Sekolah" class="w-full max-h-28 object-contain mx-auto mb-2" onerror="this.style.display='none';">
+              <h3 class="text-sm font-bold uppercase mt-2">DAFTAR HASIL PENILAIAN SUMATIF SEMESTER GANJIL T.A. 2026/2027</h3>
+              <p id="print-meta-info" class="text-xs font-semibold mt-1"></p>
             </div>
-
-            <!-- Judul Dokumen Cetak Nilai -->
-            <h3 id="print-doc-title" class="text-sm font-bold uppercase mt-2">DAFTAR HASIL PENILAIAN SUMATIF SEMESTER GANJIL T.A. 2026/2027</h3>
-            <p id="print-meta-info" class="text-xs font-semibold text-gray-700 mt-1"></p>
-          </div>
-
-          <div class="overflow-x-auto">
-            <table class="w-full border-collapse border border-gray-400 text-xs">
-              <thead>
-                <tr class="bg-gray-200 text-gray-900 border-b">
-                  <th class="border border-gray-400 p-2 text-center w-10">No</th>
-                  <th class="border border-gray-400 p-2 text-left">NISN</th>
-                  <th class="border border-gray-400 p-2 text-left">Nama Siswa</th>
-                  <th class="border border-gray-400 p-2 text-center">Kelas</th>
-                  <th class="border border-gray-400 p-2 text-left">Mata Pelajaran</th>
-                  <th class="border border-gray-400 p-2 text-center">Nilai Skor</th>
-                  <th class="border border-gray-400 p-2 text-center">Pelanggaran</th>
-                  <th class="border border-gray-400 p-2 text-center">Status</th>
-                  <th class="border border-gray-400 p-2 text-left">Waktu Selesai</th>
-                  <th class="border border-gray-400 p-2 text-center print:hidden">Aksi Reset</th>
-                </tr>
-              </thead>
+            <table class="w-full border-collapse border text-xs">
+              <thead><tr class="bg-blue-800 text-white"><th class="border p-2">No</th><th class="border p-2 text-left">NISN</th><th class="border p-2 text-left">Nama Siswa</th><th class="border p-2">Kelas</th><th class="border p-2 text-left">Mata Pelajaran</th><th class="border p-2">Skor</th><th class="border p-2">Pelanggaran</th><th class="border p-2">Status</th><th class="border p-2 text-left">Waktu Selesai</th><th class="border p-2 print:hidden">Aksi</th></tr></thead>
               <tbody id="rekap-nilai-tbody"></tbody>
             </table>
-          </div>
-
-          <!-- Tanda Tangan Cetak Nilai -->
-          <div class="hidden print:flex justify-between items-end pt-10 text-xs">
-            <div>
-              <p>Mengetahui,</p>
-              <p class="font-bold">Wakasek Kurikulum</p>
-              <br><br><br>
-              <p class="font-bold underline">Ajiardin, S.T., Gr.</p>
-            </div>
-            <div class="text-right">
-              <p>Wakatobi, <span id="print-date"></span></p>
-              <p class="font-bold">Guru Mata Pelajaran</p>
-              <br><br><br>
-              <p class="font-bold underline">( ............................................ )</p>
+            <div class="hidden print:flex justify-between items-end pt-12 text-xs">
+              <div><p>Mengetahui,</p><p class="font-bold">Wakasek Kurikulum</p><br><br><br><p class="font-bold underline">Ajiardin, S.T., Gr.</p></div>
+              <div class="text-right"><p>Wakatobi, <span id="print-date"></span></p><p class="font-bold">Guru Mata Pelajaran</p><br><br><br><p class="font-bold underline">( ............................................ )</p></div>
             </div>
           </div>
         </div>
 
-        <!-- TAB: UPLOAD SOAL -->
+        <!-- TAB UPLOAD SOAL -->
         <div id="tab-upload-soal" class="hidden bg-white p-6 rounded-lg shadow border space-y-6">
           <h3 class="font-bold text-md text-gray-800 border-b pb-2">Upload Berkas Soal HTML Multi-Kelas</h3>
           <form onsubmit="SoalModule.processHTMLUpload(event)" class="space-y-4">
@@ -242,10 +177,10 @@
           <div id="upload-log" class="hidden border p-4 bg-gray-900 text-green-400 font-mono text-xs max-h-48 overflow-y-auto"></div>
         </div>
 
-        <!-- TAB: BANK SOAL -->
+        <!-- TAB BANK SOAL -->
         <div id="tab-bank-soal" class="hidden bg-white p-6 rounded-lg shadow border space-y-6">
           <div class="flex justify-between items-center border-b pb-4 print:hidden">
-            <h3 class="font-bold text-md text-gray-800">Bank Soal & Editor Gambar Supabase</h3>
+            <h3 class="font-bold text-md text-gray-800">Bank Soal & Editor Supabase</h3>
             <div class="flex gap-2">
               <select id="bank-filter-kelas" onchange="SoalModule.renderBankSoalList()" class="border px-3 py-1.5 rounded text-xs"></select>
               <select id="bank-filter-mapel" onchange="SoalModule.renderBankSoalList()" class="border px-3 py-1.5 rounded text-xs"></select>
@@ -253,35 +188,17 @@
             </div>
           </div>
           <div id="bank-soal-list" class="space-y-3 print:hidden"></div>
-          <!-- AREA CETAK 2: NASKAH SOAL ARSIP (PDF / PRINT) -->
-        <div id="print-soal-area" class="hidden print:block space-y-4">
-          <div class="text-center border-b-2 border-black pb-3 mb-4">
-            <!-- Kop Sekolah dari Supabase Storage -->
-            <img src="https://nbwpnhshhpfqtmbwewgk.supabase.co/storage/v1/object/public/media-sekolah/kop_sekolah.png" 
-                 alt="Kop Sekolah" 
-                 class="w-full max-h-28 object-contain mx-auto mb-2"
-                 onerror="this.style.display='none'; document.getElementById('fallback-header-soal').classList.remove('hidden');">
-            
-            <div id="fallback-header-soal" class="hidden">
-              <h2 class="text-lg font-bold uppercase">PEMERINTAH PROVINSI SULAWESI TENGGARA</h2>
-              <h3 class="text-md font-bold uppercase">SMKN 1 WAKATOBI</h3>
+          <div id="print-soal-area" class="hidden print:block space-y-4">
+            <div class="text-center border-b-2 border-black pb-3 mb-4">
+              <img src="https://nbwpnhshhpfqtmbwewgk.supabase.co/storage/v1/object/public/media-sekolah/kop_sekolah.png" alt="Kop Sekolah" class="w-full max-h-28 object-contain mx-auto mb-2" onerror="this.style.display='none';">
+              <h3 class="text-sm font-bold uppercase mt-2">NASKAH SOAL PENILAIAN SUMATIF SEMESTER GANJIL T.A. 2026/2027</h3>
+              <p id="print-soal-meta" class="text-xs font-semibold mt-1"></p>
             </div>
-
-            <!-- Judul Dokumen Naskah Soal -->
-            <h3 class="text-sm font-bold uppercase mt-2">NASKAH SOAL PENILAIAN SUMATIF SEMESTER GANJIL T.A. 2026/2027</h3>
-            <p id="print-soal-meta" class="text-xs font-semibold text-gray-800 mt-1"></p>
+            <div id="print-soal-content-container" class="space-y-6 text-xs"></div>
           </div>
-
-          <div class="border border-black p-3 text-xs space-y-1 mb-4">
-            <strong>PETUNJUK UMUM:</strong>
-            <p>1. Bacalah setiap butir soal dengan teliti sebelum menjawab.</p>
-            <p>2. Pilihlah salah satu jawaban A, B, C, D, atau E yang paling benar.</p>
-          </div>
-
-          <div id="print-soal-content-container" class="space-y-6 text-xs"></div>
         </div>
 
-        <!-- TAB: DATA MAPEL SUPABASE -->
+        <!-- TAB MAPEL -->
         <div id="tab-mapel" class="hidden bg-white p-6 rounded-lg shadow border space-y-6">
           <h3 class="font-bold text-md text-gray-800 border-b pb-2">Kelola Data Mata Pelajaran (Supabase)</h3>
           <form onsubmit="MapelModule.handleAdd(event)" class="flex gap-3 max-w-lg">
@@ -291,7 +208,7 @@
           <div id="mapel-list-container" class="space-y-2 max-w-lg"></div>
         </div>
 
-        <!-- TAB: KARTU SISWA -->
+        <!-- TAB SISWA -->
         <div id="tab-siswa" class="hidden bg-white p-6 rounded-lg shadow border space-y-6">
           <div class="flex justify-between items-center border-b pb-4">
             <h3 class="font-bold text-md text-gray-800">Cetak Kartu Ujian Siswa</h3>
@@ -304,108 +221,20 @@
         </div>
       </section>
 
-      <!-- SCREEN 3: EXAM SISWA -->
+      <!-- SCREEN EXAM SISWA -->
       <section id="screen-exam" class="hidden space-y-4">
         <div class="bg-white p-4 rounded-lg shadow border flex justify-between items-center">
-          <div>
-            <h2 id="exam-mapel-title" class="font-bold text-md text-blue-900">Mata Pelajaran Ujian</h2>
-            <p id="exam-student-info" class="text-xs text-gray-500">Peserta: -</p>
-          </div>
-          <div class="text-right">
-            <p class="text-xs text-gray-500">Sisa Waktu</p>
-            <div id="exam-timer" class="text-xl font-black text-red-600">00:45:00</div>
-          </div>
-        </div>
-        <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
-          <div class="lg:col-span-3 bg-white p-6 rounded-lg shadow border flex flex-col justify-between min-h-[400px]">
-            <div>
-              <div class="flex justify-between items-center border-b pb-2 mb-4">
-                <span class="font-bold text-sm text-gray-700">Soal No. <span id="current-question-num">1</span></span>
-                <span class="text-xs bg-blue-100 text-blue-800 px-2.5 py-0.5 rounded-full">Pilihan Ganda</span>
-              </div>
-              <div id="question-render-area" class="text-sm space-y-4"></div>
-              <div id="options-render-area" class="mt-6 space-y-3"></div>
-            </div>
-            <div class="flex justify-between border-t pt-4 mt-6">
-              <button onclick="ExamModule.prevQuestion()" class="bg-gray-500 text-white px-4 py-2 rounded text-xs font-bold">Sebelumnya</button>
-              <button onclick="ExamModule.nextQuestion()" class="bg-blue-600 text-white px-4 py-2 rounded text-xs font-bold">Berikutnya</button>
-              <button onclick="ExamModule.finishExamConfirm()" class="bg-emerald-600 text-white px-4 py-2 rounded text-xs font-bold">Kirim Jawaban</button>
-            </div>
-          </div>
-          <div class="bg-white p-4 rounded-lg shadow border">
-            <h3 class="font-bold text-xs text-gray-600 uppercase mb-3">Navigasi Nomor Soal</h3>
-            <div id="question-grid" class="grid grid-cols-5 gap-2 text-xs font-bold"></div>
-          </div>
+          <div><h2 id="exam-mapel-title" class="font-bold text-md text-blue-900">Ujian Sumatif</h2><p id="exam-student-info" class="text-xs text-gray-500">Peserta: -</p></div>
+          <div class="text-right"><p class="text-xs text-gray-500">Sisa Waktu</p><div id="exam-timer" class="text-xl font-black text-red-600">00:45:00</div></div>
         </div>
       </section>
-
     </main>
   </div>
 
-  <!-- MODAL EDIT SOAL -->
-  <div id="modal-edit-soal" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 overflow-y-auto">
-    <div class="bg-white rounded-xl max-w-3xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
-      <div class="flex justify-between items-center border-b pb-3">
-        <h3 class="text-md font-bold text-gray-800">Edit Soal & Upload Gambar</h3>
-        <button onclick="SoalModule.closeEditModal()" class="text-gray-500 text-lg font-bold">&times;</button>
-      </div>
-      <form onsubmit="SoalModule.saveEditedSoal(event)" class="space-y-4 text-xs">
-        <input type="hidden" id="edit-soal-id">
-        <div class="grid grid-cols-2 gap-3">
-          <div><label class="block font-bold text-gray-700 mb-1">Mata Pelajaran</label><input type="text" id="edit-soal-mapel" required class="w-full border px-3 py-2 rounded"></div>
-          <div><label class="block font-bold text-gray-700 mb-1">Kelas Target</label><input type="text" id="edit-soal-kelas" required class="w-full border px-3 py-2 rounded"></div>
-        </div>
-        <div><label class="block font-bold text-gray-700 mb-1">Konten Soal (HTML)</label><textarea id="edit-soal-html" rows="3" required class="w-full border p-2 font-mono rounded"></textarea></div>
-        <div class="bg-blue-50 border p-3 rounded space-y-2">
-          <label class="block font-bold text-blue-900">Upload Gambar Soal (Auto Compress)</label>
-          <div class="flex items-center gap-2">
-            <input type="file" id="edit-soal-img-file" accept="image/*" class="border bg-white p-1 text-xs">
-            <button type="button" onclick="SoalModule.uploadImageToStorage('edit-soal-img-file', 'edit-soal-html')" class="bg-blue-600 text-white px-3 py-1.5 rounded font-bold">Upload Gambar</button>
-          </div>
-        </div>
-        <div class="space-y-3 border-t pt-2">
-          <label class="block font-bold text-gray-800">Opsi Jawaban & Gambar Opsi:</label>
-          <div class="space-y-2">
-            <div class="border p-2 rounded bg-gray-50"><span class="font-bold text-blue-800">Opsi A:</span><input type="text" id="edit-opsi-a" required class="w-full border px-2 py-1 rounded"></div>
-            <div class="border p-2 rounded bg-gray-50"><span class="font-bold text-blue-800">Opsi B:</span><input type="text" id="edit-opsi-b" required class="w-full border px-2 py-1 rounded"></div>
-            <div class="border p-2 rounded bg-gray-50"><span class="font-bold text-blue-800">Opsi C:</span><input type="text" id="edit-opsi-c" required class="w-full border px-2 py-1 rounded"></div>
-            <div class="border p-2 rounded bg-gray-50"><span class="font-bold text-blue-800">Opsi D:</span><input type="text" id="edit-opsi-d" required class="w-full border px-2 py-1 rounded"></div>
-            <div class="border p-2 rounded bg-gray-50"><span class="font-bold text-blue-800">Opsi E:</span><input type="text" id="edit-opsi-e" required class="w-full border px-2 py-1 rounded"></div>
-          </div>
-        </div>
-        <div>
-          <label class="block font-bold text-gray-700 mb-1">Kunci Jawaban</label>
-          <select id="edit-soal-kunci" class="w-full border px-3 py-2 rounded font-bold text-emerald-700">
-            <option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option><option value="E">E</option>
-          </select>
-        </div>
-        <div class="flex justify-end gap-2 border-t pt-3">
-          <button type="button" onclick="SoalModule.closeEditModal()" class="bg-gray-400 text-white font-bold px-4 py-2 rounded">Batal</button>
-          <button type="submit" class="bg-emerald-600 text-white font-bold px-5 py-2 rounded">Simpan Perubahan</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- MODAL KECURANGAN -->
-  <div id="modal-warning" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
-    <div class="bg-white rounded-xl max-w-md w-full p-6 text-center space-y-4">
-      <div class="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto text-2xl font-bold">⚠️</div>
-      <h3 class="text-lg font-bold text-gray-800">PERINGATAN KECURANGAN!</h3>
-      <p id="warning-text" class="text-xs text-gray-600">Anda terdeteksi berpindah aplikasi!</p>
-      <button onclick="ExamModule.closeWarningModal()" class="w-full bg-red-600 text-white font-bold py-2 rounded text-xs">Kembali Ujian Fullscreen</button>
-    </div>
-  </div>
-
-  <!-- 1. Supabase SDK & Config -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- SCRIPT MODULAR ORDER -->
   <script src="./config.js"></script>
-
-  <!-- 2. Core DB Helper & State -->
-  <script src="./js/supabase.js"></script>
   <script src="./js/state.js"></script>
-
-  <!-- 3. Sub-Modul (Pastikan folder js/mapel.js benar) -->
+  <script src="./js/supabase.js"></script>
   <script src="./js/mapel.js"></script>
   <script src="./js/siswa.js"></script>
   <script src="./js/jadwal.js"></script>
@@ -413,8 +242,6 @@
   <script src="./js/rekap.js"></script>
   <script src="./js/auth.js"></script>
   <script src="./js/exam.js"></script>
-
-  <!-- 4. Controller Utama -->
   <script src="./js/app.js"></script>
 </body>
 </html>
