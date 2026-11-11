@@ -92,38 +92,87 @@ const SoalModule = {
     }
 
     filtered.forEach((q, idx) => {
+      // Membuat preview ringkasan teks soal tanpa tag HTML
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = q.soal_html;
+      const plainText = (tempDiv.textContent || tempDiv.innerText || '').trim();
+      const snippetText = plainText.length > 70 ? plainText.substring(0, 70) + '...' : plainText;
+
       const div = document.createElement('div');
-      div.className = "bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3 hover:border-ocean-300 transition";
+      div.className = "bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden transition hover:border-ocean-300";
       
       div.innerHTML = `
-        <div class="flex flex-wrap justify-between items-center gap-2 border-b border-slate-100 pb-3">
-          <div class="flex items-center space-x-2">
-            <span class="bg-ocean-700 text-white font-bold text-xs px-2.5 py-1 rounded-lg">#${idx + 1}</span>
-            <span class="bg-ocean-50 text-ocean-800 font-bold text-xs px-2.5 py-1 rounded-lg border border-ocean-200">${q.mapel}</span>
-            <span class="bg-purple-50 text-purple-800 font-bold text-xs px-2.5 py-1 rounded-lg border border-purple-200">Kelas: ${q.kelas}</span>
+        <!-- HEADER ROW (ACCORDION TOGGLE) -->
+        <div class="p-4 bg-slate-50/70 flex flex-wrap justify-between items-center gap-3 border-b border-slate-100 cursor-pointer" onclick="SoalModule.toggleSoalDetail(${q.id})">
+          <div class="flex items-center space-x-2.5 flex-1 min-w-0">
+            <span class="bg-ocean-700 text-white font-extrabold text-xs px-2.5 py-1 rounded-lg">#${idx + 1}</span>
+            <span class="bg-ocean-50 text-ocean-800 font-bold text-xs px-2.5 py-1 rounded-lg border border-ocean-200 truncate">${q.mapel}</span>
+            <span class="bg-purple-50 text-purple-800 font-bold text-xs px-2.5 py-1 rounded-lg border border-purple-200 truncate hidden sm:inline-block">Kelas: ${q.kelas}</span>
+            <span class="text-xs text-slate-600 font-medium truncate ml-2">${snippetText}</span>
           </div>
-          <div class="flex items-center space-x-2">
-            <span class="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">Kunci: ${q.kunci_jawaban}</span>
+
+          <div class="flex items-center space-x-2 flex-shrink-0" onclick="event.stopPropagation()">
+            <span class="text-xs font-extrabold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">Kunci: ${q.kunci_jawaban}</span>
+            
+            <button id="btn-toggle-${q.id}" onclick="SoalModule.toggleSoalDetail(${q.id})" class="bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs px-3 py-1 rounded-lg border border-blue-200 transition flex items-center gap-1">
+              <span>👁️ Lihat Soal</span>
+            </button>
+
             <button onclick="SoalModule.openEditModal(${q.id})" class="bg-amber-50 hover:bg-amber-100 text-amber-700 font-bold text-xs px-3 py-1 rounded-lg border border-amber-300 transition">
-              ✏️ Edit Soal & Gambar
+              ✏️ Edit
             </button>
           </div>
         </div>
 
-        <div class="text-xs text-slate-800 leading-relaxed font-medium space-y-2">
-          <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">${q.soal_html}</div>
-        </div>
+        <!-- DETAIL BODY (COLLAPSIBLE / DEFAULT HIDDEN) -->
+        <div id="detail-soal-${q.id}" class="hidden p-5 space-y-4 bg-white border-t border-slate-100 transition-all duration-300">
+          <div class="text-xs text-slate-800 leading-relaxed font-medium space-y-2">
+            <div class="font-bold text-slate-500 mb-1 uppercase tracking-wider text-[10px]">Teks Pertanyaan / Studi Kasus:</div>
+            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">${q.soal_html}</div>
+          </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs pt-1">
-          <div class="p-2 rounded-lg border ${q.kunci_jawaban === 'A' ? 'bg-emerald-50 border-emerald-300 font-bold text-emerald-900' : 'bg-slate-50 border-slate-100'}"><strong>A.</strong> ${q.opsi_a}</div>
-          <div class="p-2 rounded-lg border ${q.kunci_jawaban === 'B' ? 'bg-emerald-50 border-emerald-300 font-bold text-emerald-900' : 'bg-slate-50 border-slate-100'}"><strong>B.</strong> ${q.opsi_b}</div>
-          <div class="p-2 rounded-lg border ${q.kunci_jawaban === 'C' ? 'bg-emerald-50 border-emerald-300 font-bold text-emerald-900' : 'bg-slate-50 border-slate-100'}"><strong>C.</strong> ${q.opsi_c}</div>
-          <div class="p-2 rounded-lg border ${q.kunci_jawaban === 'D' ? 'bg-emerald-50 border-emerald-300 font-bold text-emerald-900' : 'bg-slate-50 border-slate-100'}"><strong>D.</strong> ${q.opsi_d}</div>
-          <div class="p-2 rounded-lg border ${q.kunci_jawaban === 'E' ? 'bg-emerald-50 border-emerald-300 font-bold text-emerald-900' : 'bg-slate-50 border-slate-100'} md:col-span-2"><strong>E.</strong> ${q.opsi_e}</div>
+          <div class="space-y-2 pt-1">
+            <div class="font-bold text-slate-500 uppercase tracking-wider text-[10px]">Pilihan Jawaban (A - E):</div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+              <div class="p-2.5 rounded-xl border ${q.kunci_jawaban === 'A' ? 'bg-emerald-50 border-emerald-300 font-bold text-emerald-900 ring-1 ring-emerald-400' : 'bg-slate-50 border-slate-200 text-slate-700'}">
+                <strong>A.</strong> ${q.opsi_a}
+              </div>
+              <div class="p-2.5 rounded-xl border ${q.kunci_jawaban === 'B' ? 'bg-emerald-50 border-emerald-300 font-bold text-emerald-900 ring-1 ring-emerald-400' : 'bg-slate-50 border-slate-200 text-slate-700'}">
+                <strong>B.</strong> ${q.opsi_b}
+              </div>
+              <div class="p-2.5 rounded-xl border ${q.kunci_jawaban === 'C' ? 'bg-emerald-50 border-emerald-300 font-bold text-emerald-900 ring-1 ring-emerald-400' : 'bg-slate-50 border-slate-200 text-slate-700'}">
+                <strong>C.</strong> ${q.opsi_c}
+              </div>
+              <div class="p-2.5 rounded-xl border ${q.kunci_jawaban === 'D' ? 'bg-emerald-50 border-emerald-300 font-bold text-emerald-900 ring-1 ring-emerald-400' : 'bg-slate-50 border-slate-200 text-slate-700'}">
+                <strong>D.</strong> ${q.opsi_d}
+              </div>
+              <div class="p-2.5 rounded-xl border ${q.kunci_jawaban === 'E' ? 'bg-emerald-50 border-emerald-300 font-bold text-emerald-900 ring-1 ring-emerald-400' : 'bg-slate-50 border-slate-200 text-slate-700'} md:col-span-2">
+                <strong>E.</strong> ${q.opsi_e}
+              </div>
+            </div>
+          </div>
         </div>
       `;
       container.appendChild(div);
     });
+  },
+
+  // --- LOGIKA ACCORDION BUKA/TUTUP DETAIL SOAL ---
+  toggleSoalDetail(id) {
+    const detailEl = document.getElementById(`detail-soal-${id}`);
+    const btnEl = document.getElementById(`btn-toggle-${id}`);
+
+    if (!detailEl || !btnEl) return;
+
+    if (detailEl.classList.contains('hidden')) {
+      detailEl.classList.remove('hidden');
+      btnEl.innerHTML = `<span>🙈 Tutup Soal</span>`;
+      btnEl.className = "bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs px-3 py-1 rounded-lg border border-slate-300 transition flex items-center gap-1";
+    } else {
+      detailEl.classList.add('hidden');
+      btnEl.innerHTML = `<span>👁️ Lihat Soal</span>`;
+      btnEl.className = "bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs px-3 py-1 rounded-lg border border-blue-200 transition flex items-center gap-1";
+    }
   },
 
   // --- UNGGAH NASKAH SOAL HTML ---
