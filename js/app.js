@@ -14,22 +14,30 @@ const App = {
       const client = await DB.getClient();
       this.updateDBStatus(client);
 
-      // 1. Load Data Mapel
-      if (window.MapelModule) await MapelModule.loadAndRender();
+      // MEMANGGIL SEMUA MODUL SECARA EKSPLISIT
+      if (window.MapelModule) {
+        console.log("[App] Memanggil MapelModule...");
+        await MapelModule.loadAndRender();
+      }
 
-      // 2. Load Data Siswa & Kartu
-      if (window.SiswaModule) await SiswaModule.loadAndRender();
+      if (window.SiswaModule) {
+        console.log("[App] Memanggil SiswaModule...");
+        await SiswaModule.loadAndRender();
+      }
 
-      // 3. Load Bank Soal & Upload
-      if (window.SoalModule) await SoalModule.loadAndRender();
+      if (window.SoalModule) {
+        console.log("[App] Memanggil SoalModule...");
+        await SoalModule.loadAndRender();
+      }
 
-      // 4. Load Jadwal Ujian
-      if (window.JadwalModule) await JadwalModule.loadAndRender();
+      if (window.RekapModule) {
+        console.log("[App] Memanggil RekapModule...");
+        await RekapModule.refreshMonitoringData();
+      }
 
-      // 5. Load Live Monitoring & Rekap Nilai
-      if (window.RekapModule) await RekapModule.refreshMonitoringData();
+      if (window.JadwalModule) JadwalModule.renderJadwalList();
 
-      console.log("[App] Seluruh Modul Berhasil Dimuat & Siap Digunakan.");
+      console.log("[App] Seluruh Modul Siap Digunakan.");
     } catch (err) {
       console.error("[App] Terjadi kesalahan saat inisialisasi:", err.message);
       if (badge) {
@@ -81,10 +89,8 @@ const App = {
     if (tabName === 'monitoring' && window.RekapModule) RekapModule.refreshMonitoringData();
     if (tabName === 'bank-soal' && window.SoalModule) SoalModule.loadAndRender();
     if (tabName === 'siswa' && window.SiswaModule) SiswaModule.loadAndRender();
-    if (tabName === 'jadwal' && window.JadwalModule) JadwalModule.loadAndRender();
     if (tabName === 'mapel' && window.MapelModule) MapelModule.loadAndRender();
   }
 };
 
 window.addEventListener('load', () => App.init());
-
