@@ -45,7 +45,7 @@ const DB = {
     try {
       const { data, error } = await client.from('mapel').select('*').order('id', { ascending: true });
       if (error) return [];
-      return data ? data.map(m => m.nama_mapel || m.mapel || m.nama || Object.values(m)[1]).filter(Boolean) : [];
+      return data ? data.map(m => m.nama_mapel || m.mapel || m.NAMA_MAPEL || m.nama || Object.values(m)[1]).filter(Boolean) : [];
     } catch (err) {
       return [];
     }
@@ -54,16 +54,31 @@ const DB = {
   async insertMapel(namaMapel) {
     const client = await this.getClient();
     if (!client) throw new Error("Database tidak terhubung.");
-    const { data, error } = await client.from('mapel').insert([{ nama_mapel: namaMapel }]);
-    if (error) throw error;
+
+    let { data, error } = await client.from('mapel').insert([{ nama_mapel: namaMapel }]);
+    if (error) {
+      const res2 = await client.from('mapel').insert([{ mapel: namaMapel }]);
+      if (res2.error) {
+        const res3 = await client.from('mapel').insert([{ NAMA_MAPEL: namaMapel }]);
+        if (res3.error) throw error;
+        return res3.data;
+      }
+      return res2.data;
+    }
     return data;
   },
 
   async deleteMapel(namaMapel) {
     const client = await this.getClient();
     if (!client) throw new Error("Database tidak terhubung.");
-    const { error } = await client.from('mapel').delete().eq('nama_mapel', namaMapel);
-    if (error) throw error;
+
+    const { error: err1 } = await client.from('mapel').delete().eq('nama_mapel', namaMapel);
+    if (err1) {
+      const { error: err2 } = await client.from('mapel').delete().eq('mapel', namaMapel);
+      if (err2) {
+        await client.from('mapel').delete().eq('NAMA_MAPEL', namaMapel);
+      }
+    }
     return true;
   },
 
@@ -113,10 +128,7 @@ const DB = {
     if (!client) return [];
     try {
       const { data, error } = await client.from('jadwal_ujian').select('*').order('id', { ascending: false });
-      if (error) {
-        console.warn("[DB Helper] Gagal fetch jadwal_ujian:", error.message);
-        return [];
-      }
+      if (error) return [];
       return (data || []).map(j => ({
         id: j.id || j.ID,
         mapel: j.mapel || j.MAPEL || j.nama_mapel || j.NAMA_MAPEL || '-',
@@ -127,9 +139,43 @@ const DB = {
         jamSelesai: j.jam_selesai || j.JAM_SELESAI || j.jamSelesai || '09:00'
       }));
     } catch (err) {
-      console.error("[DB Helper] Error fetchSchedules:", err.message);
       return [];
     }
+  },
+
+  // Mendapatkan Jadwal Aktif yang Sesuai dengan Kelas & Waktu Sekarang
+  async fetchActiveScheduleForStudent(kelasSiswa) {
+    const schedules = await this.fetchSchedules();
+    if (!schedules || schedules.length === 0) return null;
+
+    const now = new Date();
+    // Format YYYY-MM-DD lokal
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const currentDateStr = `${year}-${month}-${day}`;
+
+    // Format HH:MM lokal
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const currentTimeStr = `${hours}:${minutes}`;
+
+    console.log(`[DB Check Jadwal] Kelas: ${kelasSiswa} | Tgl Sekarang: ${currentDateStr} | Jam Sekarang: ${currentTimeStr}`);
+
+    const activeSchedule = schedules.find(j => {
+      const matchKelas = String(j.kelas).trim().toUpperCase() === String(kelasSiswa).trim().toUpperCase();
+      const matchTanggal = String(j.tanggal).trim() === currentDateStr;
+      
+      // Sanitasi Waktu Jam Mulai & Jam Selesai
+      const jamMulaiClean = String(j.jamMulai).substring(0, 5);
+      const jamSelesaiClean = String(j.jamSelesai).substring(0, 5);
+      
+      const inTimeRange = currentTimeStr >= jamMulaiClean && currentTimeStr <= jamSelesaiClean;
+
+      return matchKelas && matchTanggal && inTimeRange;
+    });
+
+    return activeSchedule || null;
   },
 
   async fetchHasilUjian() {
@@ -139,7 +185,6 @@ const DB = {
       const { data, error } = await client.from('hasil_ujian').select('*');
       if (error) return [];
       
-      // Normalisasi Kolom Hasil Ujian
       return (data || []).map(h => ({
         id: h.id || h.ID,
         ID_SISWA: h.ID_SISWA || h.id_siswa || h.nisn || '-',
@@ -160,7 +205,6 @@ const DB = {
     const client = await this.getClient();
     if (!client) throw new Error("Database tidak terhubung.");
 
-    // Coba simpan menggunakan berbagai opsi variasi kolom agar kompatibel dengan tabel Supabase
     const dataToInsert = {
       ID_SISWA: String(payload.id_siswa),
       id_siswa: String(payload.id_siswa),
@@ -175,8 +219,6 @@ const DB = {
 
     const { data, error } = await client.from('hasil_ujian').insert([dataToInsert]);
     if (error) {
-      // Fallback jika ada kolom spesifik yang ditolak
-      console.warn("[DB Helper] Retry insert hasil_ujian dengan fallback minimal...", error.message);
       const fallbackPayload = {
         ID_SISWA: String(payload.id_siswa),
         mapel: payload.mapel,
