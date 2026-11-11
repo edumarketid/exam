@@ -14,14 +14,18 @@ const App = {
       const client = await DB.getClient();
       this.updateDBStatus(client);
 
-      // Pemanggilan aman per modul
-      if (window.MapelModule) try { await MapelModule.loadAndRender(); } catch (e) {}
-      if (window.SiswaModule) try { await SiswaModule.loadAndRender(); } catch (e) {}
-      if (window.SoalModule) try { await SoalModule.loadAndRender(); } catch (e) {}
-      if (window.JadwalModule) try { await JadwalModule.loadAndRender(); } catch (e) {}
-      if (window.RekapModule) try { await RekapModule.refreshMonitoringData(); } catch (e) {}
+      // 1. Load Mapel & Siswa Terlebih Dahulu Agar State Terisi
+      if (window.MapelModule) try { await MapelModule.loadAndRender(); } catch (e) { console.error("Mapel Error:", e); }
+      if (window.SiswaModule) try { await SiswaModule.loadAndRender(); } catch (e) { console.error("Siswa Error:", e); }
 
-      console.log("[App] Aplikasi Siap Digunakan.");
+      // 2. Load Jadwal Ujian Setelah Mapel & Siswa Siap
+      if (window.JadwalModule) try { await JadwalModule.loadAndRender(); } catch (e) { console.error("Jadwal Error:", e); }
+
+      // 3. Modul Bank Soal & Monitoring
+      if (window.SoalModule) try { await SoalModule.loadAndRender(); } catch (e) { console.error("Soal Error:", e); }
+      if (window.RekapModule) try { await RekapModule.refreshMonitoringData(); } catch (e) { console.error("Rekap Error:", e); }
+
+      console.log("[App] Seluruh Modul Berhasil Dimuat & Siap Digunakan.");
     } catch (err) {
       console.error("[App] Kesalahan kritis:", err.message);
       if (badge) {
