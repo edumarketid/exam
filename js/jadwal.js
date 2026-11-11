@@ -1,42 +1,41 @@
 const JadwalModule = {
-  saveJadwalUjian(e) {
-    e.preventDefault();
-    const mapel = document.getElementById('jadwal-mapel').value;
-    const kelas = document.getElementById('jadwal-kelas').value;
-    const tanggal = document.getElementById('jadwal-tanggal').value;
-    const durasi = parseInt(document.getElementById('jadwal-durasi').value);
-    const jamMulai = document.getElementById('jadwal-jam-mulai').value;
-    const jamSelesai = document.getElementById('jadwal-jam-selesai').value;
-
-    const newJadwal = { id: Date.now(), mapel, kelas, tanggal, durasi, jamMulai, jamSelesai };
-    State.jadwalList.push(newJadwal);
-    localStorage.setItem('EXAM_JADWAL_LIST', JSON.stringify(State.jadwalList));
-
-    alert("Jadwal Ujian berhasil disimpan & diaktifkan!");
-    this.renderJadwalList();
+  async loadAndRender() {
+    try {
+      console.log("[JadwalModule] Menarik data jadwal dari Supabase...");
+      State.schedules = await DB.fetchSchedules();
+      this.renderJadwalList();
+    } catch (err) {
+      console.error("[JadwalModule] Error:", err.message);
+    }
   },
 
   renderJadwalList() {
-    const container = document.getElementById('jadwal-list');
+    const container = document.getElementById('jadwal-list-container');
     if (!container) return;
     container.innerHTML = '';
 
-    if (State.jadwalList.length === 0) {
-      container.innerHTML = `<p class="text-xs text-gray-500 italic">Belum ada jadwal ujian yang dikonfigurasi.</p>`;
+    if (!State.schedules || State.schedules.length === 0) {
+      container.innerHTML = `<p class="text-xs text-amber-600 italic p-3 text-center border rounded">Belum ada jadwal ujian yang dibuat.</p>`;
       return;
     }
 
-    State.jadwalList.forEach((j, idx) => {
-      const item = document.createElement('div');
-      item.className = "flex justify-between items-center p-3 border rounded-lg bg-purple-50 text-xs";
-      item.innerHTML = `
+    State.schedules.forEach((j, idx) => {
+      const card = document.createElement('div');
+      card.className = "flex justify-between items-center p-3 border rounded bg-gray-50 text-xs shadow-sm mb-2";
+      card.innerHTML = `
         <div>
-          <span class="font-bold text-purple-900">[${j.kelas}] ${j.mapel}</span>
-          <div class="text-gray-600 mt-0.5">Tanggal: <strong>${j.tanggal}</strong> | Jam: <strong>${j.jamMulai} - ${j.jamSelesai}</strong> (${j.durasi} Menit)</div>
+          <strong class="text-blue-900 block">${j.mapel || j.NAMA_MAPEL}</strong>
+          <span class="text-[11px] text-gray-600">Kelas: ${j.kelas} | Durasi: ${j.durasi || 45} Menit</span>
         </div>
-        <button onclick="JadwalModule.deleteJadwal(${idx})" class="bg-red-600 text-white px-2.5 py-1 rounded font-semibold text-[10px]">Hapus</button>
+        <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded font-bold text-[10px]">Aktif</span>
       `;
-      container.appendChild(item);
+      container.appendChild(card);
+    });
+  }
+};
+
+window.JadwalModule = JadwalModule;
+
     });
   },
 
