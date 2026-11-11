@@ -1,6 +1,6 @@
 {
-  "name": "ExamSMKN1Wakatobi - CBT System",
-  "short_name": "ExamSMKN1",
+  "name": "SMKN1Wakatobi - CBT System",
+  "short_name": "CBT-SMKN1",
   "description": "Aplikasi Ujian Penilaian Sumatif SMKN 1 Wakatobi",
   "start_url": "./index.html",
   "display": "standalone",
