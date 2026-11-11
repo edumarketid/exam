@@ -23,7 +23,6 @@ const ExamModule = {
     const student = State.currentUser;
     document.getElementById('exam-student-info').textContent = `Peserta: ${student.nama} (${student.kelas})`;
 
-    // 1. Ambil Bank Soal dari Supabase berdasarkan Kelas Siswa
     try {
       const client = await DB.getClient();
       if (!client) throw new Error("Koneksi database tidak tersedia.");
@@ -31,7 +30,6 @@ const ExamModule = {
       const { data, error } = await client.from('bank_soal').select('*');
       if (error) throw error;
 
-      // Filter soal berdasarkan kelas siswa (Case-Insensitive)
       const allQuestions = (data || []).map(q => ({
         id: q.id || q.ID,
         mapel: q.mapel || q.MAPEL || q.nama_mapel || 'Lainnya',
@@ -58,11 +56,9 @@ const ExamModule = {
       const mapelName = State.questions[0].mapel;
       document.getElementById('exam-mapel-title').textContent = `Ujian Sumatif: ${mapelName}`;
 
-      // 2. Render Navigasi & Soal Pertama
       this.renderQuestionNav();
       this.renderCurrentQuestion();
 
-      // 3. Minta Mode Fullscreen & Jalankan Timer (45 Menit)
       try {
         if (document.documentElement.requestFullscreen) {
           await document.documentElement.requestFullscreen();
@@ -127,7 +123,7 @@ const ExamModule = {
     ];
 
     listOpsi.forEach(opsi => {
-      if (!opsi.text) return; // Lewati jika opsi kosong
+      if (!opsi.text) return;
 
       const isSelected = selectedAns === opsi.key;
       const label = document.createElement('label');
@@ -145,7 +141,6 @@ const ExamModule = {
       containerOpsi.appendChild(label);
     });
 
-    // Update Tombol Navigasi Depan/Belakang
     const btnPrev = document.getElementById('btn-prev-soal');
     const btnNext = document.getElementById('btn-next-soal');
     
@@ -242,11 +237,11 @@ const ExamModule = {
       document.exitFullscreen().catch(e => {});
     }
 
-    // Hitung Skor Nilai
+    // 1. Kalkulasi Skor Ujian
     let skorBenar = 0;
     State.questions.forEach((q, idx) => {
       const userChoice = State.answers[idx];
-      if (userChoice && userChoice.toUpperCase() === q.kunci_jawaban.toUpperCase()) {
+      if (userChoice && String(userChoice).trim().toUpperCase() === String(q.kunci_jawaban).trim().toUpperCase()) {
         skorBenar++;
       }
     });
@@ -256,7 +251,7 @@ const ExamModule = {
     const student = State.currentUser;
 
     const payloadHasil = {
-      ID_SISWA: student.id_siswa,
+      id_siswa: student.id_siswa,
       nama_siswa: student.nama,
       kelas: student.kelas,
       mapel: State.questions[0]?.mapel || 'Mata Pelajaran',
@@ -266,15 +261,17 @@ const ExamModule = {
       waktu_selesai: new Date().toISOString()
     };
 
-    const client = await DB.getClient();
-    if (client) {
-      try {
-        await client.from('hasil_ujian').insert([payloadHasil]);
-      } catch (err) {
-        console.error("Gagal simpan nilai ke Supabase:", err.message);
-      }
+    // 2. Simpan Ke Database Supabase Terlebih Dahulu (Tunggu Await)
+    try {
+      console.log("[ExamModule] Mengirim nilai ujian ke Supabase...", payloadHasil);
+      await DB.insertHasilUjian(payloadHasil);
+      console.log("[ExamModule] Nilai ujian berhasil tersimpan di Supabase.");
+    } catch (err) {
+      console.error("[ExamModule] Gagal menyimpan nilai ujian:", err.message);
+      alert("Peringatan: Gagal menyimpan hasil ke database: " + err.message);
     }
 
+    // 3. Tampilkan Alert Informasi Skor & Logout
     alert(isDisqualified ? "Status Ujian: DIDISKUALIFIKASI" : `Ujian Selesai!\nNilai Akhir Anda: ${nilaiAkhir}`);
     AuthModule.logout();
   }
