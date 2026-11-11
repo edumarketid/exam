@@ -168,32 +168,59 @@
               <button onclick="RekapModule.printHasilUjian()" class="bg-emerald-600 text-white text-xs font-bold px-4 py-1.5 rounded">Cetak Nilai (PDF)</button>
             </div>
           </div>
-          <div id="print-area">
-            <div class="hidden print:block text-center border-b pb-3">
-              <h2 class="text-lg font-bold">PEMERINTAH PROVINSI SULAWESI TENGGARA</h2>
-              <h3 class="text-md font-bold">SMKN 1 WAKATOBI</h3>
-              <p id="print-meta-info" class="text-xs mt-1"></p>
+          <!-- AREA CETAK 1: REKAP HASIL NILAI SISWA (PDF / PRINT) -->
+        <div id="print-area" class="space-y-4">
+          <div class="hidden print:block text-center border-b-2 border-black pb-3 mb-4">
+            <!-- Kop Sekolah dari Supabase Storage -->
+            <img src="https://nbwpnhshhpfqtmbwewgk.supabase.co/storage/v1/object/public/media-sekolah/kop_sekolah.png" 
+                 alt="Kop Sekolah" 
+                 class="w-full max-h-28 object-contain mx-auto mb-2"
+                 onerror="this.style.display='none'; document.getElementById('fallback-header-rekap').classList.remove('hidden');">
+            
+            <!-- Fallback Header jika gambar kop belum diupload di bucket -->
+            <div id="fallback-header-rekap" class="hidden">
+              <h2 class="text-lg font-bold uppercase">PEMERINTAH PROVINSI SULAWESI TENGGARA</h2>
+              <h3 class="text-md font-bold uppercase">SMKN 1 WAKATOBI</h3>
             </div>
-            <table class="w-full border-collapse border text-xs">
+
+            <!-- Judul Dokumen Cetak Nilai -->
+            <h3 id="print-doc-title" class="text-sm font-bold uppercase mt-2">DAFTAR HASIL PENILAIAN SUMATIF SEMESTER GANJIL T.A. 2026/2027</h3>
+            <p id="print-meta-info" class="text-xs font-semibold text-gray-700 mt-1"></p>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full border-collapse border border-gray-400 text-xs">
               <thead>
-                <tr class="bg-blue-800 text-white">
-                  <th class="border p-2">No</th>
-                  <th class="border p-2 text-left">NISN</th>
-                  <th class="border p-2 text-left">Nama Siswa</th>
-                  <th class="border p-2">Kelas</th>
-                  <th class="border p-2 text-left">Mata Pelajaran</th>
-                  <th class="border p-2">Nilai Skor</th>
-                  <th class="border p-2">Pelanggaran</th>
-                  <th class="border p-2">Status</th>
-                  <th class="border p-2 text-left">Waktu Selesai</th>
-                  <th class="border p-2 print:hidden">Aksi</th>
+                <tr class="bg-gray-200 text-gray-900 border-b">
+                  <th class="border border-gray-400 p-2 text-center w-10">No</th>
+                  <th class="border border-gray-400 p-2 text-left">NISN</th>
+                  <th class="border border-gray-400 p-2 text-left">Nama Siswa</th>
+                  <th class="border border-gray-400 p-2 text-center">Kelas</th>
+                  <th class="border border-gray-400 p-2 text-left">Mata Pelajaran</th>
+                  <th class="border border-gray-400 p-2 text-center">Nilai Skor</th>
+                  <th class="border border-gray-400 p-2 text-center">Pelanggaran</th>
+                  <th class="border border-gray-400 p-2 text-center">Status</th>
+                  <th class="border border-gray-400 p-2 text-left">Waktu Selesai</th>
+                  <th class="border border-gray-400 p-2 text-center print:hidden">Aksi Reset</th>
                 </tr>
               </thead>
               <tbody id="rekap-nilai-tbody"></tbody>
             </table>
-            <div class="hidden print:flex justify-between items-end pt-12 text-xs">
-              <div><p>Mengetahui,</p><p class="font-bold">Wakasek Kurikulum</p><br><br><br><p class="font-bold underline">Ajiardin, S.T., Gr.</p></div>
-              <div class="text-right"><p>Wakatobi, <span id="print-date"></span></p><p class="font-bold">Guru Mata Pelajaran</p><br><br><br><p class="font-bold underline">( ............................................ )</p></div>
+          </div>
+
+          <!-- Tanda Tangan Cetak Nilai -->
+          <div class="hidden print:flex justify-between items-end pt-10 text-xs">
+            <div>
+              <p>Mengetahui,</p>
+              <p class="font-bold">Wakasek Kurikulum</p>
+              <br><br><br>
+              <p class="font-bold underline">Ajiardin, S.T., Gr.</p>
+            </div>
+            <div class="text-right">
+              <p>Wakatobi, <span id="print-date"></span></p>
+              <p class="font-bold">Guru Mata Pelajaran</p>
+              <br><br><br>
+              <p class="font-bold underline">( ............................................ )</p>
             </div>
           </div>
         </div>
@@ -226,14 +253,32 @@
             </div>
           </div>
           <div id="bank-soal-list" class="space-y-3 print:hidden"></div>
-          <div id="print-soal-area" class="hidden print:block space-y-4">
-            <div class="text-center border-b-2 border-black pb-3">
-              <h2 class="text-lg font-bold">PEMERINTAH PROVINSI SULAWESI TENGGARA</h2>
-              <h3 class="text-md font-bold">SMK NEGERI 1 WAKATOBI</h3>
-              <p id="print-soal-meta" class="text-xs font-semibold mt-1"></p>
+          <!-- AREA CETAK 2: NASKAH SOAL ARSIP (PDF / PRINT) -->
+        <div id="print-soal-area" class="hidden print:block space-y-4">
+          <div class="text-center border-b-2 border-black pb-3 mb-4">
+            <!-- Kop Sekolah dari Supabase Storage -->
+            <img src="https://nbwpnhshhpfqtmbwewgk.supabase.co/storage/v1/object/public/media-sekolah/kop_sekolah.png" 
+                 alt="Kop Sekolah" 
+                 class="w-full max-h-28 object-contain mx-auto mb-2"
+                 onerror="this.style.display='none'; document.getElementById('fallback-header-soal').classList.remove('hidden');">
+            
+            <div id="fallback-header-soal" class="hidden">
+              <h2 class="text-lg font-bold uppercase">PEMERINTAH PROVINSI SULAWESI TENGGARA</h2>
+              <h3 class="text-md font-bold uppercase">SMKN 1 WAKATOBI</h3>
             </div>
-            <div id="print-soal-content-container" class="space-y-6 text-xs"></div>
+
+            <!-- Judul Dokumen Naskah Soal -->
+            <h3 class="text-sm font-bold uppercase mt-2">NASKAH SOAL PENILAIAN SUMATIF SEMESTER GANJIL T.A. 2026/2027</h3>
+            <p id="print-soal-meta" class="text-xs font-semibold text-gray-800 mt-1"></p>
           </div>
+
+          <div class="border border-black p-3 text-xs space-y-1 mb-4">
+            <strong>PETUNJUK UMUM:</strong>
+            <p>1. Bacalah setiap butir soal dengan teliti sebelum menjawab.</p>
+            <p>2. Pilihlah salah satu jawaban A, B, C, D, atau E yang paling benar.</p>
+          </div>
+
+          <div id="print-soal-content-container" class="space-y-6 text-xs"></div>
         </div>
 
         <!-- TAB: DATA MAPEL SUPABASE -->
