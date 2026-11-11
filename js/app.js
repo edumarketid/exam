@@ -1,36 +1,36 @@
 const App = {
   async init() {
-    console.log("[App] Memulai inisialisasi aplikasi CBT...");
+    console.log("[App] Memulai inisialisasi aplikasi CBT SMKN 1 Wakatobi...");
     this.setupPWA();
     if (window.ExamModule) ExamModule.setupSecurityListeners();
     
     const badge = document.getElementById('db-status-badge');
     if (badge) {
       badge.textContent = "Menghubungkan...";
-      badge.className = "px-2.5 py-1 text-xs rounded-full bg-yellow-500 text-white font-medium animate-pulse";
+      badge.className = "px-3 py-1 text-[10px] rounded-full bg-yellow-500 text-white font-bold animate-pulse shadow";
     }
 
     try {
       const client = await DB.getClient();
       this.updateDBStatus(client);
 
-      // 1. Load Mapel & Siswa Terlebih Dahulu Agar State Terisi
+      // 1. Load Mapel & Siswa Terlebih Dahulu agar State Terisi
       if (window.MapelModule) try { await MapelModule.loadAndRender(); } catch (e) { console.error("Mapel Error:", e); }
       if (window.SiswaModule) try { await SiswaModule.loadAndRender(); } catch (e) { console.error("Siswa Error:", e); }
 
-      // 2. Load Jadwal Ujian Setelah Mapel & Siswa Siap
+      // 2. Load Jadwal Ujian setelah Mapel & Siswa Siap
       if (window.JadwalModule) try { await JadwalModule.loadAndRender(); } catch (e) { console.error("Jadwal Error:", e); }
 
       // 3. Modul Bank Soal & Monitoring
       if (window.SoalModule) try { await SoalModule.loadAndRender(); } catch (e) { console.error("Soal Error:", e); }
       if (window.RekapModule) try { await RekapModule.refreshMonitoringData(); } catch (e) { console.error("Rekap Error:", e); }
 
-      console.log("[App] Seluruh Modul Berhasil Dimuat & Siap Digunakan.");
+      console.log("[App] Seluruh Modul CBT Berhasil Dimuat & Siap Digunakan.");
     } catch (err) {
       console.error("[App] Kesalahan kritis:", err.message);
       if (badge) {
         badge.textContent = "Offline / Config Error";
-        badge.className = "px-2.5 py-1 text-xs rounded-full bg-amber-600 text-white font-medium";
+        badge.className = "px-3 py-1 text-[10px] rounded-full bg-amber-600 text-white font-bold shadow";
       }
     }
   },
@@ -39,11 +39,11 @@ const App = {
     const badge = document.getElementById('db-status-badge');
     if (!badge) return;
     if (client) {
-      badge.textContent = "Database Connected";
-      badge.className = "px-2.5 py-1 text-xs rounded-full bg-emerald-600 text-white font-medium";
+      badge.textContent = "Database Terhubung";
+      badge.className = "px-3 py-1 text-[10px] rounded-full bg-emerald-600 text-white font-bold shadow";
     } else {
       badge.textContent = "Offline / Config Error";
-      badge.className = "px-2.5 py-1 text-xs rounded-full bg-amber-600 text-white font-medium";
+      badge.className = "px-3 py-1 text-[10px] rounded-full bg-amber-600 text-white font-bold shadow";
     }
   },
 
@@ -61,7 +61,7 @@ const App = {
   },
 
   switchAdminTab(tabName) {
-    ['monitoring', 'jadwal', 'rekap-nilai', 'upload-soal', 'siswa', 'bank-soal', 'mapel'].forEach(t => {
+    ['monitoring', 'jadwal', 'rekap-nilai', 'upload-soal', 'siswa', 'bank-soal', 'mapel', 'guru'].forEach(t => {
       document.getElementById(`tab-${t}`)?.classList.add('hidden');
     });
     document.getElementById(`tab-${tabName}`)?.classList.remove('hidden');
