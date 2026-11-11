@@ -297,7 +297,9 @@ const SoalModule = {
         const imgHtml = `<br><img src="${publicUrl}" alt="Gambar Soal" class="my-2 rounded border max-h-48">`;
         targetElem.value = targetElem.value.includes('<img') ? targetElem.value.replace(/<img[^>]*>/g, imgHtml) : targetElem.value + imgHtml;
       } else {
-        targetElem.value += ` <img src="${publicUrl}" alt="Gambar Opsi" class="inline-block max-h-24 my-1 rounded border">`;
+        // Sisipkan gambar ke teks opsi jawaban
+        const imgHtml = `<br><img src="${publicUrl}" alt="Gambar Opsi" class="inline-block max-h-24 my-1 rounded border">`;
+        targetElem.value += imgHtml;
       }
 
       alert("Gambar berhasil dikompres dan diunggah ke Supabase Bucket ('soal-images')!");
