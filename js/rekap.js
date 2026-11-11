@@ -148,11 +148,19 @@ const RekapModule = {
     });
   },
 
-  printHasilUjian() {
+   printHasilUjian() {
     const filterKelas = document.getElementById('rekap-filter-kelas').value;
     const filterMapel = document.getElementById('rekap-filter-mapel').value;
-    document.getElementById('print-meta-info').textContent = `Kelas: ${filterKelas} | Mata Pelajaran: ${filterMapel}`;
+    
+    // Update Judul & Informasi Meta Cetak Nilai
+    const titleElem = document.getElementById('print-doc-title');
+    if (titleElem) {
+      titleElem.textContent = "DAFTAR HASIL PENILAIAN SUMATIF SEMESTER GANJIL T.A. 2026/2027";
+    }
+    
+    document.getElementById('print-meta-info').textContent = `Mata Pelajaran: ${filterMapel} | Kelas: ${filterKelas}`;
     document.getElementById('print-date').textContent = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+    
     window.print();
   }
 };
