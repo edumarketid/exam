@@ -136,12 +136,59 @@ const DB = {
     const client = await this.getClient();
     if (!client) return [];
     try {
-      const { data, error } = await client.from('hasil_ujian').select('*').order('waktu_selesai', { ascending: false });
+      const { data, error } = await client.from('hasil_ujian').select('*');
       if (error) return [];
-      return data || [];
+      
+      // Normalisasi Kolom Hasil Ujian
+      return (data || []).map(h => ({
+        id: h.id || h.ID,
+        ID_SISWA: h.ID_SISWA || h.id_siswa || h.nisn || '-',
+        nama_siswa: h.nama_siswa || h.NAMA_SISWA || h.nama || '-',
+        kelas: h.kelas || h.KELAS || '-',
+        mapel: h.mapel || h.MAPEL || '-',
+        nilai: h.nilai !== undefined ? h.nilai : (h.NILAI !== undefined ? h.NILAI : 0),
+        jumlah_pelanggaran: h.jumlah_pelanggaran !== undefined ? h.jumlah_pelanggaran : 0,
+        status_selesai: h.status_selesai || h.STATUS_SELESAI || 'SELESAI',
+        waktu_selesai: h.waktu_selesai || h.WAKTU_SELESAI || new Date().toISOString()
+      }));
     } catch (err) {
       return [];
     }
+  },
+
+  async insertHasilUjian(payload) {
+    const client = await this.getClient();
+    if (!client) throw new Error("Database tidak terhubung.");
+
+    // Coba simpan menggunakan berbagai opsi variasi kolom agar kompatibel dengan tabel Supabase
+    const dataToInsert = {
+      ID_SISWA: String(payload.id_siswa),
+      id_siswa: String(payload.id_siswa),
+      nama_siswa: payload.nama_siswa,
+      kelas: payload.kelas,
+      mapel: payload.mapel,
+      nilai: payload.nilai,
+      jumlah_pelanggaran: payload.jumlah_pelanggaran,
+      status_selesai: payload.status_selesai,
+      waktu_selesai: payload.waktu_selesai
+    };
+
+    const { data, error } = await client.from('hasil_ujian').insert([dataToInsert]);
+    if (error) {
+      // Fallback jika ada kolom spesifik yang ditolak
+      console.warn("[DB Helper] Retry insert hasil_ujian dengan fallback minimal...", error.message);
+      const fallbackPayload = {
+        ID_SISWA: String(payload.id_siswa),
+        mapel: payload.mapel,
+        nilai: payload.nilai,
+        jumlah_pelanggaran: payload.jumlah_pelanggaran,
+        status_selesai: payload.status_selesai
+      };
+      const { data: dataFb, error: errFb } = await client.from('hasil_ujian').insert([fallbackPayload]);
+      if (errFb) throw errFb;
+      return dataFb;
+    }
+    return data;
   }
 };
 
