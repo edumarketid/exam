@@ -33,7 +33,7 @@ const ExamModule = {
     }
 
     try {
-      // 1. Periksa Jadwal Ujian Aktif di Supabase untuk Kelas Siswa Ini
+      // 1. Periksa Jadwal Ujian Aktif di Supabase
       const activeSchedule = await DB.fetchActiveScheduleForStudent(student.kelas);
 
       if (!activeSchedule) {
@@ -44,7 +44,7 @@ const ExamModule = {
 
       console.log("[ExamModule] Jadwal Ujian Aktif Ditemukan:", activeSchedule);
 
-      // 2. Ambil Bank Soal Khusus untuk Mapel & Kelas yang Terjadwal
+      // 2. Ambil Bank Soal Khusus untuk Mapel & Kelas Terjadwal
       const client = await DB.getClient();
       if (!client) throw new Error("Koneksi database tidak tersedia.");
 
@@ -64,11 +64,13 @@ const ExamModule = {
         kunci_jawaban: q.kunci_jawaban || q.KUNCI_JAWABAN || 'A'
       }));
 
-      // Filter presisi: Hanya soal dengan Mapel TERJADWAL dan Kelas SISWA
-      const filtered = allQuestions.filter(q => 
-        String(q.mapel).trim().toUpperCase() === String(activeSchedule.mapel).trim().toUpperCase() &&
-        String(q.kelas).trim().toUpperCase() === String(student.kelas).trim().toUpperCase()
-      );
+      // Check ketersediaan kelas siswa di dalam daftar kelas master soal
+      const filtered = allQuestions.filter(q => {
+        const matchMapel = String(q.mapel).trim().toUpperCase() === String(activeSchedule.mapel).trim().toUpperCase();
+        const listOfKelasTarget = String(q.kelas).toUpperCase().split(',').map(k => k.trim());
+        const matchKelas = listOfKelasTarget.includes(String(student.kelas).trim().toUpperCase());
+        return matchMapel && matchKelas;
+      });
 
       if (filtered.length === 0) {
         alert(`Jadwal Ujian "${activeSchedule.mapel}" terdeteksi AKTIF, namun berkas naskah soal belum diunggah oleh guru mapel.\n\nSilakan hubungi pengawas.`);
@@ -99,7 +101,6 @@ const ExamModule = {
         console.warn("Fullscreen tidak dapat diaktifkan otomatis.");
       }
 
-      // Jalankan Timer Sesuai Durasi Jadwal
       const durasiUjian = parseInt(activeSchedule.durasi) || 45;
       this.startTimer(durasiUjian);
 
