@@ -5,10 +5,10 @@ const RekapModule = {
       const siswaList = State.siswaList && State.siswaList.length > 0 ? State.siswaList : await DB.fetchSiswa();
 
       return (rawHasil || []).map(h => {
-        // Ambil ID siswa dari berbagai variasi kolom Supabase
+        // Normalisasi ID siswa dari berbagai variasi nama kolom Supabase
         const idSiswaStr = String(h.id_siswa || h.ID_SISWA || h.nisn || h.NISN || '').trim();
         
-        // Cari data profil siswa asli dari tabel siswa untuk mendapatkan nama & kelas presisi
+        // Match profil siswa dari State.siswaList agar nama & kelas terjamin 100% presisi
         const profilSiswa = siswaList.find(s => 
           String(s.id_siswa).trim() === idSiswaStr || 
           String(s.nisn).trim() === idSiswaStr ||
@@ -93,7 +93,6 @@ const RekapModule = {
         return;
       }
 
-      // Menyusun opsi filter kelas dan mapel secara dinamis
       let htmlControls = `
         <div class="flex flex-wrap items-center justify-between gap-3 mb-4 p-3 bg-slate-50 rounded-xl border">
           <div class="flex gap-2">
@@ -223,9 +222,11 @@ const RekapModule = {
       }
     } catch (e) {}
 
-    // Membuat dokumen window print khusus dengan Kop Surat resmi sekolah
-    const printWindow = window.open('', '_blank');
+    // URL Gambar Kop Sekolah dari Supabase Bucket 'media-sekolah'
+    const kopUrl = "https://nbwpnhshhpfqtmbwewgk.supabase.co/storage/v1/object/public/media-sekolah/kop_sekolah.png";
     const tglSekarang = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+
+    const printWindow = window.open('', '_blank');
 
     let printHtml = `
       <!DOCTYPE html>
@@ -235,17 +236,24 @@ const RekapModule = {
         <title>REKAPITULASI HASIL UJIAN CBT - SMKN 1 WAKATOBI</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <style>
-          @page { size: A4 portrait; margin: 12mm; }
+          @page { size: A4 portrait; margin: 10mm; }
           body { font-family: 'Inter', sans-serif; color: #1e293b; }
         </style>
       </head>
       <body class="p-4 bg-white" onload="window.print()">
-        <!-- KOP SURAT RESMI SEKOLAH -->
-        <div class="border-b-4 border-double border-slate-800 pb-3 mb-4 text-center">
-          <h1 class="font-extrabold text-base uppercase text-slate-900 tracking-wide">PEMERINTAH PROVINSI SULAWESI TENGGARA</h1>
-          <h2 class="font-bold text-lg uppercase text-slate-900">DINAS PENDIDIKAN DAN KEBUDAYAAN</h2>
-          <h3 class="font-black text-xl uppercase text-blue-900">SMK NEGERI 1 WAKATOBI</h3>
-          <p class="text-[11px] text-slate-600 italic mt-0.5">Desa Numana, Kec. Wangi-Wangi Selatan, Kab. Wakatobi, Sulawesi Tenggara</p>
+        
+        <!-- KOP SURAT GAMBAR DARI SUPABASE BUCKET 'media-sekolah' -->
+        <div class="mb-4 border-b-4 border-double border-slate-800 pb-2 text-center">
+          <img src="${kopUrl}" alt="Kop Surat SMKN 1 Wakatobi" class="w-full max-h-32 object-contain mx-auto" 
+               onerror="this.style.display='none'; document.getElementById('fallback-header').style.display='block';">
+          
+          <!-- FALLBACK JIKA GAMBAR BELUM DIUNGGAH KESISI SUPABASE BUCKET -->
+          <div id="fallback-header" class="hidden text-center">
+            <h1 class="font-extrabold text-sm uppercase text-slate-900 tracking-wide">PEMERINTAH PROVINSI SULAWESI TENGGARA</h1>
+            <h2 class="font-bold text-base uppercase text-slate-900">DINAS PENDIDIKAN DAN KEBUDAYAAN</h2>
+            <h3 class="font-black text-lg uppercase text-blue-900">SMK NEGERI 1 WAKATOBI</h3>
+            <p class="text-[10px] text-slate-600 italic">Desa Numana, Kec. Wangi-Wangi Selatan, Kab. Wakatobi, Sulawesi Tenggara</p>
+          </div>
         </div>
 
         <div class="text-center mb-4">
@@ -256,7 +264,7 @@ const RekapModule = {
           </p>
         </div>
 
-        <!-- TABEL HASIL DENGAN NOMOR DAN KELAS LENGKAP -->
+        <!-- TABEL HASIL UJIAN -->
         <table class="w-full text-left border-collapse border border-slate-300 text-xs mb-6">
           <thead>
             <tr class="bg-slate-100 text-[11px] font-bold text-slate-800 uppercase border-b border-slate-300">
@@ -288,7 +296,7 @@ const RekapModule = {
           </tbody>
         </table>
 
-        <!-- TANDA TANGAN RESMI -->
+        <!-- KOLOM TANDA TANGAN -->
         <div class="flex justify-between items-end text-xs pt-4">
           <div class="text-center w-56">
             <p>Mengetahui,</p>
