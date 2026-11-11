@@ -12,34 +12,26 @@ const DB = {
       let attempts = 0;
       const interval = setInterval(() => {
         attempts++;
-
         if (window.supabaseClient) {
           this.client = window.supabaseClient;
           clearInterval(interval);
           resolve(this.client);
           return;
         }
-
         if (typeof supabase !== 'undefined' && typeof CONFIG !== 'undefined') {
-          const url = CONFIG.SUPABASE_URL;
-          const key = CONFIG.SUPABASE_KEY || CONFIG.SUPABASE_ANON_KEY;
-
-          if (url && key) {
+          if (CONFIG.SUPABASE_URL && CONFIG.SUPABASE_KEY) {
             try {
-              window.supabaseClient = supabase.createClient(url, key);
+              window.supabaseClient = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
               this.client = window.supabaseClient;
-              console.log("[DB Helper] Klien Supabase Siap.");
             } catch (e) {
-              console.error("[DB Helper] Inisialisasi Klien Gagal:", e.message);
+              console.error("[DB] Error Client:", e.message);
             }
           }
           clearInterval(interval);
           resolve(this.client);
           return;
         }
-
         if (attempts >= 20) {
-          console.warn("[DB Helper] Timeout menunggu SDK Supabase / CONFIG.");
           clearInterval(interval);
           resolve(null);
         }
@@ -52,13 +44,9 @@ const DB = {
     if (!client) return [];
     try {
       const { data, error } = await client.from('mapel').select('*').order('id', { ascending: true });
-      if (error) {
-        console.warn("[DB Warn] Tabel mapel error/kosong:", error.message);
-        return [];
-      }
+      if (error) return [];
       return data ? data.map(m => m.nama_mapel || m.mapel || m.nama || Object.values(m)[1]).filter(Boolean) : [];
     } catch (err) {
-      console.error("[DB Error] fetchMapel:", err.message);
       return [];
     }
   },
@@ -83,19 +71,12 @@ const DB = {
     const client = await this.getClient();
     if (!client) return [];
     try {
-      const { data: dataSiswa, error: errSiswa } = await client.from('siswa').select('*');
-      if (errSiswa) {
-        console.warn("[DB Warn] Tabel siswa error/kosong:", errSiswa.message);
-        return [];
-      }
-      
+      const { data: dataSiswa } = await client.from('siswa').select('*');
       let dataAkun = [];
       try {
-        const { data } = await client.from('akun_siswa').select('*');
-        dataAkun = data || [];
-      } catch (e) {
-        console.warn("[DB Warn] Tabel akun_siswa belum ada/akses dibatasi.");
-      }
+        const { data: dataA } = await client.from('akun_siswa').select('*');
+        dataAkun = dataA || [];
+      } catch (e) {}
 
       return (dataSiswa || []).map(s => {
         const akun = dataAkun.find(a => a.ID_SISWA === (s.ID_SISWA || s.id_siswa));
@@ -111,7 +92,6 @@ const DB = {
         };
       });
     } catch (err) {
-      console.error("[DB Error] fetchSiswa:", err.message);
       return [];
     }
   },
@@ -121,13 +101,9 @@ const DB = {
     if (!client) return [];
     try {
       const { data, error } = await client.from('bank_soal').select('*').order('id', { ascending: true });
-      if (error) {
-        console.warn("[DB Warn] Tabel bank_soal error/kosong:", error.message);
-        return [];
-      }
+      if (error) return [];
       return data || [];
     } catch (err) {
-      console.error("[DB Error] fetchBankSoal:", err.message);
       return [];
     }
   },
@@ -137,13 +113,9 @@ const DB = {
     if (!client) return [];
     try {
       const { data, error } = await client.from('jadwal_ujian').select('*');
-      if (error) {
-        console.warn("[DB Warn] Tabel jadwal_ujian error/kosong:", error.message);
-        return [];
-      }
+      if (error) return [];
       return data || [];
     } catch (err) {
-      console.error("[DB Error] fetchSchedules:", err.message);
       return [];
     }
   },
@@ -153,14 +125,12 @@ const DB = {
     if (!client) return [];
     try {
       const { data, error } = await client.from('hasil_ujian').select('*').order('waktu_selesai', { ascending: false });
-      if (error) {
-        console.warn("[DB Warn] Tabel hasil_ujian error/kosong:", error.message);
-        return [];
-      }
+      if (error) return [];
       return data || [];
     } catch (err) {
-      console.error("[DB Error] fetchHasilUjian:", err.message);
       return [];
     }
   }
 };
+
+window.DB = DB;
