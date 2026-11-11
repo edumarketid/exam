@@ -39,6 +39,38 @@ const DB = {
     });
   },
 
+  // --- MODUL ADMIN / PROKTOR ---
+  async fetchAdmin() {
+    const client = await this.getClient();
+    if (!client) return [];
+    try {
+      const { data, error } = await client.from('admin').select('*').order('id_admin', { ascending: true });
+      if (error) {
+        console.warn("[DB Helper] Gagal fetch tabel admin:", error.message);
+        return [];
+      }
+      return (data || []).map(a => ({
+        id_admin: a.id_admin || a.ID_ADMIN || a.id,
+        username: String(a.username || a.USERNAME || 'admin').trim(),
+        password: String(a.password || a.PASSWORD || 'admin123').trim(),
+        nama_admin: a.nama_admin || a.NAMA_ADMIN || 'Administrator Proktor',
+        no_hp: String(a.no_hp || a.NO_HP || '-').trim(),
+        status: a.status || a.STATUS || 'Aktif'
+      }));
+    } catch (err) {
+      console.error("[DB Helper] Error fetchAdmin:", err.message);
+      return [];
+    }
+  },
+
+  async insertAdmin(payload) {
+    const client = await this.getClient();
+    if (!client) throw new Error("Database tidak terhubung.");
+    const { data, error } = await client.from('admin').insert([payload]);
+    if (error) throw error;
+    return data;
+  },
+
   // --- MODUL MAPEL ---
   async fetchMapel() {
     const client = await this.getClient();
@@ -56,18 +88,13 @@ const DB = {
     const client = await this.getClient();
     if (!client) throw new Error("Database tidak terhubung.");
 
-    // 1. Coba Insert Standar (Biarkan Supabase Menggenerate ID)
     let { data, error } = await client.from('mapel').insert([{ nama_mapel: namaMapel }]);
-    
-    // 2. Jika bentrok karena mapel_pkey (Duplicate Primary Key), hitung ID tertinggi secara manual
     if (error && error.code === '23505') {
-      console.warn("[DB Helper] Terdeteksi bentrok mapel_pkey. Menggunakan kalkulasi ID manual...");
       const { data: allMapel } = await client.from('mapel').select('id').order('id', { ascending: false }).limit(1);
       const maxId = (allMapel && allMapel.length > 0) ? (parseInt(allMapel[0].id) || 0) + 1 : 1;
 
       const resManual = await client.from('mapel').insert([{ id: maxId, nama_mapel: namaMapel }]);
       if (resManual.error) {
-        // Coba lagi dengan nama kolom 'mapel'
         const resManual2 = await client.from('mapel').insert([{ id: maxId, mapel: namaMapel }]);
         if (resManual2.error) throw resManual2.error;
         return resManual2.data;
@@ -75,9 +102,7 @@ const DB = {
       return resManual.data;
     }
 
-    // 3. Fallback jika nama kolom di Supabase adalah 'mapel' atau 'NAMA_MAPEL'
     if (error) {
-      console.warn("[DB Helper] Fallback insert mapel dengan kolom 'mapel'...", error.message);
       const res2 = await client.from('mapel').insert([{ mapel: namaMapel }]);
       if (res2.error) {
         const res3 = await client.from('mapel').insert([{ NAMA_MAPEL: namaMapel }]);
@@ -232,8 +257,6 @@ const DB = {
     const hours = String(now.getHours()).padStart(2, '0');
     const minutes = String(now.getMinutes()).padStart(2, '0');
     const currentTimeStr = `${hours}:${minutes}`;
-
-    console.log(`[DB Check Jadwal] Kelas: ${kelasSiswa} | Tgl Sekarang: ${currentDateStr} | Jam Sekarang: ${currentTimeStr}`);
 
     const activeSchedule = schedules.find(j => {
       const listOfKelasTarget = String(j.kelas).toUpperCase().split(',').map(k => k.trim());
