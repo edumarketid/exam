@@ -48,7 +48,7 @@ const SoalModule = {
     if (!file) return;
 
     logBox.classList.remove('hidden');
-    logBox.textContent = `[INFO] Membaca file: ${file.name}...\n[INFO] Kelas Target: ${selectedKelasList.join(', ')}\n`;
+    logBox.textContent = `[INFO] Membaca file: ${file.name}...\n[INFO] Kelas Target (${selectedKelasList.length} kelas): ${selectedKelasList.join(', ')}\n`;
 
     const reader = new FileReader();
     reader.onload = async (event) => {
@@ -62,25 +62,26 @@ const SoalModule = {
         return;
       }
 
-      const parsedQuestions = [];
-      selectedKelasList.forEach((kelasTarget) => {
-        soalElements.forEach((el) => {
-          const kunci = el.getAttribute('data-kunci') || 'A';
-          const kontenEl = el.querySelector('.soal-konten');
-          const soalHtml = kontenEl ? kontenEl.innerHTML.trim() : el.innerHTML.trim();
-          const opsiItems = el.querySelectorAll('.opsi-jawaban li');
+      // Gabungkan seluruh kelas target yang dicentang menjadi 1 string pisahan koma
+      const combinedKelasString = selectedKelasList.join(', ');
 
-          parsedQuestions.push({
-            mapel: mapel,
-            kelas: kelasTarget,
-            soal_html: soalHtml,
-            opsi_a: opsiItems[0] ? opsiItems[0].innerHTML.trim() : '',
-            opsi_b: opsiItems[1] ? opsiItems[1].innerHTML.trim() : '',
-            opsi_c: opsiItems[2] ? opsiItems[2].innerHTML.trim() : '',
-            opsi_d: opsiItems[3] ? opsiItems[3].innerHTML.trim() : '',
-            opsi_e: opsiItems[4] ? opsiItems[4].innerHTML.trim() : '',
-            kunci_jawaban: kunci.toUpperCase()
-          });
+      const parsedQuestions = [];
+      soalElements.forEach((el) => {
+        const kunci = el.getAttribute('data-kunci') || 'A';
+        const kontenEl = el.querySelector('.soal-konten');
+        const soalHtml = kontenEl ? kontenEl.innerHTML.trim() : el.innerHTML.trim();
+        const opsiItems = el.querySelectorAll('.opsi-jawaban li');
+
+        parsedQuestions.push({
+          mapel: mapel,
+          kelas: combinedKelasString, // Disimpan sebagai 1 paket master untuk banyak kelas
+          soal_html: soalHtml,
+          opsi_a: opsiItems[0] ? opsiItems[0].innerHTML.trim() : '',
+          opsi_b: opsiItems[1] ? opsiItems[1].innerHTML.trim() : '',
+          opsi_c: opsiItems[2] ? opsiItems[2].innerHTML.trim() : '',
+          opsi_d: opsiItems[3] ? opsiItems[3].innerHTML.trim() : '',
+          opsi_e: opsiItems[4] ? opsiItems[4].innerHTML.trim() : '',
+          kunci_jawaban: kunci.toUpperCase()
         });
       });
 
@@ -88,7 +89,7 @@ const SoalModule = {
       if (client) {
         const { error } = await client.from('bank_soal').insert(parsedQuestions);
         if (!error) {
-          alert(`Berhasil mengunggah ${soalElements.length} butir soal untuk ${selectedKelasList.length} kelas target!\n\nTotal ${parsedQuestions.length} baris data berhasil disimpan ke Supabase.`);
+          alert(`BERHASIL UNGGAH NASKAH MASTER!\n\nSebanyak ${parsedQuestions.length} butir soal berhasil disimpan untuk ${selectedKelasList.length} kelas target (${combinedKelasString}).\n\nEdit soal cukup dilakukan 1 kali saja!`);
           await this.loadAndRender();
         } else {
           alert(`Gagal menyimpan ke Supabase: ${error.message}`);
@@ -112,8 +113,11 @@ const SoalModule = {
     container.innerHTML = '';
     let filtered = State.questions || [];
 
+    // Filter Fleksibel: Memeriksa apakah kelas target mengandung string filter
     if (filterKelas !== 'ALL') {
-      filtered = filtered.filter(q => String(q.kelas).trim().toUpperCase() === filterKelas.toUpperCase());
+      filtered = filtered.filter(q => 
+        String(q.kelas).toUpperCase().split(',').map(k => k.trim()).includes(filterKelas.toUpperCase())
+      );
     }
     if (filterMapel !== 'ALL') {
       filtered = filtered.filter(q => String(q.mapel).trim().toUpperCase() === filterMapel.toUpperCase());
@@ -128,7 +132,7 @@ const SoalModule = {
       return;
     }
 
-    // PENGELOMPOKAN TERPISAH BERDASARKAN MAPEL DAN KELAS TARGET (Mapel + "_" + Kelas)
+    // Kelompokkan naskah master berdasarkan kombinasi Mapel + Paket Kelas
     const groupedByMapelAndKelas = {};
     filtered.forEach(q => {
       const groupKey = `${q.mapel}___${q.kelas}`;
@@ -140,7 +144,7 @@ const SoalModule = {
       const groupQuestions = groupedByMapelAndKelas[groupKey];
       const [mapelName, kelasName] = groupKey.split('___');
       
-      const isOpen = State.openAccordionMapel[groupKey] !== false; // Default terbuka saat dimuat
+      const isOpen = State.openAccordionMapel[groupKey] !== false;
 
       const groupCard = document.createElement('div');
       groupCard.className = "border rounded-lg bg-white overflow-hidden shadow-sm transition mb-3";
@@ -154,14 +158,14 @@ const SoalModule = {
             <div>
               <h4 class="font-bold text-sm text-gray-800">${mapelName}</h4>
               <p class="text-[11px] text-gray-600 mt-0.5">
-                Kelas Target: <strong class="text-blue-800 font-bold bg-blue-100 px-2 py-0.5 rounded">${kelasName}</strong> | Total: <strong class="text-emerald-700 font-bold">${groupQuestions.length} Butir Soal</strong>
+                Target Kelas (${kelasName.split(',').length} Kelas): <strong class="text-blue-800 font-bold bg-blue-100 px-2 py-0.5 rounded">${kelasName}</strong> | Total: <strong class="text-emerald-700 font-bold">${groupQuestions.length} Butir Master Soal</strong>
               </p>
             </div>
           </div>
           
           <div class="flex items-center gap-2">
             <button onclick="event.stopPropagation(); SoalModule.deleteSoalByGroup('${mapelName.replace(/'/g, "\\'")}', '${kelasName.replace(/'/g, "\\'")}')" class="bg-red-600 hover:bg-red-700 text-white text-[11px] font-bold px-3 py-1.5 rounded shadow transition flex items-center gap-1">
-              🗑️ Hapus Soal Kelas Ini
+              🗑️ Hapus Paket Naskah Ini
             </button>
             <span onclick="SoalModule.toggleAccordionGroup('${groupKey.replace(/'/g, "\\'")}')" class="cursor-pointer text-xs font-semibold text-blue-600 bg-blue-100 px-2.5 py-1.5 rounded-full hover:bg-blue-200">
               ${isOpen ? 'Tutup' : 'Buka'}
@@ -177,12 +181,12 @@ const SoalModule = {
                 <div class="border p-3.5 rounded-lg bg-gray-50 space-y-3 text-xs">
                   <div class="flex justify-between items-start gap-4 border-b pb-2">
                     <div>
-                      <span class="font-bold text-blue-800">[Kelas: ${q.kelas}]</span>
+                      <span class="font-bold text-blue-800">[Akses Kelas: ${q.kelas}]</span>
                       <span class="ml-2 font-bold text-emerald-800">Kunci Jawaban: ${q.kunci_jawaban}</span>
                     </div>
                     <div class="flex gap-2">
                       <button onclick="SoalModule.openEditModal(${qId})" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-2.5 py-1 rounded text-[10px] flex items-center gap-1 shadow">
-                        ✏️ Edit Soal & Gambar
+                        ✏️ Edit Soal & Gambar (Cukup 1x Edit)
                       </button>
                       <button onclick="SoalModule.deleteSoal(${qId})" class="bg-red-500 hover:bg-red-600 text-white font-bold px-2.5 py-1 rounded text-[10px] shadow">
                         Hapus Soal Ini
@@ -333,7 +337,7 @@ const SoalModule = {
 
         if (error) throw error;
 
-        alert("Perubahan teks & gambar soal berhasil diperbarui di Supabase!");
+        alert("Perubahan teks & gambar soal berhasil diperbarui di Supabase (Otomatis berlaku untuk seluruh kelas target)!");
         await this.loadAndRender();
         this.closeEditModal();
       } catch (err) {
@@ -344,7 +348,7 @@ const SoalModule = {
 
   async deleteSoalByGroup(mapelName, kelasName) {
     const countGroup = State.questions.filter(q => q.mapel === mapelName && q.kelas === kelasName).length;
-    if (!confirm(`HAPUS SOAL KELAS INI?\n\nApakah Anda yakin ingin menghapus SELURUH ${countGroup} butir soal untuk:\nMata Pelajaran: "${mapelName}"\nKelas Target: "${kelasName}"?`)) return;
+    if (!confirm(`HAPUS PAKET NASKAH SOAL?\n\nApakah Anda yakin ingin menghapus SELURUH ${countGroup} butir master soal untuk:\nMata Pelajaran: "${mapelName}"\nKelas Target: "${kelasName}"?`)) return;
 
     const client = await DB.getClient();
     if (client) {
@@ -355,7 +359,7 @@ const SoalModule = {
           .eq('kelas', kelasName);
           
         if (error) throw error;
-        alert(`Berhasil menghapus seluruh soal "${mapelName}" [${kelasName}] dari Supabase.`);
+        alert(`Berhasil menghapus seluruh paket naskah soal "${mapelName}" dari Supabase.`);
         await this.loadAndRender();
       } catch (err) {
         alert(`Gagal menghapus soal: ${err.message}`);
@@ -382,7 +386,11 @@ const SoalModule = {
     container.innerHTML = '';
     let filtered = State.questions || [];
 
-    if (filterKelas !== 'ALL') filtered = filtered.filter(q => q.kelas === filterKelas);
+    if (filterKelas !== 'ALL') {
+      filtered = filtered.filter(q => 
+        String(q.kelas).toUpperCase().split(',').map(k => k.trim()).includes(filterKelas.toUpperCase())
+      );
+    }
     if (filterMapel !== 'ALL') filtered = filtered.filter(q => q.mapel === filterMapel);
 
     document.getElementById('print-soal-meta').textContent = `Mata Pelajaran: ${filterMapel} | Kelas Target: ${filterKelas} | Alokasi Waktu: 45 Menit`;
