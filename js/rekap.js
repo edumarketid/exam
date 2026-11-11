@@ -119,6 +119,22 @@ const RekapModule = {
     document.getElementById('print-date').textContent = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
     window.print();
   }
+  async exportPDF() {
+    const mapelFilter = document.getElementById('rekap-filter-mapel')?.value || 'ALL';
+    const kelasFilter = document.getElementById('rekap-filter-kelas')?.value || 'ALL';
+    
+    // Cari data guru pengampu berdasarkan mapel
+    const listGuru = await DB.fetchGuru();
+    const guruPengampu = listGuru.find(g => 
+      String(g.mapel_diampu).trim().toUpperCase() === String(mapelFilter).trim().toUpperCase()
+    ) || { nama_guru: ' Guru Mata Pelajaran', nip: '-' };
+
+    // Tampilkan di Footer Cetak PDF
+    document.getElementById('print-ttd-guru').textContent = guruPengampu.nama_guru;
+    document.getElementById('print-nip-guru').textContent = `NIP. ${guruPengampu.nip}`;
+    
+    window.print();
+  }
 };
 
 window.RekapModule = RekapModule;
