@@ -9,18 +9,40 @@ const AuthModule = {
       return;
     }
 
-    console.log(`[AuthModule] Menguji login untuk input: "${usernameInput}"`);
+    console.log(`[AuthModule] Menguji login untuk username: "${usernameInput}"`);
 
-    // 1. CEK AKUN ADMIN / PROKTOR
+    // 1. CEK AKUN ADMIN / PROKTOR (TABEL DYNAMIC SUPABASE & FALLBACK CONFIG)
+    try {
+      const listAdmin = await DB.fetchAdmin();
+      const foundAdmin = listAdmin.find(a => 
+        a.username === usernameInput && a.password === passwordInput
+      );
+
+      if (foundAdmin) {
+        if (String(foundAdmin.status).toLowerCase() !== 'aktif') {
+          alert("Akun Admin ini berstatus Non-Aktif.");
+          return;
+        }
+        State.currentUser = { ...foundAdmin, role: 'admin', nama: foundAdmin.nama_admin };
+        alert(`Selamat Datang Administrator: ${foundAdmin.nama_admin}`);
+        App.showScreen('admin');
+        App.switchAdminTab('monitoring');
+        return;
+      }
+    } catch (err) {
+      console.warn("[AuthModule] Gagal mengecek tabel admin, mencoba config fallback...", err.message);
+    }
+
+    // Fallback Config Admin jika Database tidak memberikan respon
     if (typeof CONFIG !== 'undefined' && usernameInput === CONFIG.ADMIN_USER && passwordInput === CONFIG.ADMIN_PASS) {
       State.currentUser = { role: 'admin', nama: 'Administrator Proktor' };
-      alert("Selamat Datang, Administrator!");
+      alert("Selamat Datang, Administrator Proktor!");
       App.showScreen('admin');
       App.switchAdminTab('monitoring');
       return;
     }
 
-    // 2. CEK AKUN GURU (NIP / No HP)
+    // 2. CEK AKUN GURU (TABEL GURU SUPABASE)
     try {
       const listGuru = await DB.fetchGuru();
       const foundGuru = listGuru.find(g => 
@@ -42,7 +64,7 @@ const AuthModule = {
       console.error("[AuthModule] Error saat verifikasi akun guru:", err.message);
     }
 
-    // 3. CEK AKUN SISWA (NISN / Username)
+    // 3. CEK AKUN SISWA (TABEL SISWA SUPABASE)
     try {
       const listSiswa = await DB.fetchSiswa();
       const foundSiswa = listSiswa.find(s => 
