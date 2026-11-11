@@ -98,8 +98,8 @@ const SoalModule = {
     reader.readAsText(file);
   },
 
-  toggleAccordionMapel(mapelKey) {
-    State.openAccordionMapel[mapelKey] = !State.openAccordionMapel[mapelKey];
+  toggleAccordionGroup(groupKey) {
+    State.openAccordionMapel[groupKey] = !State.openAccordionMapel[groupKey];
     this.renderBankSoalList();
   },
 
@@ -128,39 +128,42 @@ const SoalModule = {
       return;
     }
 
-    const groupedByMapel = {};
+    // PENGELOMPOKAN TERPISAH BERDASARKAN MAPEL DAN KELAS TARGET (Mapel + "_" + Kelas)
+    const groupedByMapelAndKelas = {};
     filtered.forEach(q => {
-      if (!groupedByMapel[q.mapel]) groupedByMapel[q.mapel] = [];
-      groupedByMapel[q.mapel].push(q);
+      const groupKey = `${q.mapel}___${q.kelas}`;
+      if (!groupedByMapelAndKelas[groupKey]) groupedByMapelAndKelas[groupKey] = [];
+      groupedByMapelAndKelas[groupKey].push(q);
     });
 
-    Object.keys(groupedByMapel).forEach((mapelName) => {
-      const mapelQuestions = groupedByMapel[mapelName];
-      const isOpen = State.openAccordionMapel[mapelName] !== false;
-      const daftarKelasUnique = [...new Set(mapelQuestions.map(q => q.kelas))].join(', ');
+    Object.keys(groupedByMapelAndKelas).forEach((groupKey) => {
+      const groupQuestions = groupedByMapelAndKelas[groupKey];
+      const [mapelName, kelasName] = groupKey.split('___');
+      
+      const isOpen = State.openAccordionMapel[groupKey] !== false; // Default terbuka saat dimuat
 
-      const mapelCard = document.createElement('div');
-      mapelCard.className = "border rounded-lg bg-white overflow-hidden shadow-sm transition mb-3";
+      const groupCard = document.createElement('div');
+      groupCard.className = "border rounded-lg bg-white overflow-hidden shadow-sm transition mb-3";
 
-      mapelCard.innerHTML = `
+      groupCard.innerHTML = `
         <div class="p-4 bg-gray-50 hover:bg-blue-50 flex justify-between items-center transition border-b">
-          <div onclick="SoalModule.toggleAccordionMapel('${mapelName.replace(/'/g, "\\'")}')" class="flex items-center gap-3 cursor-pointer flex-grow">
-            <div class="w-8 h-8 rounded bg-blue-600 text-white font-bold flex items-center justify-center text-xs">
+          <div onclick="SoalModule.toggleAccordionGroup('${groupKey.replace(/'/g, "\\'")}')" class="flex items-center gap-3 cursor-pointer flex-grow">
+            <div class="w-8 h-8 rounded bg-blue-600 text-white font-bold flex items-center justify-center text-xs shadow">
               ${isOpen ? '▼' : '►'}
             </div>
             <div>
               <h4 class="font-bold text-sm text-gray-800">${mapelName}</h4>
-              <p class="text-[11px] text-gray-500 mt-0.5">
-                Target Kelas: <strong class="text-blue-800">${daftarKelasUnique}</strong> | Total: <strong class="text-emerald-700">${mapelQuestions.length} Butir Soal</strong>
+              <p class="text-[11px] text-gray-600 mt-0.5">
+                Kelas Target: <strong class="text-blue-800 font-bold bg-blue-100 px-2 py-0.5 rounded">${kelasName}</strong> | Total: <strong class="text-emerald-700 font-bold">${groupQuestions.length} Butir Soal</strong>
               </p>
             </div>
           </div>
           
           <div class="flex items-center gap-2">
-            <button onclick="event.stopPropagation(); SoalModule.deleteSoalByMapel('${mapelName.replace(/'/g, "\\'")}')" class="bg-red-600 hover:bg-red-700 text-white text-[11px] font-bold px-3 py-1.5 rounded shadow transition flex items-center gap-1">
-              🗑️ Hapus Soal Mapel Ini
+            <button onclick="event.stopPropagation(); SoalModule.deleteSoalByGroup('${mapelName.replace(/'/g, "\\'")}', '${kelasName.replace(/'/g, "\\'")}')" class="bg-red-600 hover:bg-red-700 text-white text-[11px] font-bold px-3 py-1.5 rounded shadow transition flex items-center gap-1">
+              🗑️ Hapus Soal Kelas Ini
             </button>
-            <span onclick="SoalModule.toggleAccordionMapel('${mapelName.replace(/'/g, "\\'")}')" class="cursor-pointer text-xs font-semibold text-blue-600 bg-blue-100 px-2.5 py-1.5 rounded-full hover:bg-blue-200">
+            <span onclick="SoalModule.toggleAccordionGroup('${groupKey.replace(/'/g, "\\'")}')" class="cursor-pointer text-xs font-semibold text-blue-600 bg-blue-100 px-2.5 py-1.5 rounded-full hover:bg-blue-200">
               ${isOpen ? 'Tutup' : 'Buka'}
             </span>
           </div>
@@ -168,7 +171,7 @@ const SoalModule = {
 
         <div class="${isOpen ? 'block' : 'hidden'} p-4 space-y-4 bg-white">
           <div class="grid grid-cols-1 gap-4">
-            ${mapelQuestions.map((q, idx) => {
+            ${groupQuestions.map((q, idx) => {
               const qId = q.id || idx;
               return `
                 <div class="border p-3.5 rounded-lg bg-gray-50 space-y-3 text-xs">
@@ -203,7 +206,7 @@ const SoalModule = {
           </div>
         </div>
       `;
-      container.appendChild(mapelCard);
+      container.appendChild(groupCard);
     });
   },
 
@@ -297,7 +300,6 @@ const SoalModule = {
         const imgHtml = `<br><img src="${publicUrl}" alt="Gambar Soal" class="my-2 rounded border max-h-48">`;
         targetElem.value = targetElem.value.includes('<img') ? targetElem.value.replace(/<img[^>]*>/g, imgHtml) : targetElem.value + imgHtml;
       } else {
-        // Sisipkan gambar ke teks opsi jawaban
         const imgHtml = `<br><img src="${publicUrl}" alt="Gambar Opsi" class="inline-block max-h-24 my-1 rounded border">`;
         targetElem.value += imgHtml;
       }
@@ -340,19 +342,23 @@ const SoalModule = {
     }
   },
 
-  async deleteSoalByMapel(mapelName) {
-    const countMapel = State.questions.filter(q => q.mapel === mapelName).length;
-    if (!confirm(`HAPUS SELURUH SOAL MAPEL?\n\nApakah Anda yakin ingin menghapus SELURUH ${countMapel} butir soal untuk mata pelajaran:\n"${mapelName}"?`)) return;
+  async deleteSoalByGroup(mapelName, kelasName) {
+    const countGroup = State.questions.filter(q => q.mapel === mapelName && q.kelas === kelasName).length;
+    if (!confirm(`HAPUS SOAL KELAS INI?\n\nApakah Anda yakin ingin menghapus SELURUH ${countGroup} butir soal untuk:\nMata Pelajaran: "${mapelName}"\nKelas Target: "${kelasName}"?`)) return;
 
     const client = await DB.getClient();
     if (client) {
       try {
-        const { error } = await client.from('bank_soal').delete().eq('mapel', mapelName);
+        const { error } = await client.from('bank_soal')
+          .delete()
+          .eq('mapel', mapelName)
+          .eq('kelas', kelasName);
+          
         if (error) throw error;
-        alert(`Berhasil menghapus seluruh soal untuk mata pelajaran "${mapelName}" dari Supabase.`);
+        alert(`Berhasil menghapus seluruh soal "${mapelName}" [${kelasName}] dari Supabase.`);
         await this.loadAndRender();
       } catch (err) {
-        alert(`Gagal menghapus soal mapel: ${err.message}`);
+        alert(`Gagal menghapus soal: ${err.message}`);
       }
     }
   },
