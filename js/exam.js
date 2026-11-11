@@ -13,6 +13,16 @@ const ExamModule = {
     });
   },
 
+  // Algoritma Pengacak Soal (Fisher-Yates Shuffle)
+  shuffleArray(array) {
+    const arr = [...array];
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  },
+
   async startExam() {
     App.showScreen('exam');
     State.examActive = true;
@@ -43,15 +53,19 @@ const ExamModule = {
         kunci_jawaban: q.kunci_jawaban || q.KUNCI_JAWABAN || 'A'
       }));
 
-      State.questions = allQuestions.filter(q => 
+      // Filter berdasarkan kelas siswa
+      const filtered = allQuestions.filter(q => 
         String(q.kelas).trim().toUpperCase() === String(student.kelas).trim().toUpperCase()
       );
 
-      if (State.questions.length === 0) {
+      if (filtered.length === 0) {
         alert(`Belum ada naskah soal yang tersedia untuk kelas ${student.kelas}. Silakan hubungi pengawas.`);
         AuthModule.logout();
         return;
       }
+
+      // ACAK URUTAN SOAL KHUSUS UNTUK SISWA INI
+      State.questions = this.shuffleArray(filtered);
 
       const mapelName = State.questions[0].mapel;
       document.getElementById('exam-mapel-title').textContent = `Ujian Sumatif: ${mapelName}`;
@@ -237,7 +251,6 @@ const ExamModule = {
       document.exitFullscreen().catch(e => {});
     }
 
-    // 1. Kalkulasi Skor Ujian
     let skorBenar = 0;
     State.questions.forEach((q, idx) => {
       const userChoice = State.answers[idx];
@@ -261,7 +274,6 @@ const ExamModule = {
       waktu_selesai: new Date().toISOString()
     };
 
-    // 2. Simpan Ke Database Supabase Terlebih Dahulu (Tunggu Await)
     try {
       console.log("[ExamModule] Mengirim nilai ujian ke Supabase...", payloadHasil);
       await DB.insertHasilUjian(payloadHasil);
@@ -271,7 +283,6 @@ const ExamModule = {
       alert("Peringatan: Gagal menyimpan hasil ke database: " + err.message);
     }
 
-    // 3. Tampilkan Alert Informasi Skor & Logout
     alert(isDisqualified ? "Status Ujian: DIDISKUALIFIKASI" : `Ujian Selesai!\nNilai Akhir Anda: ${nilaiAkhir}`);
     AuthModule.logout();
   }
