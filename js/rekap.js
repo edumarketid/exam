@@ -1,14 +1,14 @@
 const RekapModule = {
+  pieChartInstance: null,
+
   async fetchAndNormalizeHasil() {
     try {
       const rawHasil = await DB.fetchHasilUjian();
       const siswaList = State.siswaList && State.siswaList.length > 0 ? State.siswaList : await DB.fetchSiswa();
 
       return (rawHasil || []).map(h => {
-        // Normalisasi ID siswa dari berbagai variasi nama kolom Supabase
         const idSiswaStr = String(h.id_siswa || h.ID_SISWA || h.nisn || h.NISN || '').trim();
         
-        // Match profil siswa dari State.siswaList agar nama & kelas terjamin 100% presisi
         const profilSiswa = siswaList.find(s => 
           String(s.id_siswa).trim() === idSiswaStr || 
           String(s.nisn).trim() === idSiswaStr ||
@@ -20,7 +20,7 @@ const RekapModule = {
         const mapelFix = h.mapel || h.MAPEL || h.nama_mapel || '-';
         const nilaiFix = h.nilai !== undefined ? h.nilai : (h.NILAI !== undefined ? h.NILAI : 0);
         const pelanggaranFix = h.jumlah_pelanggaran !== undefined ? h.jumlah_pelanggaran : (h.JUMLAH_PELANGGARAN || 0);
-        const statusFix = h.status_selesai || h.STATUS_SELESAI || 'SELESAI';
+        const statusFix = String(h.status_selesai || h.STATUS_SELESAI || 'SELESAI').toUpperCase();
         const waktuFix = h.waktu_selesai || h.WAKTU_SELESAI || new Date().toISOString();
 
         return {
@@ -41,13 +41,14 @@ const RekapModule = {
     }
   },
 
+  // --- DASHBOARD ANALITIK & GRAFIK PIZZA ---
   async refreshMonitoringData() {
-    const container = document.getElementById('monitoring-list-container');
-    if (!container) return;
-
     try {
+      const siswaList = State.siswaList && State.siswaList.length > 0 ? State.siswaList : await DB.fetchSiswa();
+      State.siswaList = siswaList;
+
       let hasilList = await this.fetchAndNormalizeHasil();
-      
+
       // Privilege Filter Guru jika login sebagai Guru
       if (State.currentUser && State.currentUser.role === 'guru') {
         const mapelGuru = String(State.currentUser.mapel_diampu || '').trim().toUpperCase();
@@ -57,37 +58,239 @@ const RekapModule = {
         );
       }
 
-      container.innerHTML = '';
+      // 1. KALKULASI STATISTIK KESELURUHAN
+      const activeSiswa = siswaList.filter(s => String(s.status).toLowerCase() === 'aktif');
+      const totalSiswa = activeSiswa.length;
 
-      if (!hasilList || hasilList.length === 0) {
-        container.innerHTML = `<p class="text-xs text-slate-500 italic p-4 text-center">Belum ada aktivitas ujian siswa yang tercatat saat ini.</p>`;
-        return;
-      }
+      let countSelesai = 0;
+      let countMengerjakan = 0;
+      let countMelanggar = 0;
 
-      hasilList.forEach((h) => {
-        const div = document.createElement('div');
-        div.className = "flex justify-between items-center p-3 border rounded-xl bg-slate-50 text-xs shadow-sm mb-2 hover:bg-blue-50 transition";
-        div.innerHTML = `
-          <div>
-            <div class="font-bold text-slate-800">${h.nama_siswa} <span class="text-ocean-700 font-semibold">(${h.kelas})</span></div>
-            <div class="text-[11px] text-slate-500 mt-0.5">Mata Ujian: <strong>${h.mapel}</strong> | Waktu Selesai: ${new Date(h.waktu_selesai).toLocaleString('id-ID')} WITA</div>
+      // Map status unik per siswa
+      const statusPerSiswa = {};
+      hasilList.forEach(h => {
+        const key = String(h.id_siswa || h.nama_siswa).trim();
+        statusPerSiswa[key] = h;
+      });
+
+      Object.values(statusPerSiswa).forEach(h => {
+        if (h.status_selesai === 'DIDISKUALIFIKASI' || Number(h.jumlah_pelanggaran) > 0) {
+          countMelanggar++;
+        }
+        if (h.status_selesai === 'MENGERJAKAN') {
+          countMengerjakan++;
+        } else if (h.status_selesai === 'SELESAI' || h.status_selesai === 'DIDISKUALIFIKASI') {
+          countSelesai++;
+        }
+      });
+
+      const countBelumMulai = Math.max(0, totalSiswa - (countSelesai + countMengerjakan));
+
+      // 2. RENDER KARTU SUMMARY ATAS
+      const cardsContainer = document.getElementById('dashboard-summary-cards');
+      if (cardsContainer) {
+        cardsContainer.innerHTML = `
+          <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+            <div class="text-[11px] font-bold text-slate-400 uppercase">Total Siswa</div>
+            <div class="text-2xl font-black text-slate-800 mt-1">${totalSiswa}</div>
+            <div class="text-[10px] text-slate-500 mt-1">Peserta Terdaftar Aktif</div>
           </div>
-          <div class="text-right">
-            <div class="text-base font-extrabold ${h.status_selesai === 'DIDISKUALIFIKASI' ? 'text-rose-600' : 'text-emerald-600'}">
-              Nilai: ${h.nilai}
-            </div>
-            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${h.status_selesai === 'DIDISKUALIFIKASI' ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}">
-              ${h.status_selesai} (${h.jumlah_pelanggaran}x Pelanggaran)
-            </span>
+
+          <div class="bg-emerald-50 p-4 rounded-2xl border border-emerald-200 shadow-sm">
+            <div class="text-[11px] font-bold text-emerald-700 uppercase">Sudah Selesai</div>
+            <div class="text-2xl font-black text-emerald-800 mt-1">${countSelesai}</div>
+            <div class="text-[10px] text-emerald-600 mt-1">Ujian Terkirim</div>
+          </div>
+
+          <div class="bg-blue-50 p-4 rounded-2xl border border-blue-200 shadow-sm">
+            <div class="text-[11px] font-bold text-blue-700 uppercase">Mengerjakan</div>
+            <div class="text-2xl font-black text-blue-800 mt-1">${countMengerjakan}</div>
+            <div class="text-[10px] text-blue-600 mt-1">Aktif di Ruang Tes</div>
+          </div>
+
+          <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200 shadow-sm">
+            <div class="text-[11px] font-bold text-slate-600 uppercase">Belum Mulai</div>
+            <div class="text-2xl font-black text-slate-700 mt-1">${countBelumMulai}</div>
+            <div class="text-[10px] text-slate-500 mt-1">Menunggu Login</div>
+          </div>
+
+          <div class="bg-rose-50 p-4 rounded-2xl border border-rose-200 shadow-sm">
+            <div class="text-[11px] font-bold text-rose-700 uppercase">Melanggar</div>
+            <div class="text-2xl font-black text-rose-800 mt-1">${countMelanggar}</div>
+            <div class="text-[10px] text-rose-600 mt-1">Peringatan / Diskualifikasi</div>
           </div>
         `;
-        container.appendChild(div);
+      }
+
+      // 3. RENDER GRAFIK PIZZA (PIE CHART)
+      this.renderDashboardPieChart({
+        selesai: countSelesai,
+        mengerjakan: countMengerjakan,
+        belumMulai: countBelumMulai,
+        melanggar: countMelanggar
       });
+
+      // 4. RENDER RINCIAN JUMLAH SISWA PER KELAS
+      this.renderDashboardKelasBreakdown(activeSiswa, statusPerSiswa);
+
+      // 5. RENDER LOG AKTIVITAS TERKINI
+      const logContainer = document.getElementById('monitoring-list-container');
+      if (logContainer) {
+        logContainer.innerHTML = '';
+        if (!hasilList || hasilList.length === 0) {
+          logContainer.innerHTML = `<p class="text-xs text-slate-500 italic p-4 text-center">Belum ada aktivitas ujian siswa yang tercatat saat ini.</p>`;
+        } else {
+          hasilList.slice().reverse().forEach((h) => {
+            const isMengerjakan = h.status_selesai === 'MENGERJAKAN';
+            const isDiskualifikasi = h.status_selesai === 'DIDISKUALIFIKASI';
+
+            let badgeClass = 'bg-emerald-100 text-emerald-700';
+            if (isMengerjakan) badgeClass = 'bg-blue-100 text-blue-700 animate-pulse';
+            if (isDiskualifikasi) badgeClass = 'bg-rose-100 text-rose-700';
+
+            const div = document.createElement('div');
+            div.className = "flex justify-between items-center p-3 border rounded-xl bg-slate-50 text-xs shadow-sm hover:bg-blue-50/50 transition";
+            div.innerHTML = `
+              <div>
+                <div class="font-bold text-slate-800">${h.nama_siswa} <span class="text-ocean-700 font-semibold">(${h.kelas})</span></div>
+                <div class="text-[11px] text-slate-500 mt-0.5">Mata Ujian: <strong>${h.mapel}</strong> | Update: ${new Date(h.waktu_selesai).toLocaleTimeString('id-ID')} WITA</div>
+              </div>
+              <div class="text-right">
+                <div class="text-sm font-extrabold ${isDiskualifikasi ? 'text-rose-600' : (isMengerjakan ? 'text-blue-600' : 'text-emerald-600')}">
+                  ${isMengerjakan ? 'Sedang Tes...' : `Nilai: ${h.nilai}`}
+                </div>
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${badgeClass}">
+                  ${h.status_selesai} (${h.jumlah_pelanggaran}x Pelanggaran)
+                </span>
+              </div>
+            `;
+            logContainer.appendChild(div);
+          });
+        }
+      }
     } catch (err) {
-      console.error("[RekapModule] Error monitoring:", err.message);
+      console.error("[RekapModule] Error render dashboard:", err.message);
     }
   },
 
+  renderDashboardPieChart(stats) {
+    const canvas = document.getElementById('dashboard-pie-chart');
+    if (!canvas || typeof Chart === 'undefined') return;
+
+    if (this.pieChartInstance) {
+      this.pieChartInstance.destroy();
+    }
+
+    const ctx = canvas.getContext('2d');
+    this.pieChartInstance = new Chart(ctx, {
+      type: 'pie',
+      data: {
+        labels: [
+          `Sudah Selesai (${stats.selesai})`,
+          `Sedang Mengerjakan (${stats.mengerjakan})`,
+          `Belum Mulai (${stats.belumMulai})`,
+          `Melanggar / Diskualifikasi (${stats.melanggar})`
+        ],
+        datasets: [{
+          data: [stats.selesai, stats.mengerjakan, stats.belumMulai, stats.melanggar],
+          backgroundColor: [
+            '#10b981', // Emerald - Selesai
+            '#3b82f6', // Blue - Mengerjakan
+            '#94a3b8', // Slate - Belum Mulai
+            '#f43f5e'  // Rose - Melanggar
+          ],
+          borderColor: '#ffffff',
+          borderWidth: 2
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: {
+              font: { size: 11, family: 'Inter', weight: '600' },
+              padding: 12,
+              usePointStyle: true
+            }
+          }
+        }
+      }
+    });
+  },
+
+  renderDashboardKelasBreakdown(activeSiswa, statusPerSiswa) {
+    const container = document.getElementById('dashboard-kelas-breakdown');
+    if (!container) return;
+
+    // Kelompokkan siswa berdasarkan kelas
+    const kelasMap = {};
+    activeSiswa.forEach(s => {
+      const k = String(s.kelas || 'Tanpa Kelas').trim();
+      if (!kelasMap[k]) {
+        kelasMap[k] = { total: 0, selesai: 0, mengerjakan: 0, belum: 0, melanggar: 0 };
+      }
+      kelasMap[k].total++;
+
+      const keySiswa = String(s.id_siswa || s.nama).trim();
+      const record = statusPerSiswa[keySiswa];
+
+      if (record) {
+        if (record.status_selesai === 'DIDISKUALIFIKASI' || Number(record.jumlah_pelanggaran) > 0) {
+          kelasMap[k].melanggar++;
+        }
+        if (record.status_selesai === 'MENGERJAKAN') {
+          kelasMap[k].mengerjakan++;
+        } else if (record.status_selesai === 'SELESAI' || record.status_selesai === 'DIDISKUALIFIKASI') {
+          kelasMap[k].selesai++;
+        }
+      } else {
+        kelasMap[k].belum++;
+      }
+    });
+
+    const sortedKelas = Object.keys(kelasMap).sort();
+
+    if (sortedKelas.length === 0) {
+      container.innerHTML = `<p class="text-xs text-slate-500 text-center p-4">Belum ada data kelas terdaftar.</p>`;
+      return;
+    }
+
+    let html = `
+      <table class="w-full text-left border-collapse text-xs">
+        <thead>
+          <tr class="bg-slate-100 border-b border-slate-200 text-[10px] font-bold text-slate-600 uppercase">
+            <th class="p-2.5">Kelas</th>
+            <th class="p-2.5 text-center">Jml Siswa</th>
+            <th class="p-2.5 text-center text-emerald-700">Selesai</th>
+            <th class="p-2.5 text-center text-blue-700">Mengerjakan</th>
+            <th class="p-2.5 text-center text-slate-600">Belum</th>
+            <th class="p-2.5 text-center text-rose-700">Melanggar</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 font-medium text-slate-700">
+    `;
+
+    sortedKelas.forEach(k => {
+      const d = kelasMap[k];
+      html += `
+        <tr class="hover:bg-slate-50">
+          <td class="p-2.5 font-bold text-slate-800">${k}</td>
+          <td class="p-2.5 text-center font-extrabold">${d.total}</td>
+          <td class="p-2.5 text-center"><span class="bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded">${d.selesai}</span></td>
+          <td class="p-2.5 text-center"><span class="bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded">${d.mengerjakan}</span></td>
+          <td class="p-2.5 text-center"><span class="bg-slate-100 text-slate-700 font-bold px-2 py-0.5 rounded">${d.belum}</span></td>
+          <td class="p-2.5 text-center"><span class="bg-rose-100 text-rose-800 font-bold px-2 py-0.5 rounded">${d.melanggar}</span></td>
+        </tr>
+      `;
+    });
+
+    html += `</tbody></table>`;
+    container.innerHTML = html;
+  },
+
+  // --- REKAP NILAI & RESET PESERTA ---
   async renderRekapNilai() {
     const container = document.getElementById('rekap-table-container');
     if (!container) return;
@@ -95,7 +298,9 @@ const RekapModule = {
     try {
       let hasilList = await this.fetchAndNormalizeHasil();
 
-      // Privilege Filter Guru jika login sebagai Guru
+      // Hanya tampilkan yang sudah selesai/diskualifikasi pada tabel rekap nilai
+      hasilList = hasilList.filter(h => h.status_selesai !== 'MENGERJAKAN');
+
       if (State.currentUser && State.currentUser.role === 'guru') {
         const mapelGuru = String(State.currentUser.mapel_diampu || '').trim().toUpperCase();
         hasilList = hasilList.filter(h => 
@@ -107,7 +312,7 @@ const RekapModule = {
       if (!hasilList || hasilList.length === 0) {
         container.innerHTML = `
           <div class="p-6 text-center text-xs text-amber-700 bg-amber-50 rounded-xl border border-amber-200">
-            <p class="font-bold">Belum ada hasil ujian yang tersimpan di Supabase.</p>
+            <p class="font-bold">Belum ada hasil ujian selesai yang tersimpan di Supabase.</p>
           </div>`;
         return;
       }
@@ -216,7 +421,6 @@ const RekapModule = {
     containerData.innerHTML = html;
   },
 
-  // --- FITUR RESET UJIAN SISWA ---
   async resetHasilSiswa(id, namaSiswa, mapel) {
     if (!id) {
       alert("ID hasil ujian tidak valid.");
@@ -237,7 +441,6 @@ const RekapModule = {
       await DB.deleteHasilUjian(id);
       alert(`Berhasil! Riwayat ujian "${namaSiswa}" untuk mapel "${mapel}" telah direset. Siswa kini dapat mengerjakan ujian ulang.`);
       
-      // Segarkan tabel rekap nilai & live monitoring
       await this.renderRekapNilai();
       await this.refreshMonitoringData();
     } catch (err) {
@@ -250,6 +453,7 @@ const RekapModule = {
     const filterMapel = (document.getElementById('rekap-filter-mapel')?.value || 'ALL').trim();
 
     let listToPrint = this.currentHasilList || await this.fetchAndNormalizeHasil();
+    listToPrint = listToPrint.filter(h => h.status_selesai !== 'MENGERJAKAN');
 
     if (filterKelas !== 'ALL') {
       listToPrint = listToPrint.filter(h => String(h.kelas).trim().toUpperCase() === filterKelas.toUpperCase());
@@ -263,7 +467,6 @@ const RekapModule = {
       return;
     }
 
-    // Cari data guru pengampu jika ada
     let namaGuruTtd = "Guru Mata Pelajaran";
     let nipGuruTtd = "-";
 
@@ -281,7 +484,6 @@ const RekapModule = {
       }
     } catch (e) {}
 
-    // URL Gambar Kop Sekolah dari Supabase Bucket 'media-sekolah'
     const kopUrl = "https://nbwpnhshhpfqtmbwewgk.supabase.co/storage/v1/object/public/media-sekolah/kop_sekolah.png";
     const tglSekarang = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
 
@@ -301,7 +503,6 @@ const RekapModule = {
       </head>
       <body class="p-4 bg-white" onload="window.print()">
         
-        <!-- KOP SURAT GAMBAR DARI SUPABASE BUCKET 'media-sekolah' -->
         <div class="mb-4 border-b-4 border-double border-slate-800 pb-2 text-center">
           <img src="${kopUrl}" alt="Kop Surat SMKN 1 Wakatobi" class="w-full max-h-32 object-contain mx-auto" 
                onerror="this.style.display='none'; document.getElementById('fallback-header').style.display='block';">
@@ -322,7 +523,6 @@ const RekapModule = {
           </p>
         </div>
 
-        <!-- TABEL HASIL UJIAN -->
         <table class="w-full text-left border-collapse border border-slate-300 text-xs mb-6">
           <thead>
             <tr class="bg-slate-100 text-[11px] font-bold text-slate-800 uppercase border-b border-slate-300">
@@ -354,7 +554,6 @@ const RekapModule = {
           </tbody>
         </table>
 
-        <!-- KOLOM TANDA TANGAN -->
         <div class="flex justify-between items-end text-xs pt-4">
           <div class="text-center w-56">
             <p>Mengetahui,</p>
