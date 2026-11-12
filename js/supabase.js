@@ -328,6 +328,18 @@ const DB = {
       return dataFb;
     }
     return data;
+  },
+
+  async deleteHasilUjian(id) {
+    const client = await this.getClient();
+    if (!client) throw new Error("Database tidak terhubung.");
+    const { error } = await client.from('hasil_ujian').delete().eq('id', id);
+    if (error) {
+      // Fallback jika kolom ID menggunakan huruf kapital 'ID'
+      const { error: errCap } = await client.from('hasil_ujian').delete().eq('ID', id);
+      if (errCap) throw errCap;
+    }
+    return true;
   }
 };
 
