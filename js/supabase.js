@@ -1,46 +1,38 @@
 const DB = {
   client: null,
 
-  initImmediate() {
+  async getClient() {
     if (this.client) return this.client;
     if (window.supabaseClient) {
       this.client = window.supabaseClient;
       return this.client;
     }
 
-    const cfg = window.CONFIG || (typeof CONFIG !== 'undefined' ? CONFIG : null);
-    const sbLib = window.supabase || (typeof supabase !== 'undefined' ? supabase : null);
-
-    if (sbLib && sbLib.createClient && cfg && cfg.SUPABASE_URL && cfg.SUPABASE_KEY) {
-      try {
-        window.supabaseClient = sbLib.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_KEY);
-        this.client = window.supabaseClient;
-        console.log("[DB] Berhasil terhubung ke Supabase:", cfg.SUPABASE_URL);
-        return this.client;
-      } catch (e) {
-        console.error("[DB] Gagal membuat client Supabase:", e.message);
-      }
-    }
-    return null;
-  },
-
-  async getClient() {
-    const immediate = this.initImmediate();
-    if (immediate) return immediate;
-
     return new Promise((resolve) => {
       let attempts = 0;
       const interval = setInterval(() => {
         attempts++;
-        const client = this.initImmediate();
-        if (client) {
+        if (window.supabaseClient) {
+          this.client = window.supabaseClient;
           clearInterval(interval);
-          resolve(client);
+          resolve(this.client);
           return;
         }
-        if (attempts >= 30) {
+        if (typeof supabase !== 'undefined' && typeof CONFIG !== 'undefined') {
+          if (CONFIG.SUPABASE_URL && CONFIG.SUPABASE_KEY) {
+            try {
+              window.supabaseClient = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
+              this.client = window.supabaseClient;
+            } catch (e) {
+              console.error("[DB] Error Client:", e.message);
+            }
+          }
           clearInterval(interval);
-          console.error("[DB] Timeout: Library Supabase atau config.js tidak ditemukan/key kosong.");
+          resolve(this.client);
+          return;
+        }
+        if (attempts >= 20) {
+          clearInterval(interval);
           resolve(null);
         }
       }, 100);
@@ -73,7 +65,7 @@ const DB = {
 
   async insertAdmin(payload) {
     const client = await this.getClient();
-    if (!client) throw new Error("Database tidak terhubung. Periksa config.js dan koneksi internet.");
+    if (!client) throw new Error("Database tidak terhubung.");
     const { data, error } = await client.from('admin').insert([payload]);
     if (error) throw error;
     return data;
@@ -94,7 +86,7 @@ const DB = {
 
   async insertMapel(namaMapel) {
     const client = await this.getClient();
-    if (!client) throw new Error("Database tidak terhubung. Periksa config.js dan koneksi internet.");
+    if (!client) throw new Error("Database tidak terhubung.");
 
     let { data, error } = await client.from('mapel').insert([{ nama_mapel: namaMapel }]);
     if (error && error.code === '23505') {
@@ -124,7 +116,7 @@ const DB = {
 
   async deleteMapel(namaMapel) {
     const client = await this.getClient();
-    if (!client) throw new Error("Database tidak terhubung. Periksa config.js dan koneksi internet.");
+    if (!client) throw new Error("Database tidak terhubung.");
 
     const { error: err1 } = await client.from('mapel').delete().eq('nama_mapel', namaMapel);
     if (err1) {
@@ -166,7 +158,7 @@ const DB = {
 
   async insertGuru(payload) {
     const client = await this.getClient();
-    if (!client) throw new Error("Database tidak terhubung. Periksa config.js dan koneksi internet.");
+    if (!client) throw new Error("Database tidak terhubung.");
     const { data, error } = await client.from('guru').insert([payload]);
     if (error) throw error;
     return data;
@@ -174,7 +166,7 @@ const DB = {
 
   async updateGuru(id_guru, payload) {
     const client = await this.getClient();
-    if (!client) throw new Error("Database tidak terhubung. Periksa config.js dan koneksi internet.");
+    if (!client) throw new Error("Database tidak terhubung.");
     const { data, error } = await client.from('guru').update(payload).eq('id_guru', id_guru);
     if (error) throw error;
     return data;
@@ -182,7 +174,7 @@ const DB = {
 
   async deleteGuru(id_guru) {
     const client = await this.getClient();
-    if (!client) throw new Error("Database tidak terhubung. Periksa config.js dan koneksi internet.");
+    if (!client) throw new Error("Database tidak terhubung.");
     const { error } = await client.from('guru').delete().eq('id_guru', id_guru);
     if (error) throw error;
     return true;
@@ -308,7 +300,7 @@ const DB = {
 
   async insertHasilUjian(payload) {
     const client = await this.getClient();
-    if (!client) throw new Error("Database tidak terhubung. Periksa config.js dan koneksi internet.");
+    if (!client) throw new Error("Database tidak terhubung.");
 
     const dataToInsert = {
       ID_SISWA: String(payload.id_siswa),
@@ -340,9 +332,10 @@ const DB = {
 
   async deleteHasilUjian(id) {
     const client = await this.getClient();
-    if (!client) throw new Error("Database tidak terhubung. Periksa config.js dan koneksi internet.");
+    if (!client) throw new Error("Database tidak terhubung.");
     const { error } = await client.from('hasil_ujian').delete().eq('id', id);
     if (error) {
+      // Fallback jika kolom ID menggunakan huruf kapital 'ID'
       const { error: errCap } = await client.from('hasil_ujian').delete().eq('ID', id);
       if (errCap) throw errCap;
     }
@@ -351,4 +344,3 @@ const DB = {
 };
 
 window.DB = DB;
-DB.initImmediate();
