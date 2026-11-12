@@ -564,8 +564,8 @@ const RekapModule = {
           </div>
 
           <div class="text-center w-64">
-            <p>Wangi-Wangi Selatan, ${tglSekarang}</p>
-            <p class="font-bold">Guru Mata Pelajaran / Pengampu</p>
+            <p>Wangi-Wangi, ${tglSekarang}</p>
+            <p class="font-bold">Guru Mata Pelajaran</p>
             <div class="h-16"></div>
             <p class="font-bold underline">${namaGuruTtd}</p>
             <p class="text-[10px] text-slate-500">NIP. ${nipGuruTtd}</p>
