@@ -101,15 +101,24 @@ const SiswaModule = {
 
     selectedSiswa.forEach(s => {
       kartuHtml += `
-        <div class="border-2 border-slate-800 rounded-xl p-4 bg-slate-50 space-y-2 text-xs">
-          <div class="flex items-center gap-3 border-b border-slate-300 pb-2">
+        <div class="border-2 border-slate-800 rounded-xl p-4 bg-slate-50 space-y-2 text-xs break-inside-avoid">
+          <div class="flex items-center justify-between border-b border-slate-300 pb-2">
             <div class="font-bold text-sm text-blue-900">SMK NEGERI 1 WAKATOBI</div>
+            <span class="text-[10px] font-bold bg-blue-100 text-blue-800 px-2 py-0.5 rounded">KARTU PESERTA</span>
           </div>
-          <div class="space-y-1">
-            <div><span class="w-24 inline-block font-semibold">Nama Peserta</span>: <strong>${s.nama}</strong></div>
-            <div><span class="w-24 inline-block font-semibold">NISN / Username</span>: <strong class="font-mono text-blue-800">${s.nisn}</strong></div>
-            <div><span class="w-24 inline-block font-semibold">Kelas</span>: <strong>${s.kelas}</strong></div>
-            <div><span class="w-24 inline-block font-semibold">Password</span>: <strong class="font-mono text-emerald-700">${s.pass || 'smk123'}</strong></div>
+          <div class="flex items-start gap-3 pt-1">
+            <!-- Kotak Foto 3x4 di Samping Kiri -->
+            <div class="w-16 h-20 shrink-0 border border-dashed border-slate-500 bg-white rounded flex flex-col items-center justify-center text-[9px] font-bold text-slate-400 text-center leading-tight">
+              <span>FOTO</span>
+              <span>3 x 4</span>
+            </div>
+            <!-- Identitas Peserta di Samping Kanan -->
+            <div class="space-y-1 flex-1 min-w-0">
+              <div class="flex"><span class="w-24 shrink-0 font-semibold">Nama Peserta</span><span class="mr-1">:</span><strong class="truncate">${s.nama}</strong></div>
+              <div class="flex"><span class="w-24 shrink-0 font-semibold">NISN / User</span><span class="mr-1">:</span><strong class="font-mono text-blue-800">${s.nisn}</strong></div>
+              <div class="flex"><span class="w-24 shrink-0 font-semibold">Kelas</span><span class="mr-1">:</span><strong>${s.kelas}</strong></div>
+              <div class="flex"><span class="w-24 shrink-0 font-semibold">Password</span><span class="mr-1">:</span><strong class="font-mono text-emerald-700">${s.pass || 'smk123'}</strong></div>
+            </div>
           </div>
         </div>
       `;
