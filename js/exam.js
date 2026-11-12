@@ -1,4 +1,6 @@
 const ExamModule = {
+  activeRecordId: null,
+
   setupSecurityListeners() {
     document.addEventListener('fullscreenchange', () => {
       if (!document.fullscreenElement && State.examActive) {
@@ -24,6 +26,7 @@ const ExamModule = {
 
   async startExam() {
     State.examActive = false;
+    this.activeRecordId = null;
     const student = State.currentUser;
 
     if (!student || !student.kelas) {
@@ -41,8 +44,6 @@ const ExamModule = {
         AuthModule.logout();
         return;
       }
-
-      console.log("[ExamModule] Jadwal Ujian Aktif Ditemukan:", activeSchedule);
 
       // 2. Ambil Bank Soal Khusus untuk Mapel Terjadwal & Kelas Siswa
       const client = await DB.getClient();
@@ -64,7 +65,6 @@ const ExamModule = {
         kunci_jawaban: q.kunci_jawaban || q.KUNCI_JAWABAN || 'A'
       }));
 
-      // Filter presisi untuk kelas target
       const filtered = allQuestions.filter(q => {
         const matchMapel = String(q.mapel).trim().toUpperCase() === String(activeSchedule.mapel).trim().toUpperCase();
         const listOfKelasTarget = String(q.kelas).toUpperCase().split(',').map(k => k.trim());
@@ -78,7 +78,28 @@ const ExamModule = {
         return;
       }
 
-      // 3. Tampilkan Layar Ujian & Acak Soal per Siswa
+      // 3. Catat status "MENGERJAKAN" agar muncul di Dashboard Real-Time
+      try {
+        const { data: insertedData } = await client.from('hasil_ujian').insert([{
+          ID_SISWA: String(student.id_siswa),
+          id_siswa: String(student.id_siswa),
+          nama_siswa: student.nama,
+          kelas: student.kelas,
+          mapel: activeSchedule.mapel,
+          nilai: 0,
+          jumlah_pelanggaran: 0,
+          status_selesai: 'MENGERJAKAN',
+          waktu_selesai: new Date().toISOString()
+        }]).select();
+
+        if (insertedData && insertedData.length > 0) {
+          this.activeRecordId = insertedData[0].id || insertedData[0].ID;
+        }
+      } catch (e) {
+        console.warn("[ExamModule] Log status mengerjakan dilewati:", e.message);
+      }
+
+      // 4. Tampilkan Layar Ujian & Acak Soal per Siswa
       App.showScreen('exam');
       State.examActive = true;
       State.violations = 0;
@@ -97,9 +118,7 @@ const ExamModule = {
         if (document.documentElement.requestFullscreen) {
           await document.documentElement.requestFullscreen();
         }
-      } catch (e) {
-        console.warn("Fullscreen tidak dapat diaktifkan otomatis.");
-      }
+      } catch (e) {}
 
       const durasiUjian = parseInt(activeSchedule.durasi) || 45;
       this.startTimer(durasiUjian);
@@ -296,9 +315,17 @@ const ExamModule = {
     };
 
     try {
-      console.log("[ExamModule] Mengirim nilai ujian ke Supabase...", payloadHasil);
-      await DB.insertHasilUjian(payloadHasil);
-      console.log("[ExamModule] Nilai ujian berhasil tersimpan di Supabase.");
+      const client = await DB.getClient();
+      if (this.activeRecordId && client) {
+        await client.from('hasil_ujian').update({
+          nilai: payloadHasil.nilai,
+          jumlah_pelanggaran: payloadHasil.jumlah_pelanggaran,
+          status_selesai: payloadHasil.status_selesai,
+          waktu_selesai: payloadHasil.waktu_selesai
+        }).eq('id', this.activeRecordId);
+      } else {
+        await DB.insertHasilUjian(payloadHasil);
+      }
     } catch (err) {
       console.error("[ExamModule] Gagal menyimpan nilai ujian:", err.message);
       alert("Peringatan: Gagal menyimpan hasil ke database: " + err.message);
