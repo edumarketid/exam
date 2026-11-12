@@ -46,7 +46,17 @@ const RekapModule = {
     if (!container) return;
 
     try {
-      const hasilList = await this.fetchAndNormalizeHasil();
+      let hasilList = await this.fetchAndNormalizeHasil();
+      
+      // Privilege Filter Guru jika login sebagai Guru
+      if (State.currentUser && State.currentUser.role === 'guru') {
+        const mapelGuru = String(State.currentUser.mapel_diampu || '').trim().toUpperCase();
+        hasilList = hasilList.filter(h => 
+          String(h.mapel).trim().toUpperCase().includes(mapelGuru) || 
+          mapelGuru.includes(String(h.mapel).trim().toUpperCase())
+        );
+      }
+
       container.innerHTML = '';
 
       if (!hasilList || hasilList.length === 0) {
@@ -83,7 +93,16 @@ const RekapModule = {
     if (!container) return;
 
     try {
-      const hasilList = await this.fetchAndNormalizeHasil();
+      let hasilList = await this.fetchAndNormalizeHasil();
+
+      // Privilege Filter Guru jika login sebagai Guru
+      if (State.currentUser && State.currentUser.role === 'guru') {
+        const mapelGuru = String(State.currentUser.mapel_diampu || '').trim().toUpperCase();
+        hasilList = hasilList.filter(h => 
+          String(h.mapel).trim().toUpperCase().includes(mapelGuru) || 
+          mapelGuru.includes(String(h.mapel).trim().toUpperCase())
+        );
+      }
 
       if (!hasilList || hasilList.length === 0) {
         container.innerHTML = `
@@ -159,12 +178,16 @@ const RekapModule = {
             <th class="p-3 text-center">NILAI AKHIR</th>
             <th class="p-3 text-center">PELANGGARAN</th>
             <th class="p-3 text-center">STATUS</th>
+            <th class="p-3 text-center">AKSI</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100 font-medium text-slate-700">
     `;
 
     filtered.forEach((h, idx) => {
+      const safeNama = String(h.nama_siswa).replace(/'/g, "\\'");
+      const safeMapel = String(h.mapel).replace(/'/g, "\\'");
+
       html += `
         <tr class="hover:bg-slate-50 transition">
           <td class="p-3 text-center font-bold text-slate-500">${idx + 1}</td>
@@ -178,12 +201,48 @@ const RekapModule = {
               ${h.status_selesai}
             </span>
           </td>
+          <td class="p-3 text-center">
+            <button onclick="RekapModule.resetHasilSiswa(${h.id}, '${safeNama}', '${safeMapel}')" 
+                    title="Reset & Izinkan Ujian Ulang"
+                    class="bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-[11px] px-2.5 py-1 rounded-lg border border-rose-200 transition inline-flex items-center gap-1">
+              <span>🔄 Reset</span>
+            </button>
+          </td>
         </tr>
       `;
     });
 
     html += `</tbody></table>`;
     containerData.innerHTML = html;
+  },
+
+  // --- FITUR RESET UJIAN SISWA ---
+  async resetHasilSiswa(id, namaSiswa, mapel) {
+    if (!id) {
+      alert("ID hasil ujian tidak valid.");
+      return;
+    }
+
+    const konfirmasi = confirm(
+      `KONFIRMASI RESET UJIAN SISWA\n\n` +
+      `Nama Siswa : ${namaSiswa}\n` +
+      `Mata Ujian : ${mapel}\n\n` +
+      `Nilai dan status selesai siswa ini akan DIHAPUS sehingga siswa dapat mengikuti ujian ulang dari awal.\n\n` +
+      `Apakah Anda yakin ingin melanjutkan?`
+    );
+
+    if (!konfirmasi) return;
+
+    try {
+      await DB.deleteHasilUjian(id);
+      alert(`Berhasil! Riwayat ujian "${namaSiswa}" untuk mapel "${mapel}" telah direset. Siswa kini dapat mengerjakan ujian ulang.`);
+      
+      // Segarkan tabel rekap nilai & live monitoring
+      await this.renderRekapNilai();
+      await this.refreshMonitoringData();
+    } catch (err) {
+      alert("Gagal mereset hasil ujian: " + err.message);
+    }
   },
 
   async exportPDF() {
@@ -247,7 +306,6 @@ const RekapModule = {
           <img src="${kopUrl}" alt="Kop Surat SMKN 1 Wakatobi" class="w-full max-h-32 object-contain mx-auto" 
                onerror="this.style.display='none'; document.getElementById('fallback-header').style.display='block';">
           
-          <!-- FALLBACK JIKA GAMBAR BELUM DIUNGGAH KESISI SUPABASE BUCKET -->
           <div id="fallback-header" class="hidden text-center">
             <h1 class="font-extrabold text-sm uppercase text-slate-900 tracking-wide">PEMERINTAH PROVINSI SULAWESI TENGGARA</h1>
             <h2 class="font-bold text-base uppercase text-slate-900">DINAS PENDIDIKAN DAN KEBUDAYAAN</h2>
