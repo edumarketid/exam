@@ -46,7 +46,6 @@ const SoalModule = {
 
     let html = `<option value="">-- Pilih Mata Pelajaran --</option>`;
     
-    // Ambil daftar mapel dari tabel mapel & bank soal
     const mapelSet = new Set(State.mapelList || []);
     if (State.questions) {
       State.questions.forEach(q => { if (q.mapel) mapelSet.add(q.mapel); });
@@ -73,7 +72,6 @@ const SoalModule = {
     const container = document.getElementById('container-upload-kelas-checkboxes');
     if (!container) return;
 
-    // Ekstrak kelas unik dari data siswa dan bank soal
     const kelasSet = new Set();
 
     if (State.siswaList && State.siswaList.length > 0) {
@@ -219,7 +217,7 @@ const SoalModule = {
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = q.soal_html;
         const plainText = (tempDiv.textContent || tempDiv.innerText || '').trim();
-        const snippetText = plainText.length > 60 ? plainText.substring(0, 60) + '...' : plainText;
+        const snippetText = plainText.length > 55 ? plainText.substring(0, 55) + '...' : plainText;
 
         innerSoalHtml += `
           <!-- BUTIR SOAL ITEM -->
@@ -233,11 +231,17 @@ const SoalModule = {
               
               <div class="flex items-center space-x-1.5 flex-shrink-0" onclick="event.stopPropagation()">
                 <span class="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">Kunci: ${q.kunci_jawaban}</span>
+                
                 <button id="btn-toggle-${q.id}" onclick="SoalModule.toggleSoalDetail(${q.id})" class="bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-[11px] px-2.5 py-1 rounded border border-blue-200 transition">
                   👁️ Buka
                 </button>
+                
                 <button onclick="SoalModule.openEditModal(${q.id})" class="bg-amber-50 hover:bg-amber-100 text-amber-700 font-bold text-[11px] px-2.5 py-1 rounded border border-amber-300 transition">
                   ✏️ Edit
+                </button>
+
+                <button onclick="SoalModule.deleteSoal(${q.id}, ${idx + 1})" class="bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-[11px] px-2.5 py-1 rounded border border-rose-300 transition">
+                  🗑️ Hapus
                 </button>
               </div>
             </div>
@@ -257,15 +261,15 @@ const SoalModule = {
         `;
       });
 
-      // KARTU UTAMA DENGAN HEADER MAPEL + KELAS & TOMBOL CETAK NASKAH
+      // KARTU UTAMA DENGAN HEADER MAPEL + KELAS & TOMBOL CETAK + HAPUS PAKET
       groupBox.innerHTML = `
-        <div class="p-4 bg-ocean-900 text-white flex justify-between items-center cursor-pointer select-none" onclick="SoalModule.toggleMapelGroup('${safeGroupId}')">
+        <div class="p-4 bg-ocean-900 text-white flex flex-wrap justify-between items-center gap-3 cursor-pointer select-none" onclick="SoalModule.toggleMapelGroup('${safeGroupId}')">
           <div class="flex items-center space-x-3">
-            <div class="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center font-bold text-teal-300">
+            <div class="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center font-bold text-teal-300 flex-shrink-0">
               <i class="fa-solid fa-book-open"></i>
             </div>
             <div>
-              <div class="flex items-center gap-2">
+              <div class="flex flex-wrap items-center gap-2">
                 <h4 class="font-bold text-sm tracking-wide text-white">${groupData.mapel}</h4>
                 <span class="bg-purple-500/30 text-purple-200 text-[10px] px-2 py-0.5 rounded-full font-bold border border-purple-400/40">
                   Kelas: ${groupData.kelas}
@@ -281,6 +285,14 @@ const SoalModule = {
                     class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg shadow transition flex items-center gap-1.5">
               <i class="fa-solid fa-print"></i>
               <span>Cetak Soal</span>
+            </button>
+
+            <!-- TOMBOL HAPUS PAKET SOAL PER MAPEL & KELAS -->
+            <button onclick="SoalModule.deleteGroupSoal('${encodeURIComponent(groupData.mapel)}', '${encodeURIComponent(groupData.kelas)}', ${listSoalGroup.length})" 
+                    title="Hapus Seluruh Soal pada Mapel & Kelas Ini"
+                    class="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg shadow transition flex items-center gap-1.5">
+              <i class="fa-solid fa-trash-can"></i>
+              <span class="hidden md:inline">Hapus Paket</span>
             </button>
 
             <span class="bg-teal-500/20 text-teal-300 text-xs px-3 py-1.5 rounded-full font-bold border border-teal-500/30 hidden sm:inline-block">
@@ -303,6 +315,70 @@ const SoalModule = {
     });
   },
 
+  // --- HAPUS BUTIR SOAL SATUAN ---
+  async deleteSoal(id, nomorUrut) {
+    if (!id) return;
+
+    const konfirmasi = confirm(
+      `KONFIRMASI HAPUS BUTIR SOAL\n\n` +
+      `Apakah Anda yakin ingin menghapus Soal #${nomorUrut} secara permanen dari database?\n` +
+      `Tindakan ini tidak dapat dibatalkan.`
+    );
+
+    if (!konfirmasi) return;
+
+    try {
+      const client = await DB.getClient();
+      const { error } = await client.from('bank_soal').delete().eq('id', id);
+      if (error) {
+        const { error: errCap } = await client.from('bank_soal').delete().eq('ID', id);
+        if (errCap) throw errCap;
+      }
+
+      alert(`Soal #${nomorUrut} berhasil dihapus dari Bank Soal.`);
+      await this.loadAndRender();
+    } catch (err) {
+      alert("Gagal menghapus soal: " + err.message);
+    }
+  },
+
+  // --- HAPUS SELURUH PAKET SOAL PER MAPEL & KELAS ---
+  async deleteGroupSoal(encodedMapel, encodedKelas, jumlahSoal) {
+    const mapel = decodeURIComponent(encodedMapel);
+    const kelas = decodeURIComponent(encodedKelas);
+
+    const konfirmasi = confirm(
+      `PERINGATAN PENGHAPUSAN MASSAL!\n\n` +
+      `Mata Pelajaran : ${mapel}\n` +
+      `Kelas Target   : ${kelas}\n` +
+      `Jumlah Butir   : ${jumlahSoal} Soal\n\n` +
+      `Seluruh ${jumlahSoal} soal pada paket ini akan DIHAPUS PERMANEN.\n` +
+      `Apakah Anda yakin ingin melanjutkan?`
+    );
+
+    if (!konfirmasi) return;
+
+    try {
+      const client = await DB.getClient();
+      const idsToDelete = (State.questions || [])
+        .filter(q => 
+          String(q.mapel).trim().toUpperCase() === mapel.trim().toUpperCase() &&
+          String(q.kelas).trim().toUpperCase() === kelas.trim().toUpperCase()
+        )
+        .map(q => q.id);
+
+      if (idsToDelete.length === 0) return;
+
+      const { error } = await client.from('bank_soal').delete().in('id', idsToDelete);
+      if (error) throw error;
+
+      alert(`Berhasil menghapus seluruh ${idsToDelete.length} butir soal pada paket "${mapel} (${kelas})".`);
+      await this.loadAndRender();
+    } catch (err) {
+      alert("Gagal menghapus paket soal: " + err.message);
+    }
+  },
+
   // --- FITUR CETAK NASKAH SOAL RESMI DENGAN KOP DARI SUPABASE STORAGE ---
   async printNaskahSoal(encodedMapel, encodedKelas) {
     const mapel = decodeURIComponent(encodedMapel);
@@ -318,7 +394,6 @@ const SoalModule = {
       return;
     }
 
-    // Cari data guru pengampu berdasarkan mapel
     let namaGuru = "Guru Mata Pelajaran";
     let nipGuru = "-";
 
