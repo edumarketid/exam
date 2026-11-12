@@ -8,14 +8,17 @@ const RekapModule = {
 
       return (rawHasil || []).map(h => {
         const idSiswaStr = String(h.id_siswa || h.ID_SISWA || h.nisn || h.NISN || '').trim();
+        const namaHasilStr = String(h.nama_siswa || h.NAMA_SISWA || h.nama || '').trim().toLowerCase();
         
         const profilSiswa = siswaList.find(s => 
-          String(s.id_siswa).trim() === idSiswaStr || 
-          String(s.nisn).trim() === idSiswaStr ||
-          String(s.user).trim() === idSiswaStr
+          String(s.id_siswa || '').trim() === idSiswaStr || 
+          String(s.nisn || s.NISN || '').trim() === idSiswaStr ||
+          String(s.user || '').trim() === idSiswaStr ||
+          (namaHasilStr !== '' && String(s.nama || '').trim().toLowerCase() === namaHasilStr)
         );
 
         const namaFix = profilSiswa ? profilSiswa.nama : (h.nama_siswa || h.NAMA_SISWA || h.nama || '-');
+        const nisnFix = profilSiswa ? (profilSiswa.NISN || profilSiswa.nisn || '-') : (h.NISN || h.nisn || '-');
         const kelasFix = profilSiswa ? profilSiswa.kelas : (h.kelas || h.KELAS || '-');
         const mapelFix = h.mapel || h.MAPEL || h.nama_mapel || '-';
         const nilaiFix = h.nilai !== undefined ? h.nilai : (h.NILAI !== undefined ? h.NILAI : 0);
@@ -27,6 +30,7 @@ const RekapModule = {
           id: h.id || h.ID,
           id_siswa: idSiswaStr,
           nama_siswa: namaFix,
+          nisn: nisnFix,
           kelas: kelasFix,
           mapel: mapelFix,
           nilai: nilaiFix,
@@ -537,12 +541,12 @@ const RekapModule = {
     `;
 
     listToPrint.forEach((h, idx) => {
-      const nisnSiswa = h.NISN || h.nisn || h.siswa?.NISN || h.siswa?.nisn || '-';
+      const nisnSiswa = h.nisn || h.NISN || h.siswa?.NISN || h.siswa?.nisn || '-';
       printHtml += `
         <tr class="border-b border-slate-200">
           <td class="p-2 border border-slate-300 text-center font-bold">${idx + 1}</td>
           <td class="p-2 border border-slate-300 font-bold">${h.nama_siswa}</td>
-          <td class="p-2 border border-slate-300 text-center font-semibold">${h.NISN}</td>
+          <td class="p-2 border border-slate-300 text-center font-semibold">${nisnSiswa}</td>
           <td class="p-2 border border-slate-300 text-center font-extrabold text-sm">${h.nilai}</td>
           <td class="p-2 border border-slate-300 text-center font-bold text-[10px]">${h.status_selesai}</td>
         </tr>
