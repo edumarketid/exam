@@ -1,79 +1,152 @@
+// Pastikan State tersedia (baik dari js/state.js maupun inisialisasi baru)
+window.State = window.State || {
+  currentUser: null,
+  examActive: false,
+  timerInterval: null,
+  violations: 0,
+  currentQuestionIdx: 0,
+  answers: {},
+  questions: [],
+  schedules: [],
+  siswaList: [],
+  mapelList: []
+};
+
 const App = {
   async init() {
-    console.log("[App] Memulai inisialisasi aplikasi CBT SMKN 1 Wakatobi...");
-    this.setupPWA();
-    if (window.ExamModule) ExamModule.setupSecurityListeners();
-    
-    const badge = document.getElementById('db-status-badge');
-    if (badge) {
-      badge.textContent = "Menghubungkan...";
-      badge.className = "px-3 py-1 text-[10px] rounded-full bg-yellow-500 text-white font-bold animate-pulse shadow";
+    console.log("[App] Menginisialisasi sistem CBT SMKN 1 Wakatobi...");
+
+    if (typeof ExamModule !== 'undefined' && ExamModule.setupSecurityListeners) {
+      ExamModule.setupSecurityListeners();
     }
 
+    // Uji koneksi Supabase & update badge status pada layar login
+    const badge = document.getElementById('db-status-badge');
     try {
-      const client = await DB.getClient();
-      this.updateDBStatus(client);
-
-      // 1. Load Mapel & Siswa Terlebih Dahulu agar State Terisi
-      if (window.MapelModule) try { await MapelModule.loadAndRender(); } catch (e) { console.error("Mapel Error:", e); }
-      if (window.SiswaModule) try { await SiswaModule.loadAndRender(); } catch (e) { console.error("Siswa Error:", e); }
-
-      // 2. Load Jadwal Ujian setelah Mapel & Siswa Siap
-      if (window.JadwalModule) try { await JadwalModule.loadAndRender(); } catch (e) { console.error("Jadwal Error:", e); }
-
-      // 3. Modul Bank Soal & Monitoring
-      if (window.SoalModule) try { await SoalModule.loadAndRender(); } catch (e) { console.error("Soal Error:", e); }
-      if (window.RekapModule) try { await RekapModule.refreshMonitoringData(); } catch (e) { console.error("Rekap Error:", e); }
-
-      console.log("[App] Seluruh Modul CBT Berhasil Dimuat & Siap Digunakan.");
-    } catch (err) {
-      console.error("[App] Kesalahan kritis:", err.message);
+      const client = typeof DB !== 'undefined' ? await DB.getClient() : null;
+      if (client) {
+        if (badge) {
+          badge.textContent = "Terhubung ke Database";
+          badge.className = "px-3 py-1 text-[10px] rounded-full bg-emerald-600 text-white font-bold shadow";
+        }
+      } else {
+        if (badge) {
+          badge.textContent = "Gagal Terhubung (Periksa config.js)";
+          badge.className = "px-3 py-1 text-[10px] rounded-full bg-rose-600 text-white font-bold shadow";
+        }
+      }
+    } catch (e) {
       if (badge) {
-        badge.textContent = "Offline / Config Error";
-        badge.className = "px-3 py-1 text-[10px] rounded-full bg-amber-600 text-white font-bold shadow";
+        badge.textContent = "Koneksi Terputus";
+        badge.className = "px-3 py-1 text-[10px] rounded-full bg-rose-600 text-white font-bold shadow";
       }
     }
+
+    this.showScreen('login');
   },
 
-  updateDBStatus(client) {
-    const badge = document.getElementById('db-status-badge');
-    if (!badge) return;
-    if (client) {
-      badge.textContent = "Database Terhubung";
-      badge.className = "px-3 py-1 text-[10px] rounded-full bg-emerald-600 text-white font-bold shadow";
-    } else {
-      badge.textContent = "Offline / Config Error";
-      badge.className = "px-3 py-1 text-[10px] rounded-full bg-amber-600 text-white font-bold shadow";
+  showScreen(screenName) {
+    const screens = ['login', 'admin', 'exam'];
+    screens.forEach(s => {
+      const el = document.getElementById(`screen-${s}`);
+      if (el) {
+        if (s === screenName) {
+          el.classList.remove('hidden');
+        } else {
+          el.classList.add('hidden');
+        }
+      }
+    });
+
+    if (screenName === 'admin' && State.currentUser) {
+      this.applyRoleUI();
     }
   },
 
-  setupPWA() {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js').catch(err => console.error(err));
+  applyRoleUI() {
+    const user = State.currentUser;
+    if (!user) return;
+
+    const nameEl = document.getElementById('admin-profile-name');
+    const roleEl = document.getElementById('admin-profile-role');
+
+    const navGuru = document.getElementById('nav-guru');
+    const navMapel = document.getElementById('nav-mapel');
+
+    if (user.role === 'admin') {
+      if (nameEl) nameEl.textContent = user.nama_admin || user.nama || 'Proktor Utama';
+      if (roleEl) roleEl.textContent = 'Online • Admin';
+      if (navGuru) navGuru.classList.remove('hidden');
+      if (navMapel) navMapel.classList.remove('hidden');
+    } else if (user.role === 'guru') {
+      if (nameEl) nameEl.textContent = user.nama_guru || 'Guru Pengampu';
+      if (roleEl) roleEl.textContent = `Guru • ${user.mapel_diampu || 'Mapel'}`;
+      if (navGuru) navGuru.classList.add('hidden');
+      if (navMapel) navMapel.classList.add('hidden');
     }
   },
 
-  showScreen(screenId) {
-    ['login', 'admin', 'exam'].forEach(id => {
-      document.getElementById(`screen-${id}`)?.classList.add('hidden');
-    });
-    document.getElementById(`screen-${screenId}`)?.classList.remove('hidden');
-  },
+  async switchAdminTab(tabName) {
+    // Daftar seluruh ID tab sesuai index.html asli
+    const tabIds = [
+      'tab-monitoring',
+      'tab-jadwal',
+      'tab-upload-soal',
+      'tab-bank-soal',
+      'tab-siswa',
+      'tab-guru',
+      'tab-mapel',
+      'tab-rekap-nilai'
+    ];
 
-  switchAdminTab(tabName) {
-    ['monitoring', 'jadwal', 'rekap-nilai', 'upload-soal', 'siswa', 'bank-soal', 'mapel', 'guru'].forEach(t => {
-      document.getElementById(`tab-${t}`)?.classList.add('hidden');
+    tabIds.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.add('hidden');
     });
-    document.getElementById(`tab-${tabName}`)?.classList.remove('hidden');
-    
-    if (tabName === 'rekap-nilai' && window.RekapModule) RekapModule.renderRekapNilai();
-    if (tabName === 'monitoring' && window.RekapModule) RekapModule.refreshMonitoringData();
-    if (tabName === 'bank-soal' && window.SoalModule) SoalModule.loadAndRender();
-    if (tabName === 'siswa' && window.SiswaModule) SiswaModule.loadAndRender();
-    if (tabName === 'jadwal' && window.JadwalModule) JadwalModule.loadAndRender();
-    if (tabName === 'mapel' && window.MapelModule) MapelModule.loadAndRender();
+
+    const targetTab = document.getElementById(`tab-${tabName}`);
+    if (targetTab) {
+      targetTab.classList.remove('hidden');
+    }
+
+    // Highlight tombol navigasi aktif di sidebar
+    const navBtns = document.querySelectorAll('.admin-nav-btn');
+    navBtns.forEach(btn => {
+      btn.classList.remove('bg-white/10', 'text-white', 'font-bold');
+      btn.classList.add('text-slate-300', 'font-medium');
+    });
+
+    const activeNav = document.getElementById(`nav-${tabName}`);
+    if (activeNav) {
+      activeNav.classList.remove('text-slate-300', 'font-medium');
+      activeNav.classList.add('bg-white/10', 'text-white', 'font-bold');
+    }
+
+    // Panggil modul pemuat data sesuai tab
+    try {
+      if (tabName === 'monitoring' && typeof RekapModule !== 'undefined') {
+        await RekapModule.refreshMonitoringData();
+      } else if (tabName === 'jadwal' && typeof JadwalModule !== 'undefined') {
+        await JadwalModule.loadAndRender();
+      } else if ((tabName === 'upload-soal' || tabName === 'bank-soal') && typeof SoalModule !== 'undefined') {
+        await SoalModule.loadAndRender();
+      } else if (tabName === 'siswa' && typeof SiswaModule !== 'undefined') {
+        await SiswaModule.loadAndRender();
+      } else if (tabName === 'guru' && typeof GuruModule !== 'undefined') {
+        await GuruModule.loadAndRender();
+      } else if (tabName === 'mapel' && typeof MapelModule !== 'undefined' && MapelModule.loadAndRender) {
+        await MapelModule.loadAndRender();
+      } else if (tabName === 'rekap-nilai' && typeof RekapModule !== 'undefined') {
+        await RekapModule.renderRekapNilai();
+      }
+    } catch (err) {
+      console.error(`[App] Error memuat tab ${tabName}:`, err.message);
+    }
   }
 };
 
 window.App = App;
-window.addEventListener('load', () => App.init());
+
+document.addEventListener('DOMContentLoaded', () => {
+  App.init();
+});
