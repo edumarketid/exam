@@ -199,10 +199,10 @@
       <div class="flex-1 overflow-y-auto py-6 px-4 space-y-1">
         <div class="px-3 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Utama</div>
         
-        <button onclick="App.switchAdminTab('monitoring')" class="w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl hover:bg-white/10 text-slate-300 font-medium text-xs transition">
-          <i class="fa-solid fa-desktop w-5 text-teal-300"></i>
-          <span>Live Monitoring Tes</span>
-        </button>
+<button onclick="App.switchAdminTab('monitoring')" id="nav-monitoring" class="admin-nav-btn w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-xs font-bold transition">
+  <i class="fa-solid fa-chart-pie w-4"></i>
+  <span>Dashboard</span>
+</button>
 
         <button onclick="App.switchAdminTab('jadwal')" class="w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl hover:bg-white/10 text-slate-300 font-medium text-xs transition">
           <i class="fa-solid fa-calendar-check w-5 text-teal-300"></i>
@@ -271,13 +271,56 @@
 
       <main class="flex-1 overflow-y-auto p-6 space-y-6">
 
-        <!-- TAB MONITORING -->
-        <div id="tab-monitoring" class="space-y-6">
-          <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80 space-y-4">
-            <h3 class="font-bold text-base text-slate-800 border-b pb-3">Monitoring Ujian Real-Time</h3>
-            <div id="monitoring-list-container" class="space-y-2"></div>
-          </div>
+        <!-- TAB DASHBOARD & ANALITIK TES -->
+<div id="tab-monitoring" class="admin-tab-content space-y-6">
+  <div class="flex flex-wrap justify-between items-center gap-3 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+    <div>
+      <h3 class="font-extrabold text-base text-slate-800">Dashboard & Analitik Pelaksanaan Ujian</h3>
+      <p class="text-xs text-slate-500 mt-0.5">Pantauan statistik peserta keseluruhan, per kelas, dan status pengerjaan tes secara real-time.</p>
+    </div>
+    <button onclick="RekapModule.refreshMonitoringData()" class="bg-ocean-700 hover:bg-ocean-800 text-white font-bold text-xs px-4 py-2 rounded-xl shadow transition flex items-center gap-2">
+      <i class="fa-solid fa-rotate"></i>
+      <span>Segarkan Data</span>
+    </button>
+  </div>
+
+  <!-- KARTU RINGKASAN STATISTIK UTAMA -->
+  <div id="dashboard-summary-cards" class="grid grid-cols-2 md:grid-cols-5 gap-3"></div>
+
+  <!-- GRAFIK PIZZA & RINCIAN PER KELAS -->
+  <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+    <!-- Kolom Kiri: Grafik Pizza -->
+    <div class="lg:col-span-5 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+      <div>
+        <h4 class="font-bold text-sm text-slate-800 border-b border-slate-100 pb-3 mb-4">
+          <i class="fa-solid fa-chart-pie text-ocean-600 mr-1.5"></i> Grafik Status Peserta Ujian
+        </h4>
+        <div class="relative h-64 w-full flex items-center justify-center">
+          <canvas id="dashboard-pie-chart"></canvas>
         </div>
+      </div>
+      <div class="mt-4 pt-3 border-t border-slate-100 text-[11px] text-slate-500 text-center">
+        Data dikalkulasi otomatis berdasarkan peserta aktif & jadwal ujian hari ini.
+      </div>
+    </div>
+
+    <!-- Kolom Kanan: Rincian Jumlah Siswa Per Kelas -->
+    <div class="lg:col-span-7 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+      <h4 class="font-bold text-sm text-slate-800 border-b border-slate-100 pb-3 mb-4">
+        <i class="fa-solid fa-users-rectangle text-ocean-600 mr-1.5"></i> Distribusi & Progres Siswa Per Kelas
+      </h4>
+      <div id="dashboard-kelas-breakdown" class="overflow-x-auto max-h-72 overflow-y-auto"></div>
+    </div>
+  </div>
+
+  <!-- LOG AKTIVITAS TERKINI -->
+  <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+    <h4 class="font-bold text-sm text-slate-800 border-b border-slate-100 pb-3 mb-4">
+      <i class="fa-solid fa-clock-rotate-left text-ocean-600 mr-1.5"></i> Log Aktivitas Peserta Terkini
+    </h4>
+    <div id="monitoring-list-container" class="space-y-2 max-h-80 overflow-y-auto"></div>
+  </div>
+</div>
 
         <!-- TAB JADWAL UJIAN -->
         <div id="tab-jadwal" class="hidden space-y-6">
