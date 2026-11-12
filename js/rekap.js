@@ -555,7 +555,7 @@ const RekapModule = {
         </table>
 
         <div class="flex justify-between items-end text-xs pt-4">
-          <div class="text-center w-56">
+          <div class="text-left w-56">
             <p>Mengetahui,</p>
             <p class="font-bold">Plt. Kepala Sekolah</p>
             <div class="h-16"></div>
@@ -563,7 +563,7 @@ const RekapModule = {
             <p class="text-[10px] text-slate-500">NIP. 197511222010011007</p>
           </div>
 
-          <div class="text-center w-64">
+          <div class="text-left w-64">
             <p>Wangi-Wangi, ${tglSekarang}</p>
             <p class="font-bold">Guru Mata Pelajaran</p>
             <div class="h-16"></div>
