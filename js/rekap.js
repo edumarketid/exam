@@ -529,7 +529,6 @@ const RekapModule = {
               <th class="p-2 border border-slate-300 text-center w-8">NO</th>
               <th class="p-2 border border-slate-300 text-center">NAMA SISWA</th>
               <th class="p-2 border border-slate-300 text-center">NISN</th>
-              <th class="p-2 border border-slate-300">MATA PELAJARAN</th>
               <th class="p-2 border border-slate-300 text-center">NILAI AKHIR</th>
               <th class="p-2 border border-slate-300 text-center">STATUS</th>
             </tr>
@@ -542,8 +541,7 @@ const RekapModule = {
         <tr class="border-b border-slate-200">
           <td class="p-2 border border-slate-300 text-center font-bold">${idx + 1}</td>
           <td class="p-2 border border-slate-300 font-bold">${h.nama_siswa}</td>
-          <td class="p-2 border border-slate-300 text-center font-semibold">${h.nisn}</td>
-          <td class="p-2 border border-slate-300">${h.mapel}</td>
+          <td class="p-2 border border-slate-300 text-center font-semibold">${h.NISN}</td>
           <td class="p-2 border border-slate-300 text-center font-extrabold text-sm">${h.nilai}</td>
           <td class="p-2 border border-slate-300 text-center font-bold text-[10px]">${h.status_selesai}</td>
         </tr>
