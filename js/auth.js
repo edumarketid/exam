@@ -1,97 +1,90 @@
 const AuthModule = {
   async login(e) {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
+
     const usernameInput = String(document.getElementById('login-username')?.value || '').trim();
     const passwordInput = String(document.getElementById('login-password')?.value || '').trim();
 
     if (!usernameInput || !passwordInput) {
-      alert("Silakan isi Username/NISN dan Password!");
+      alert("Silakan isi Username / NISN / No. HP dan Password!");
       return;
     }
 
-    console.log(`[AuthModule] Menguji login untuk username: "${usernameInput}"`);
-
-    // 1. CEK AKUN ADMIN / PROKTOR (TABEL DYNAMIC SUPABASE & FALLBACK CONFIG)
+    // 1. CEK AKUN ADMIN DI SUPABASE
     try {
-      const listAdmin = await DB.fetchAdmin();
-      const foundAdmin = listAdmin.find(a => 
-        a.username === usernameInput && a.password === passwordInput
-      );
-
-      if (foundAdmin) {
-        if (String(foundAdmin.status).toLowerCase() !== 'aktif') {
-          alert("Akun Admin ini berstatus Non-Aktif.");
+      if (typeof DB !== 'undefined' && DB.fetchAdmin) {
+        const listAdmin = await DB.fetchAdmin();
+        const foundAdmin = listAdmin.find(a => a.username === usernameInput && a.password === passwordInput);
+        if (foundAdmin) {
+          if (String(foundAdmin.status).toLowerCase() !== 'aktif') {
+            alert("Akun Admin ini berstatus Non-Aktif.");
+            return;
+          }
+          State.currentUser = { ...foundAdmin, role: 'admin', nama: foundAdmin.nama_admin };
+          alert(`Selamat Datang Administrator: ${foundAdmin.nama_admin}`);
+          App.showScreen('admin');
+          App.switchAdminTab('monitoring');
           return;
         }
-        State.currentUser = { ...foundAdmin, role: 'admin', nama: foundAdmin.nama_admin };
-        alert(`Selamat Datang Administrator: ${foundAdmin.nama_admin}`);
-        App.showScreen('admin');
-        App.switchAdminTab('monitoring');
-        return;
       }
-    } catch (err) {
-      console.warn("[AuthModule] Gagal mengecek tabel admin, mencoba config fallback...", err.message);
-    }
+    } catch (err) {}
 
-    // Fallback Config Admin jika Database tidak memberikan respon
-    if (typeof CONFIG !== 'undefined' && usernameInput === CONFIG.ADMIN_USER && passwordInput === CONFIG.ADMIN_PASS) {
-      State.currentUser = { role: 'admin', nama: 'Administrator Proktor' };
+    // 2. FALLBACK CONFIG.JS ADMIN (admin / admin123)
+    const cfg = window.CONFIG || (typeof CONFIG !== 'undefined' ? CONFIG : null);
+    if (cfg && usernameInput === String(cfg.ADMIN_USER) && passwordInput === String(cfg.ADMIN_PASS)) {
+      State.currentUser = { role: 'admin', nama: 'Proktor Utama' };
       alert("Selamat Datang, Administrator Proktor!");
       App.showScreen('admin');
       App.switchAdminTab('monitoring');
       return;
     }
 
-    // 2. CEK AKUN GURU (TABEL GURU SUPABASE)
+    // 3. CEK AKUN GURU DI SUPABASE
     try {
-      const listGuru = await DB.fetchGuru();
-      const foundGuru = listGuru.find(g => 
-        (g.no_hp === usernameInput || g.nip === usernameInput) && g.password === passwordInput
-      );
-
-      if (foundGuru) {
-        if (String(foundGuru.status).toLowerCase() !== 'aktif') {
-          alert("Akun Guru Anda saat ini berstatus Non-Aktif. Silakan hubungi Administrator.");
+      if (typeof DB !== 'undefined' && DB.fetchGuru) {
+        const listGuru = await DB.fetchGuru();
+        const foundGuru = listGuru.find(g => 
+          (g.no_hp === usernameInput || g.nip === usernameInput) && g.password === passwordInput
+        );
+        if (foundGuru) {
+          if (String(foundGuru.status).toLowerCase() !== 'aktif') {
+            alert("Akun Guru Anda berstatus Non-Aktif.");
+            return;
+          }
+          State.currentUser = { ...foundGuru, role: 'guru' };
+          alert(`Selamat Datang Pak/Ibu Guru: ${foundGuru.nama_guru}`);
+          App.showScreen('admin');
+          App.switchAdminTab('bank-soal');
           return;
         }
-        State.currentUser = { ...foundGuru, role: 'guru' };
-        alert(`Selamat Datang Pak/Ibu Guru: ${foundGuru.nama_guru}`);
-        App.showScreen('admin');
-        App.switchAdminTab('bank-soal');
-        return;
       }
-    } catch (err) {
-      console.error("[AuthModule] Error saat verifikasi akun guru:", err.message);
-    }
+    } catch (err) {}
 
-    // 3. CEK AKUN SISWA (TABEL SISWA SUPABASE)
+    // 4. CEK AKUN SISWA DI SUPABASE
     try {
-      const listSiswa = await DB.fetchSiswa();
-      const foundSiswa = listSiswa.find(s => 
-        (String(s.nisn).trim() === usernameInput || String(s.user).trim() === usernameInput) && 
-        String(s.pass).trim() === passwordInput
-      );
-
-      if (foundSiswa) {
-        if (String(foundSiswa.status).toLowerCase() !== 'aktif' && foundSiswa.status !== 'Aktif') {
-          alert("Status akun Anda Non-Aktif. Silakan hubungi panitia ujian.");
+      if (typeof DB !== 'undefined' && DB.fetchSiswa) {
+        const listSiswa = await DB.fetchSiswa();
+        const foundSiswa = listSiswa.find(s => 
+          (String(s.nisn).trim() === usernameInput || String(s.user).trim() === usernameInput) && 
+          String(s.pass).trim() === passwordInput
+        );
+        if (foundSiswa) {
+          if (String(foundSiswa.status).toLowerCase() !== 'aktif') {
+            alert("Status akun Anda Non-Aktif. Hubungi panitia ujian.");
+            return;
+          }
+          State.currentUser = { ...foundSiswa, role: 'siswa' };
+          alert(`Selamat Datang, ${foundSiswa.nama} (${foundSiswa.kelas})`);
+          await ExamModule.startExam();
           return;
         }
-        State.currentUser = { ...foundSiswa, role: 'siswa' };
-        alert(`Selamat Datang, ${foundSiswa.nama} (${foundSiswa.kelas})`);
-        await ExamModule.startExam();
-        return;
       }
-    } catch (err) {
-      console.error("[AuthModule] Error saat verifikasi akun siswa:", err.message);
-    }
+    } catch (err) {}
 
-    // GAGAL AUTHENTIKASI
-    alert("Login Gagal! Username/NISN atau Password tidak sesuai.");
+    alert("Login Gagal! Periksa kembali Username/NISN/No. HP dan Password Anda.");
   },
 
   logout() {
-    console.log("[AuthModule] Keluar dari sesi aplikasi.");
     State.currentUser = null;
     State.examActive = false;
     App.showScreen('login');
