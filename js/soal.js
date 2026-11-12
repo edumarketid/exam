@@ -486,15 +486,15 @@ const SoalModule = {
         <div class="flex justify-between items-end text-xs pt-8 border-t border-slate-300 mt-6 page-break-inside-avoid">
           <div class="text-center w-56">
             <p>Mengetahui,</p>
-            <p class="font-bold">Proktor / Panitia CBT</p>
+            <p class="font-bold">Plt. Kepala Sekolah,</p>
             <div class="h-16"></div>
-            <p class="font-bold underline">TIM IT SMKN 1 Wakatobi</p>
-            <p class="text-[10px] text-slate-500">NIP. -</p>
+            <p class="font-bold underline">Abdul Kaharuddin, S.Pd.I.</p>
+            <p class="text-[10px] text-slate-500">NIP. 197511222010011007</p>
           </div>
 
           <div class="text-center w-64">
             <p>Wangi-Wangi Selatan, ${tglSekarang}</p>
-            <p class="font-bold">Guru Mata Pelajaran / Pembuat Soal</p>
+            <p class="font-bold">Guru Mata Pelajaran,</p>
             <div class="h-16"></div>
             <p class="font-bold underline">${namaGuru}</p>
             <p class="text-[10px] text-slate-500">NIP. ${nipGuru}</p>
