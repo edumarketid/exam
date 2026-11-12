@@ -435,25 +435,156 @@
           </div>
         </div>
 
-        <!-- TAB GURU & PENGAWAS (PERSIAPAN FITUR BARU) -->
-        <div id="tab-guru" class="hidden space-y-6">
-          <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80 space-y-6">
-            <div class="flex justify-between items-center border-b pb-3">
-              <div>
-                <h3 class="font-bold text-base text-slate-800">Data Guru & Pengawas Ujian</h3>
-                <p class="text-xs text-slate-500">Manajemen akun proktor, guru pengampu mapel, dan pengawas ruangan</p>
-              </div>
-              <button onclick="alert('Fitur Penambahan Guru Pengawas akan aktif di update berikutnya!')" class="bg-ocean-700 hover:bg-ocean-800 text-white font-bold text-xs px-4 py-2 rounded-xl shadow">
-                + Tambah Guru / Pengawas
-              </button>
-            </div>
-            <div class="p-8 border rounded-xl bg-slate-50 text-center text-xs text-slate-500">
-              <i class="fa-solid fa-chalkboard-user text-3xl text-ocean-600 mb-2"></i>
-              <p class="font-bold text-slate-700">Tabel Guru & Pengawas Ruangan Siap Diintegrasikan.</p>
-              <p class="text-[11px] mt-1">Struktur tabel dan modul Supabase siap dihubungkan untuk tugas proktor dan pengawasan ujian.</p>
-            </div>
-          </div>
+        <!-- TAB MANAJEMEN DATA GURU & PENGAWAS -->
+<div id="tab-guru" class="admin-tab-content hidden space-y-6">
+  <!-- FORM TAMBAH GURU BARU -->
+  <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+    <div class="border-b border-slate-100 pb-3 mb-4">
+      <h3 class="font-extrabold text-base text-slate-800">Tambah Akun Guru Pengampu & Pengawas</h3>
+      <p class="text-xs text-slate-500 mt-0.5">Guru dapat login menggunakan <strong>No. HP</strong> atau <strong>NIP</strong> untuk mengelola soal mapelnya dan mencetak rekap nilai.</p>
+    </div>
+
+    <form id="form-tambah-guru" onsubmit="GuruModule.saveNewGuru(event)" class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+      <div>
+        <label class="block font-bold text-slate-700 mb-1">Nama Lengkap & Gelar *</label>
+        <input type="text" id="guru-nama" required placeholder="Contoh: Ana Tangka, S.Pd." class="w-full border border-slate-300 rounded-xl px-3 py-2 focus:ring-2 focus:ring-ocean-500 outline-none">
+      </div>
+
+      <div>
+        <label class="block font-bold text-slate-700 mb-1">NIP / NUPTK</label>
+        <input type="text" id="guru-nip" placeholder="Contoh: 199603072023212032" class="w-full border border-slate-300 rounded-xl px-3 py-2 focus:ring-2 focus:ring-ocean-500 outline-none">
+      </div>
+
+      <div>
+        <label class="block font-bold text-slate-700 mb-1">No. HP / WhatsApp (Username Login) *</label>
+        <input type="text" id="guru-hp" required placeholder="Contoh: 085298875399" class="w-full border border-slate-300 rounded-xl px-3 py-2 focus:ring-2 focus:ring-ocean-500 outline-none">
+      </div>
+
+      <div>
+        <label class="block font-bold text-slate-700 mb-1">Password Login *</label>
+        <input type="text" id="guru-password" value="guru123" required class="w-full border border-slate-300 rounded-xl px-3 py-2 font-mono focus:ring-2 focus:ring-ocean-500 outline-none">
+      </div>
+
+      <div>
+        <label class="block font-bold text-slate-700 mb-1">Mata Pelajaran Diampu *</label>
+        <select id="guru-mapel" required class="w-full border border-slate-300 rounded-xl px-3 py-2 bg-white focus:ring-2 focus:ring-ocean-500 outline-none">
+          <option value="">-- Pilih Mata Pelajaran --</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="block font-bold text-slate-700 mb-1">Jabatan / Peran Ujian</label>
+        <select id="guru-jabatan" class="w-full border border-slate-300 rounded-xl px-3 py-2 bg-white focus:ring-2 focus:ring-ocean-500 outline-none">
+          <option value="Guru Mata Pelajaran">Guru Mata Pelajaran</option>
+          <option value="Guru & Pengawas Ruang">Guru & Pengawas Ruang</option>
+          <option value="Pengawas Ruang Ujian">Pengawas Ruang Ujian</option>
+          <option value="Koordinator / Proktor">Koordinator / Proktor</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="block font-bold text-slate-700 mb-1">Kelas Diampu (Opsional)</label>
+        <input type="text" id="guru-kelas" placeholder="Contoh: X TKJ 1, X TKJ 2" class="w-full border border-slate-300 rounded-xl px-3 py-2 focus:ring-2 focus:ring-ocean-500 outline-none">
+      </div>
+
+      <div>
+        <label class="block font-bold text-slate-700 mb-1">Status Kepegawaian</label>
+        <select id="guru-kepegawaian" class="w-full border border-slate-300 rounded-xl px-3 py-2 bg-white focus:ring-2 focus:ring-ocean-500 outline-none">
+          <option value="PNS">PNS</option>
+          <option value="PPPK">PPPK</option>
+          <option value="GTT / Honor">GTT / Honor</option>
+        </select>
+      </div>
+
+      <div class="flex items-end">
+        <button type="submit" class="w-full bg-ocean-700 hover:bg-ocean-800 text-white font-bold py-2.5 px-4 rounded-xl shadow transition flex items-center justify-center gap-2">
+          <i class="fa-solid fa-user-plus"></i>
+          <span>Simpan Akun Guru</span>
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- DAFTAR GURU & PENGAWAS TERDAFTAR -->
+  <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+    <div class="flex flex-wrap justify-between items-center gap-3 border-b border-slate-100 pb-3 mb-4">
+      <div>
+        <h4 class="font-bold text-sm text-slate-800">Daftar Guru & Pengawas Terdaftar</h4>
+        <p class="text-[11px] text-slate-500">Data NIP dan Nama Guru otomatis tercantum pada lembar cetak PDF Rekap Nilai & Naskah Soal.</p>
+      </div>
+      <button onclick="GuruModule.loadAndRender()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs px-3 py-1.5 rounded-lg transition">
+        <i class="fa-solid fa-rotate mr-1"></i> Segarkan
+      </button>
+    </div>
+
+    <div id="guru-table-container" class="overflow-x-auto"></div>
+  </div>
+</div>
+
+<!-- MODAL EDIT DATA GURU -->
+<div id="modal-edit-guru" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+    <div class="flex justify-between items-center border-b pb-3">
+      <h4 class="font-extrabold text-sm text-slate-800">Edit Data Guru & Pengawas</h4>
+      <button onclick="GuruModule.closeEditModal()" class="text-slate-400 hover:text-slate-700 font-bold text-lg">&times;</button>
+    </div>
+
+    <form onsubmit="GuruModule.saveEditedGuru(event)" class="space-y-3 text-xs">
+      <input type="hidden" id="edit-guru-id">
+
+      <div>
+        <label class="block font-bold text-slate-700 mb-1">Nama Lengkap & Gelar</label>
+        <input type="text" id="edit-guru-nama" required class="w-full border border-slate-300 rounded-xl px-3 py-2">
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">NIP</label>
+          <input type="text" id="edit-guru-nip" class="w-full border border-slate-300 rounded-xl px-3 py-2">
         </div>
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">No. HP (Login)</label>
+          <input type="text" id="edit-guru-hp" required class="w-full border border-slate-300 rounded-xl px-3 py-2">
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Password Login</label>
+          <input type="text" id="edit-guru-password" required class="w-full border border-slate-300 rounded-xl px-3 py-2 font-mono">
+        </div>
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Status Akun</label>
+          <select id="edit-guru-status" class="w-full border border-slate-300 rounded-xl px-3 py-2 bg-white">
+            <option value="Aktif">Aktif</option>
+            <option value="Non-Aktif">Non-Aktif</option>
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <label class="block font-bold text-slate-700 mb-1">Mata Pelajaran Diampu</label>
+        <select id="edit-guru-mapel" class="w-full border border-slate-300 rounded-xl px-3 py-2 bg-white"></select>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Jabatan</label>
+          <input type="text" id="edit-guru-jabatan" class="w-full border border-slate-300 rounded-xl px-3 py-2">
+        </div>
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Kelas Diampu</label>
+          <input type="text" id="edit-guru-kelas" class="w-full border border-slate-300 rounded-xl px-3 py-2">
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-2 pt-3 border-t">
+        <button type="button" onclick="GuruModule.closeEditModal()" class="px-4 py-2 rounded-xl border border-slate-300 font-bold text-slate-600 hover:bg-slate-50">Batal</button>
+        <button type="submit" class="px-5 py-2 rounded-xl bg-ocean-700 hover:bg-ocean-800 text-white font-bold shadow">Simpan Perubahan</button>
+      </div>
+    </form>
+  </div>
+</div>
 
         <!-- TAB DATA MAPEL -->
         <div id="tab-mapel" class="hidden space-y-6">
