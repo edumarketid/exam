@@ -87,7 +87,7 @@ const SiswaModule = {
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Cetak Kartu Ujian SMKN 1 Wakatobi</title>
+        <title>Cetak Kartu Login SMKN 1 Wakatobi</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <style>
           @page { size: A4; margin: 10mm; }
@@ -95,28 +95,31 @@ const SiswaModule = {
         </style>
       </head>
       <body class="p-4 bg-white text-slate-800" onload="window.print()">
-        <h2 class="text-center font-bold text-base mb-4 border-b pb-2">KARTU PESERTA UJIAN SUMATIF - SMKN 1 WAKATOBI</h2>
         <div class="card-grid">
     `;
 
     selectedSiswa.forEach(s => {
+      const ttlSiswa = s.TTL || s.ttl || '-';
       kartuHtml += `
-        <div class="border-2 border-slate-800 rounded-xl p-4 bg-slate-50 space-y-2 text-xs break-inside-avoid">
-          <div class="flex items-center justify-between border-b border-slate-300 pb-2">
-            <div class="font-bold text-sm text-blue-900">SMK NEGERI 1 WAKATOBI</div>
-            <span class="text-[10px] font-bold bg-blue-100 text-blue-800 px-2 py-0.5 rounded">KARTU PESERTA</span>
+        <div class="border-2 border-slate-800 rounded-xl p-3.5 bg-slate-50 text-xs break-inside-avoid">
+          <div class="text-center border-b-2 border-dashed border-slate-400 pb-2 mb-2.5 leading-tight">
+            <div class="font-extrabold text-[13px] text-blue-950 uppercase">KARTU LOGIN</div>
+            <div class="font-bold text-[11px] text-slate-800 uppercase">PENILAIAN SUMATIF SEMESTER GANJIL</div>
+            <div class="font-semibold text-[10px] text-slate-600 uppercase">TAHUN AJARAN 2026/2027</div>
           </div>
-          <div class="flex items-start gap-3 pt-1">
+          <div class="flex items-start gap-3">
             <!-- Kotak Foto 3x4 di Samping Kiri -->
-            <div class="w-16 h-20 shrink-0 border border-dashed border-slate-500 bg-white rounded flex flex-col items-center justify-center text-[9px] font-bold text-slate-400 text-center leading-tight">
+            <div class="w-16 h-20 shrink-0 border border-dashed border-slate-500 bg-white rounded flex flex-col items-center justify-center text-[9px] font-bold text-slate-400 text-center leading-tight mt-0.5">
               <span>FOTO</span>
               <span>3 x 4</span>
             </div>
             <!-- Identitas Peserta di Samping Kanan -->
-            <div class="space-y-1 flex-1 min-w-0">
+            <div class="space-y-1 flex-1 min-w-0 text-[11px]">
+              <div class="flex"><span class="w-24 shrink-0 font-semibold">Nama Sekolah</span><span class="mr-1">:</span><strong class="truncate">SMKN 1 Wakatobi</strong></div>
               <div class="flex"><span class="w-24 shrink-0 font-semibold">Nama Peserta</span><span class="mr-1">:</span><strong class="truncate">${s.nama}</strong></div>
-              <div class="flex"><span class="w-24 shrink-0 font-semibold">NISN / User</span><span class="mr-1">:</span><strong class="font-mono text-blue-800">${s.nisn}</strong></div>
+              <div class="flex"><span class="w-24 shrink-0 font-semibold">TTL</span><span class="mr-1">:</span><strong class="truncate">${ttlSiswa}</strong></div>
               <div class="flex"><span class="w-24 shrink-0 font-semibold">Kelas</span><span class="mr-1">:</span><strong>${s.kelas}</strong></div>
+              <div class="flex"><span class="w-24 shrink-0 font-semibold">Username</span><span class="mr-1">:</span><strong class="font-mono text-blue-800">${s.nisn}</strong></div>
               <div class="flex"><span class="w-24 shrink-0 font-semibold">Password</span><span class="mr-1">:</span><strong class="font-mono text-emerald-700">${s.pass || 'smk123'}</strong></div>
             </div>
           </div>
