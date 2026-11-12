@@ -537,6 +537,7 @@ const RekapModule = {
     `;
 
     listToPrint.forEach((h, idx) => {
+      const nisnSiswa = h.NISN || h.nisn || h.siswa?.NISN || h.siswa?.nisn || '-';
       printHtml += `
         <tr class="border-b border-slate-200">
           <td class="p-2 border border-slate-300 text-center font-bold">${idx + 1}</td>
