@@ -324,9 +324,13 @@ const DB = {
     const client = await this.getClient();
     if (!client) throw new Error("Database tidak terhubung. Periksa config.js dan koneksi internet.");
 
-    const dataToInsert = {
-      ID_SISWA: String(payload.id_siswa),
-      id_siswa: String(payload.id_siswa),
+    const idVal = /^\d+$/.test(String(payload.id_siswa || '').trim())
+      ? parseInt(String(payload.id_siswa).trim(), 10)
+      : String(payload.id_siswa || '');
+
+    // Coba dengan nama kolom ID_SISWA (sesuai skema asli hasil_ujian)
+    const primaryPayload = {
+      ID_SISWA: idVal,
       nama_siswa: payload.nama_siswa,
       kelas: payload.kelas,
       mapel: payload.mapel,
@@ -336,20 +340,31 @@ const DB = {
       waktu_selesai: payload.waktu_selesai
     };
 
-    const { data, error } = await client.from('hasil_ujian').insert([dataToInsert]);
-    if (error) {
-      const fallbackPayload = {
-        ID_SISWA: String(payload.id_siswa),
-        mapel: payload.mapel,
-        nilai: payload.nilai,
-        jumlah_pelanggaran: payload.jumlah_pelanggaran,
-        status_selesai: payload.status_selesai
-      };
-      const { data: dataFb, error: errFb } = await client.from('hasil_ujian').insert([fallbackPayload]);
-      if (errFb) throw errFb;
-      return dataFb;
-    }
-    return data;
+    const { data, error } = await client.from('hasil_ujian').insert([primaryPayload]).select();
+    if (!error) return data;
+
+    // Fallback 1: Jika kolom nama_siswa / kelas / waktu_selesai tidak ada di tabel hasil_ujian
+    const minimalCapPayload = {
+      ID_SISWA: idVal,
+      mapel: payload.mapel,
+      nilai: payload.nilai,
+      jumlah_pelanggaran: payload.jumlah_pelanggaran,
+      status_selesai: payload.status_selesai
+    };
+    const resMinCap = await client.from('hasil_ujian').insert([minimalCapPayload]).select();
+    if (!resMinCap.error) return resMinCap.data;
+
+    // Fallback 2: Jika kolom menggunakan huruf kecil id_siswa
+    const minimalLowerPayload = {
+      id_siswa: idVal,
+      mapel: payload.mapel,
+      nilai: payload.nilai,
+      jumlah_pelanggaran: payload.jumlah_pelanggaran,
+      status_selesai: payload.status_selesai
+    };
+    const resMinLower = await client.from('hasil_ujian').insert([minimalLowerPayload]).select();
+    if (resMinLower.error) throw resMinLower.error;
+    return resMinLower.data;
   },
 
   async deleteHasilUjian(id) {
