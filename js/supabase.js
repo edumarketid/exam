@@ -176,7 +176,15 @@ const DB = {
     const client = await this.getClient();
     if (!client) throw new Error("Database tidak terhubung. Periksa config.js dan koneksi internet.");
     const { data, error } = await client.from('guru').update(payload).eq('id_guru', id_guru);
-    if (error) throw error;
+    if (error) {
+      const resCap = await client.from('guru').update(payload).eq('ID_GURU', id_guru);
+      if (resCap.error) {
+        const resId = await client.from('guru').update(payload).eq('id', id_guru);
+        if (resId.error) throw error;
+        return resId.data;
+      }
+      return resCap.data;
+    }
     return data;
   },
 
@@ -184,7 +192,13 @@ const DB = {
     const client = await this.getClient();
     if (!client) throw new Error("Database tidak terhubung. Periksa config.js dan koneksi internet.");
     const { error } = await client.from('guru').delete().eq('id_guru', id_guru);
-    if (error) throw error;
+    if (error) {
+      const resCap = await client.from('guru').delete().eq('ID_GURU', id_guru);
+      if (resCap.error) {
+        const resId = await client.from('guru').delete().eq('id', id_guru);
+        if (resId.error) throw error;
+      }
+    }
     return true;
   },
 
