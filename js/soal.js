@@ -1,43 +1,55 @@
 const SoalModule = {
-  // --- HELPER: FILTER HAK AKSES GURU (EXACT MATCH MULTI-MAPEL & MULTI-KELAS) ---
-  getGuruPermissions() {
-    if (!State.currentUser || State.currentUser.role !== 'guru') {
-      return { isGuru: false, mapels: [], kelas: [] };
+  // --- HELPER: CEK PASANGAN (MAPEL + KELAS) MILIK GURU ---
+  getGuruPairs() {
+    if (!State.currentUser || State.currentUser.role !== 'guru') return [];
+    if (typeof GuruModule !== 'undefined' && typeof GuruModule.getGuruPairs === 'function') {
+      return GuruModule.getGuruPairs(State.currentUser);
     }
+
     const rawMapel = String(State.currentUser.mapel_diampu || '').trim();
     const rawKelas = String(State.currentUser.kelas_diampu || '').trim();
+    if (!rawMapel || rawMapel === '-') return [];
 
-    const mapels = (!rawMapel || rawMapel === '-' || rawMapel.toUpperCase() === 'ALL')
+    const pairs = [];
+    const legacyKelasList = (!rawKelas || rawKelas === '-' || rawKelas.toUpperCase() === 'ALL')
       ? []
-      : rawMapel.split(',').map(m => m.trim().toUpperCase()).filter(Boolean);
+      : rawKelas.split(',').map(k => k.trim()).filter(Boolean);
 
-    const kelas = (!rawKelas || rawKelas === '-' || rawKelas.toUpperCase() === 'ALL')
-      ? []
-      : rawKelas.split(',').map(k => k.trim().toUpperCase()).filter(Boolean);
-
-    return { isGuru: true, mapels, kelas };
+    rawMapel.split(',').map(s => s.trim()).filter(Boolean).forEach(token => {
+      const match = token.match(/^(.+?)\s*\(([^()]+)\)$/);
+      if (match) {
+        pairs.push({ mapel: match[1].trim(), kelas: match[2].trim() });
+      } else if (legacyKelasList.length > 0) {
+        legacyKelasList.forEach(k => pairs.push({ mapel: token, kelas: k }));
+      } else {
+        pairs.push({ mapel: token, kelas: '*' });
+      }
+    });
+    return pairs;
   },
 
-  isMapelAllowed(mapelName) {
-    const perm = this.getGuruPermissions();
-    if (!perm.isGuru) return true;
-    if (perm.mapels.length === 0) return false;
-    return perm.mapels.includes(String(mapelName || '').trim().toUpperCase());
-  },
+  isPairAllowed(targetMapel, targetKelas = null) {
+    if (!State.currentUser || State.currentUser.role !== 'guru') return true;
+    const pairs = this.getGuruPairs();
+    if (pairs.length === 0) return false;
 
-  isKelasAllowed(kelasStr) {
-    const perm = this.getGuruPermissions();
-    if (!perm.isGuru) return true;
-    if (perm.kelas.length === 0) return true;
-    const targetList = String(kelasStr || '').split(',').map(k => k.trim().toUpperCase()).filter(Boolean);
-    return targetList.some(k => perm.kelas.includes(k));
+    const mUpper = String(targetMapel || '').trim().toUpperCase();
+    if (!targetKelas) {
+      return pairs.some(p => p.mapel.toUpperCase() === mUpper);
+    }
+
+    const targetKelasList = String(targetKelas).split(',').map(k => k.trim().toUpperCase()).filter(Boolean);
+    return pairs.some(p => {
+      const matchM = p.mapel.toUpperCase() === mUpper;
+      const matchK = p.kelas === '*' || targetKelasList.includes(p.kelas.toUpperCase());
+      return matchM && matchK;
+    });
   },
 
   async loadAndRender() {
     try {
       console.log("[SoalModule] Menarik data Bank Soal dari Supabase...");
       
-      // 1. Pastikan data mapel & siswa tersedia di State
       if (!State.mapelList || State.mapelList.length === 0) {
         State.mapelList = await DB.fetchMapel();
       }
@@ -47,7 +59,6 @@ const SoalModule = {
 
       const rawBank = await DB.fetchBankSoal();
       
-      // Normalisasi data dari berbagai variasi nama kolom Supabase
       State.questions = (rawBank || []).map(q => ({
         id: q.id || q.ID,
         mapel: String(q.mapel || q.MAPEL || q.nama_mapel || q.NAMA_MAPEL || '-').trim(),
@@ -63,7 +74,6 @@ const SoalModule = {
 
       console.log("[SoalModule] Bank Soal berhasil dimuat:", State.questions.length, "butir");
       
-      // Populate Seluruh Komponen Form Upload & Filter
       this.populateUploadMapelDropdown();
       this.renderUploadKelasCheckboxes();
       this.populateFilterDropdowns();
@@ -79,22 +89,23 @@ const SoalModule = {
     if (!selectUploadMapel) return;
 
     let html = `<option value="">-- Pilih Mata Pelajaran --</option>`;
-    
-    const mapelSet = new Set(State.mapelList || []);
-    if (State.questions) {
-      State.questions.forEach(q => { if (q.mapel) mapelSet.add(q.mapel); });
-    }
-    if (State.currentUser && State.currentUser.role === 'guru' && State.currentUser.mapel_diampu) {
-      String(State.currentUser.mapel_diampu).split(',').forEach(m => {
-        if (m.trim() && m.trim() !== '-') mapelSet.add(m.trim());
+
+    if (State.currentUser && State.currentUser.role === 'guru') {
+      const pairs = this.getGuruPairs();
+      const uniqueMapels = [...new Set(pairs.map(p => p.mapel))];
+      uniqueMapels.forEach(m => {
+        html += `<option value="${m}">${m}</option>`;
+      });
+      selectUploadMapel.onchange = () => this.renderUploadKelasCheckboxes();
+    } else {
+      const mapelSet = new Set(State.mapelList || []);
+      if (State.questions) {
+        State.questions.forEach(q => { if (q.mapel) mapelSet.add(q.mapel); });
+      }
+      Array.from(mapelSet).sort().forEach(m => {
+        html += `<option value="${m}">${m}</option>`;
       });
     }
-
-    Array.from(mapelSet).sort().forEach(m => {
-      if (this.isMapelAllowed(m)) {
-        html += `<option value="${m}">${m}</option>`;
-      }
-    });
 
     selectUploadMapel.innerHTML = html;
   },
@@ -103,38 +114,43 @@ const SoalModule = {
     const container = document.getElementById('container-upload-kelas-checkboxes');
     if (!container) return;
 
+    const selectedMapel = (document.getElementById('select-upload-mapel')?.value || '').trim().toUpperCase();
     const kelasSet = new Set();
 
-    if (State.siswaList && State.siswaList.length > 0) {
-      State.siswaList.forEach(s => {
-        if (s.kelas && s.kelas !== '-') kelasSet.add(String(s.kelas).trim());
-      });
-    }
+    if (State.currentUser && State.currentUser.role === 'guru') {
+      const pairs = this.getGuruPairs();
+      const relevantPairs = selectedMapel
+        ? pairs.filter(p => p.mapel.toUpperCase() === selectedMapel)
+        : pairs;
 
-    if (State.questions && State.questions.length > 0) {
-      State.questions.forEach(q => {
-        if (q.kelas && q.kelas !== '-') {
-          const splitK = String(q.kelas).split(',');
-          splitK.forEach(k => kelasSet.add(k.trim()));
+      relevantPairs.forEach(p => {
+        if (p.kelas === '*') {
+          (State.siswaList || []).forEach(s => { if (s.kelas && s.kelas !== '-') kelasSet.add(String(s.kelas).trim()); });
+        } else {
+          kelasSet.add(p.kelas);
         }
       });
+    } else {
+      if (State.siswaList && State.siswaList.length > 0) {
+        State.siswaList.forEach(s => {
+          if (s.kelas && s.kelas !== '-') kelasSet.add(String(s.kelas).trim());
+        });
+      }
+      if (State.questions && State.questions.length > 0) {
+        State.questions.forEach(q => {
+          if (q.kelas && q.kelas !== '-') {
+            String(q.kelas).split(',').forEach(k => kelasSet.add(k.trim()));
+          }
+        });
+      }
     }
 
-    if (State.currentUser && State.currentUser.role === 'guru' && State.currentUser.kelas_diampu) {
-      String(State.currentUser.kelas_diampu).split(',').forEach(k => {
-        if (k.trim() && k.trim() !== '-') kelasSet.add(k.trim());
-      });
-    }
-
-    const sortedKelas = Array.from(kelasSet)
-      .filter(Boolean)
-      .filter(k => this.isKelasAllowed(k))
-      .sort();
+    const sortedKelas = Array.from(kelasSet).filter(Boolean).sort();
 
     if (sortedKelas.length === 0) {
       container.innerHTML = `
         <div class="col-span-4 p-2 text-center text-xs text-amber-700 bg-amber-50 rounded">
-          Belum ada data kelas yang sesuai dengan hak akses Anda.
+          Pilih Mata Pelajaran terlebih dahulu untuk melihat kelas target Anda.
         </div>`;
       return;
     }
@@ -162,9 +178,7 @@ const SoalModule = {
     const filterMapel = document.getElementById('bank-filter-mapel');
     const filterKelas = document.getElementById('bank-filter-kelas');
 
-    const accessibleQuestions = (State.questions || []).filter(q => 
-      this.isMapelAllowed(q.mapel) && this.isKelasAllowed(q.kelas)
-    );
+    const accessibleQuestions = (State.questions || []).filter(q => this.isPairAllowed(q.mapel, q.kelas));
 
     if (filterMapel) {
       const listMapel = [...new Set(accessibleQuestions.map(q => q.mapel))].filter(Boolean);
@@ -179,7 +193,11 @@ const SoalModule = {
       const listKelasRaw = accessibleQuestions.map(q => q.kelas).join(',').split(',');
       const listKelas = [...new Set(listKelasRaw.map(k => k.trim()))]
         .filter(Boolean)
-        .filter(k => this.isKelasAllowed(k));
+        .filter(k => {
+          if (!State.currentUser || State.currentUser.role !== 'guru') return true;
+          const pairs = this.getGuruPairs();
+          return pairs.some(p => p.kelas === '*' || p.kelas.toUpperCase() === k.toUpperCase());
+        });
       let optHtml = `<option value="ALL">-- Semua Kelas --</option>`;
       listKelas.forEach(k => {
         optHtml += `<option value="${k}">${k}</option>`;
@@ -198,12 +216,11 @@ const SoalModule = {
     container.innerHTML = '';
     let filtered = State.questions || [];
 
-    // PRIVILEGE FILTER: Jika login sebagai GURU, filter ketat hanya mapel & kelas diampunya
+    // PRIVILEGE FILTER KETAT: Pasangan (Mapel + Kelas) milik guru
     if (State.currentUser && State.currentUser.role === 'guru') {
-      filtered = filtered.filter(q => this.isMapelAllowed(q.mapel) && this.isKelasAllowed(q.kelas));
+      filtered = filtered.filter(q => this.isPairAllowed(q.mapel, q.kelas));
     }
 
-    // Filter Dropdown Tampilan
     if (filterKelas !== 'ALL') {
       filtered = filtered.filter(q => {
         const kList = String(q.kelas).toUpperCase().split(',').map(k => k.trim());
@@ -218,13 +235,12 @@ const SoalModule = {
     if (filtered.length === 0) {
       container.innerHTML = `
         <div class="p-6 text-center text-xs text-amber-700 bg-amber-50 rounded-xl border border-amber-200">
-          <p class="font-bold">Tidak ada naskah soal yang ditemukan.</p>
+          <p class="font-bold">Tidak ada naskah soal yang ditemukan untuk pasangan Mapel & Kelas Anda.</p>
           <p class="mt-1 text-slate-500">Pastikan soal sudah diunggah atau sesuaikan filter Mapel & Kelas di atas.</p>
         </div>`;
       return;
     }
 
-    // GROUPING DATA BERDASARKAN KOMBINASI (MAPEL + KELAS)
     const groupedByMapelKelas = {};
     filtered.forEach(q => {
       const mapelName = q.mapel || 'Tanpa Mapel';
@@ -243,7 +259,6 @@ const SoalModule = {
 
     let groupIdx = 0;
 
-    // RENDER ACCORDION GROUP PER (MAPEL + KELAS)
     Object.keys(groupedByMapelKelas).forEach(key => {
       groupIdx++;
       const groupData = groupedByMapelKelas[key];
@@ -262,9 +277,7 @@ const SoalModule = {
         const snippetText = plainText.length > 55 ? plainText.substring(0, 55) + '...' : plainText;
 
         innerSoalHtml += `
-          <!-- BUTIR SOAL ITEM -->
           <div class="border border-slate-200 rounded-xl overflow-hidden bg-white mb-2">
-            <!-- HEADER BUTIR SOAL -->
             <div class="p-3 bg-slate-50 flex flex-wrap justify-between items-center gap-2 cursor-pointer border-b border-slate-100" onclick="SoalModule.toggleSoalDetail(${q.id})">
               <div class="flex items-center space-x-2 flex-1 min-w-0">
                 <span class="bg-ocean-700 text-white font-extrabold text-[11px] px-2 py-0.5 rounded">Soal #${idx + 1}</span>
@@ -288,7 +301,6 @@ const SoalModule = {
               </div>
             </div>
 
-            <!-- DETAIL SOAL (DEFAULT TERLIPAT) -->
             <div id="detail-soal-${q.id}" class="hidden p-4 space-y-3 bg-white text-xs border-t border-slate-100">
               <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">${q.soal_html}</div>
               <div class="grid grid-cols-1 md:grid-cols-2 gap-2 pt-1">
@@ -303,7 +315,6 @@ const SoalModule = {
         `;
       });
 
-      // KARTU UTAMA DENGAN HEADER MAPEL + KELAS & TOMBOL CETAK + HAPUS PAKET
       groupBox.innerHTML = `
         <div class="p-4 bg-ocean-900 text-white flex flex-wrap justify-between items-center gap-3 cursor-pointer select-none" onclick="SoalModule.toggleMapelGroup('${safeGroupId}')">
           <div class="flex items-center space-x-3">
@@ -322,14 +333,12 @@ const SoalModule = {
           </div>
 
           <div class="flex items-center space-x-2" onclick="event.stopPropagation()">
-            <!-- TOMBOL CETAK NASKAH SOAL RESMI -->
             <button onclick="SoalModule.printNaskahSoal('${encodeURIComponent(groupData.mapel)}', '${encodeURIComponent(groupData.kelas)}')" 
                     class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg shadow transition flex items-center gap-1.5">
               <i class="fa-solid fa-print"></i>
               <span>Cetak Soal</span>
             </button>
 
-            <!-- TOMBOL HAPUS PAKET SOAL PER MAPEL & KELAS -->
             <button onclick="SoalModule.deleteGroupSoal('${encodeURIComponent(groupData.mapel)}', '${encodeURIComponent(groupData.kelas)}', ${listSoalGroup.length})" 
                     title="Hapus Seluruh Soal pada Mapel & Kelas Ini"
                     class="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg shadow transition flex items-center gap-1.5">
@@ -347,7 +356,6 @@ const SoalModule = {
           </div>
         </div>
 
-        <!-- CONTAINER DAFTAR SOAL DI DALAM GROUP (DEFAULT TERLIPAT / HIDDEN) -->
         <div id="${safeGroupId}" class="hidden p-4 bg-slate-100 space-y-2 border-t border-slate-200">
           ${innerSoalHtml}
         </div>
@@ -357,7 +365,6 @@ const SoalModule = {
     });
   },
 
-  // --- HAPUS BUTIR SOAL SATUAN ---
   async deleteSoal(id, nomorUrut) {
     if (!id) return;
 
@@ -384,7 +391,6 @@ const SoalModule = {
     }
   },
 
-  // --- HAPUS SELURUH PAKET SOAL PER MAPEL & KELAS ---
   async deleteGroupSoal(encodedMapel, encodedKelas, jumlahSoal) {
     const mapel = decodeURIComponent(encodedMapel);
     const kelas = decodeURIComponent(encodedKelas);
@@ -421,7 +427,6 @@ const SoalModule = {
     }
   },
 
-  // --- FITUR CETAK NASKAH SOAL RESMI DENGAN KOP DARI SUPABASE STORAGE ---
   async printNaskahSoal(encodedMapel, encodedKelas) {
     const mapel = decodeURIComponent(encodedMapel);
     const kelas = decodeURIComponent(encodedKelas);
@@ -436,28 +441,7 @@ const SoalModule = {
       return;
     }
 
-    let namaGuru = "Guru Mata Pelajaran";
-    let nipGuru = "-";
-
-    try {
-      const listGuru = await DB.fetchGuru();
-      const targetM = mapel.trim().toUpperCase();
-      const foundGuru = listGuru.find(g => {
-        const mList = String(g.mapel_diampu || '').split(',').map(m => m.trim().toUpperCase());
-        return mList.includes(targetM);
-      });
-      if (foundGuru) {
-        namaGuru = foundGuru.nama_guru;
-        nipGuru = foundGuru.nip;
-      } else if (State.currentUser && State.currentUser.role === 'guru') {
-        namaGuru = State.currentUser.nama_guru;
-        nipGuru = State.currentUser.nip;
-      }
-    } catch (e) {}
-
     const kopUrl = "https://nbwpnhshhpfqtmbwewgk.supabase.co/storage/v1/object/public/media-sekolah/kop_sekolah.png";
-    const tglSekarang = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
-
     const printWindow = window.open('', '_blank');
 
     let printHtml = `
@@ -475,7 +459,6 @@ const SoalModule = {
       </head>
       <body class="p-4 bg-white" onload="window.print()">
         
-        <!-- KOP SURAT GAMBAR SUPABASE BUCKET 'media-sekolah' -->
         <div class="mb-4 border-b-4 border-double border-slate-900 pb-2 text-center">
           <img src="${kopUrl}" alt="Kop Surat SMKN 1 Wakatobi" class="w-full max-h-32 object-contain mx-auto" 
                onerror="this.style.display='none'; document.getElementById('fallback-header').style.display='block';">
@@ -488,7 +471,6 @@ const SoalModule = {
           </div>
         </div>
 
-        <!-- HEADER PETUNJUK NASKAH SOAL -->
         <div class="border border-slate-800 rounded-lg p-3 mb-6 bg-slate-50 text-xs">
           <div class="grid grid-cols-2 gap-2">
             <div><strong>Mata Pelajaran:</strong> ${mapel}</div>
@@ -502,7 +484,6 @@ const SoalModule = {
 
         <h4 class="font-bold text-center text-sm uppercase mb-4 tracking-wide border-b pb-1">NASKAH BUTIR SOAL UJIAN SUMATIF</h4>
 
-        <!-- DAFTAR NASKAH SOAL -->
         <div class="space-y-5">
     `;
 
@@ -535,7 +516,6 @@ const SoalModule = {
     printWindow.document.close();
   },
 
-  // TOGGLE ACCORDION GROUP (MAPEL + KELAS)
   toggleMapelGroup(groupId) {
     const groupEl = document.getElementById(groupId);
     const iconBtn = document.getElementById(`btn-mapel-icon-${groupId}`);
@@ -551,7 +531,6 @@ const SoalModule = {
     }
   },
 
-  // TOGGLE BUTIR SOAL INDIVIDUAL
   toggleSoalDetail(id) {
     const detailEl = document.getElementById(`detail-soal-${id}`);
     const btnEl = document.getElementById(`btn-toggle-${id}`);
@@ -569,7 +548,6 @@ const SoalModule = {
     }
   },
 
-  // --- UNGGAH NASKAH SOAL HTML ---
   async processHTMLUpload(e) {
     e.preventDefault();
     const mapelSelect = document.getElementById('select-upload-mapel').value;
@@ -650,7 +628,6 @@ const SoalModule = {
     reader.readAsText(file);
   },
 
-  // --- MODAL EDIT SOAL & GAMBAR ---
   openEditModal(id) {
     const q = State.questions.find(item => item.id === id);
     if (!q) return;
