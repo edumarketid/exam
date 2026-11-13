@@ -46,6 +46,54 @@ const SoalModule = {
     });
   },
 
+  // --- HELPER: EKSTRAK & HAPUS FILE GAMBAR DARI BUCKET 'soal-images' ---
+  extractStoragePathsFromQuestions(questionItems) {
+    const paths = new Set();
+    const regex = /\/storage\/v1\/object\/public\/soal-images\/([^"'\s<>)]+)/gi;
+
+    (questionItems || []).forEach(q => {
+      const combinedHtml = [
+        q.soal_html, q.opsi_a, q.opsi_b, q.opsi_c, q.opsi_d, q.opsi_e
+      ].filter(Boolean).join(' ');
+
+      let match;
+      while ((match = regex.exec(combinedHtml)) !== null) {
+        if (match[1]) {
+          paths.add(decodeURIComponent(match[1]));
+        }
+      }
+    });
+
+    return Array.from(paths);
+  },
+
+  async cleanupUnusedStorageImages(deletedQuestions, remainingQuestions) {
+    try {
+      const candidatePaths = this.extractStoragePathsFromQuestions(deletedQuestions);
+      if (candidatePaths.length === 0) return 0;
+
+      // Pastikan gambar tidak sedang dipakai oleh soal lain yang masih tersisa
+      const stillUsedPaths = new Set(this.extractStoragePathsFromQuestions(remainingQuestions));
+      const safeToDelete = candidatePaths.filter(p => !stillUsedPaths.has(p));
+
+      if (safeToDelete.length === 0) return 0;
+
+      const client = await DB.getClient();
+      if (!client) return 0;
+
+      const { error } = await client.storage.from('soal-images').remove(safeToDelete);
+      if (error) {
+        console.warn("[SoalModule] Gagal menghapus file dari bucket soal-images:", error.message);
+        return 0;
+      }
+      console.log("[SoalModule] Berhasil membersihkan gambar dari Storage:", safeToDelete);
+      return safeToDelete.length;
+    } catch (e) {
+      console.warn("[SoalModule] Cleanup storage dilewati:", e.message);
+      return 0;
+    }
+  },
+
   async loadAndRender() {
     try {
       console.log("[SoalModule] Menarik data Bank Soal dari Supabase...");
@@ -216,7 +264,6 @@ const SoalModule = {
     container.innerHTML = '';
     let filtered = State.questions || [];
 
-    // PRIVILEGE FILTER KETAT: Pasangan (Mapel + Kelas) milik guru
     if (State.currentUser && State.currentUser.role === 'guru') {
       filtered = filtered.filter(q => this.isPairAllowed(q.mapel, q.kelas));
     }
@@ -333,14 +380,23 @@ const SoalModule = {
           </div>
 
           <div class="flex items-center space-x-2" onclick="event.stopPropagation()">
+            <!-- TOMBOL ANALISIS BUTIR SOAL -->
+            <button onclick="SoalModule.openAnalisisButirSoal('${encodeURIComponent(groupData.mapel)}', '${encodeURIComponent(groupData.kelas)}')" 
+                    title="Lihat Analisis Butir & Kualitas Soal"
+                    class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg shadow transition flex items-center gap-1.5">
+              <span>📊 Analisis</span>
+            </button>
+
+            <!-- TOMBOL CETAK NASKAH SOAL RESMI -->
             <button onclick="SoalModule.printNaskahSoal('${encodeURIComponent(groupData.mapel)}', '${encodeURIComponent(groupData.kelas)}')" 
                     class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg shadow transition flex items-center gap-1.5">
               <i class="fa-solid fa-print"></i>
               <span>Cetak Soal</span>
             </button>
 
+            <!-- TOMBOL HAPUS PAKET SOAL PER MAPEL & KELAS + GAMBAR STORAGE -->
             <button onclick="SoalModule.deleteGroupSoal('${encodeURIComponent(groupData.mapel)}', '${encodeURIComponent(groupData.kelas)}', ${listSoalGroup.length})" 
-                    title="Hapus Seluruh Soal pada Mapel & Kelas Ini"
+                    title="Hapus Seluruh Soal & Gambar Storage pada Mapel & Kelas Ini"
                     class="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg shadow transition flex items-center gap-1.5">
               <i class="fa-solid fa-trash-can"></i>
               <span class="hidden md:inline">Hapus Paket</span>
@@ -365,18 +421,171 @@ const SoalModule = {
     });
   },
 
+  // --- ANALISIS BUTIR SOAL & KUALITAS PAKET SOAL ---
+  async openAnalisisButirSoal(encodedMapel, encodedKelas) {
+    const mapel = decodeURIComponent(encodedMapel);
+    const kelas = decodeURIComponent(encodedKelas);
+
+    const questionsPkg = (State.questions || []).filter(q => 
+      String(q.mapel).trim().toUpperCase() === mapel.trim().toUpperCase() &&
+      String(q.kelas).trim().toUpperCase() === kelas.trim().toUpperCase()
+    );
+
+    if (questionsPkg.length === 0) {
+      alert("Paket soal tidak ditemukan.");
+      return;
+    }
+
+    // Ambil hasil ujian peserta untuk paket mapel & kelas ini
+    let hasilList = [];
+    try {
+      const normalized = typeof RekapModule !== 'undefined' && RekapModule.fetchAndNormalizeHasil
+        ? await RekapModule.fetchAndNormalizeHasil()
+        : await DB.fetchHasilUjian();
+
+      const targetKelasArr = kelas.split(',').map(k => k.trim().toUpperCase());
+      hasilList = (normalized || []).filter(h => 
+        String(h.status_selesai || '').toUpperCase() !== 'MENGERJAKAN' &&
+        String(h.mapel || '').trim().toUpperCase() === mapel.trim().toUpperCase() &&
+        targetKelasArr.includes(String(h.kelas || '').trim().toUpperCase())
+      );
+    } catch (e) {}
+
+    // Distribusi Kunci Jawaban (Keseimbangan Kunci A-E)
+    const keyDist = { A: 0, B: 0, C: 0, D: 0, E: 0 };
+    questionsPkg.forEach(q => {
+      const k = String(q.kunci_jawaban || 'A').trim().toUpperCase();
+      if (keyDist[k] !== undefined) keyDist[k]++;
+    });
+
+    // Statistik Skor Peserta
+    const scores = hasilList.map(h => Number(h.nilai) || 0);
+    const avgScore = scores.length > 0 ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1) : '0.0';
+    const maxScore = scores.length > 0 ? Math.max(...scores) : 0;
+    const minScore = scores.length > 0 ? Math.min(...scores) : 0;
+    const tuntasCount = scores.filter(s => s >= 75).length;
+
+    // Buat/tampilkan modal analisis
+    let modalEl = document.getElementById('modal-analisis-butir-soal');
+    if (!modalEl) {
+      modalEl = document.createElement('div');
+      modalEl.id = 'modal-analisis-butir-soal';
+      modalEl.className = "fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4";
+      document.body.appendChild(modalEl);
+    }
+
+    let rowsHtml = '';
+    questionsPkg.forEach((q, idx) => {
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = q.soal_html;
+      const plainText = (tempDiv.textContent || tempDiv.innerText || '').trim();
+      const hasImage = /<img\s/i.test(q.soal_html);
+      const wordCount = plainText.split(/\s+/).filter(Boolean).length;
+      const opsiCount = [q.opsi_a, q.opsi_b, q.opsi_c, q.opsi_d, q.opsi_e].filter(o => String(o || '').trim() !== '').length;
+
+      // Estimasi indeks kesukaran berbasis panjang stimulus, keberadaan gambar/tabel, & rata-rata kelas
+      let kategori = 'Sedang';
+      let badgeCls = 'bg-amber-100 text-amber-800';
+      if (hasImage || wordCount > 35 || (scores.length > 0 && Number(avgScore) < 60)) {
+        kategori = 'Sukar (HOTS)';
+        badgeCls = 'bg-rose-100 text-rose-800';
+      } else if (wordCount <= 15 && !hasImage && (scores.length === 0 || Number(avgScore) >= 80)) {
+        kategori = 'Mudah (LOTS)';
+        badgeCls = 'bg-emerald-100 text-emerald-800';
+      }
+
+      const statusValid = opsiCount >= 4 && ['A','B','C','D','E'].includes(q.kunci_jawaban)
+        ? `<span class="text-emerald-700 font-bold">✓ Valid (${opsiCount} Opsi)</span>`
+        : `<span class="text-rose-700 font-bold">⚠️ Opsi Kurang</span>`;
+
+      rowsHtml += `
+        <tr class="hover:bg-slate-50 border-b border-slate-100">
+          <td class="p-2.5 text-center font-bold text-slate-600">${idx + 1}</td>
+          <td class="p-2.5 text-slate-700">
+            <div class="line-clamp-2 font-medium">${plainText || '(Soal Berbasis Gambar)'}</div>
+            <div class="text-[10px] text-slate-400 mt-0.5">${wordCount} kata ${hasImage ? '• 🖼️ Dilengkapi Gambar' : ''}</div>
+          </td>
+          <td class="p-2.5 text-center font-extrabold text-ocean-800">${q.kunci_jawaban}</td>
+          <td class="p-2.5 text-center"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${badgeCls}">${kategori}</span></td>
+          <td class="p-2.5 text-center text-[11px]">${statusValid}</td>
+        </tr>
+      `;
+    });
+
+    modalEl.innerHTML = `
+      <div class="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden border border-slate-200">
+        <div class="p-4 bg-indigo-900 text-white flex justify-between items-center">
+          <div>
+            <h3 class="font-bold text-sm">📊 Analisis Butir Soal & Sebaran Kunci Jawaban</h3>
+            <p class="text-[11px] text-indigo-200 mt-0.5">${mapel} • Kelas: ${kelas} (${questionsPkg.length} Butir)</p>
+          </div>
+          <button onclick="document.getElementById('modal-analisis-butir-soal').classList.add('hidden')" class="bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg text-xs font-bold">✕ Tutup</button>
+        </div>
+
+        <div class="p-4 overflow-y-auto space-y-4 text-xs">
+          <!-- RINGKASAN STATISTIK UJIAN & KUNCI -->
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div class="p-3 rounded-xl bg-slate-50 border">
+              <div class="text-[10px] font-bold text-slate-400 uppercase">Peserta Selesai</div>
+              <div class="text-lg font-black text-slate-800 mt-0.5">${scores.length} Siswa</div>
+              <div class="text-[10px] text-emerald-600 font-semibold">Tuntas (≥75): ${tuntasCount} siswa</div>
+            </div>
+            <div class="p-3 rounded-xl bg-blue-50 border border-blue-200">
+              <div class="text-[10px] font-bold text-blue-600 uppercase">Rata-Rata Nilai</div>
+              <div class="text-lg font-black text-blue-900 mt-0.5">${avgScore}</div>
+              <div class="text-[10px] text-blue-700">Min: ${minScore} • Max: ${maxScore}</div>
+            </div>
+            <div class="p-3 rounded-xl bg-indigo-50 border border-indigo-200 col-span-2">
+              <div class="text-[10px] font-bold text-indigo-700 uppercase mb-1">Sebaran Kunci Jawaban (A – E)</div>
+              <div class="flex flex-wrap gap-2">
+                ${['A','B','C','D','E'].map(k => `
+                  <span class="px-2.5 py-1 rounded-lg bg-white border border-indigo-200 font-bold text-indigo-900">
+                    ${k}: ${keyDist[k]} (${Math.round((keyDist[k] / questionsPkg.length) * 100)}%)
+                  </span>
+                `).join('')}
+              </div>
+            </div>
+          </div>
+
+          <!-- TABEL ANALISIS PER BUTIR SOAL -->
+          <div class="border border-slate-200 rounded-xl overflow-hidden">
+            <table class="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr class="bg-slate-100 border-b border-slate-200 text-[10px] font-bold text-slate-600 uppercase">
+                  <th class="p-2.5 text-center w-12">No</th>
+                  <th class="p-2.5">Cuplikan Stimulus Butir Soal</th>
+                  <th class="p-2.5 text-center w-16">Kunci</th>
+                  <th class="p-2.5 text-center w-32">Tingkat Kesukaran</th>
+                  <th class="p-2.5 text-center w-28">Status Opsi</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rowsHtml}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    `;
+    modalEl.classList.remove('hidden');
+  },
+
+  // --- HAPUS BUTIR SOAL SATUAN + BERSIHKAN GAMBAR STORAGE ---
   async deleteSoal(id, nomorUrut) {
     if (!id) return;
 
     const konfirmasi = confirm(
       `KONFIRMASI HAPUS BUTIR SOAL\n\n` +
-      `Apakah Anda yakin ingin menghapus Soal #${nomorUrut} secara permanen dari database?\n` +
+      `Apakah Anda yakin ingin menghapus Soal #${nomorUrut} beserta file gambarnya dari Storage secara permanen?\n` +
       `Tindakan ini tidak dapat dibatalkan.`
     );
 
     if (!konfirmasi) return;
 
     try {
+      const targetSoal = (State.questions || []).filter(q => q.id === id);
+      const remainingSoal = (State.questions || []).filter(q => q.id !== id);
+
       const client = await DB.getClient();
       const { error } = await client.from('bank_soal').delete().eq('id', id);
       if (error) {
@@ -384,13 +593,17 @@ const SoalModule = {
         if (errCap) throw errCap;
       }
 
-      alert(`Soal #${nomorUrut} berhasil dihapus dari Bank Soal.`);
+      const deletedImgCount = await this.cleanupUnusedStorageImages(targetSoal, remainingSoal);
+      const msgImg = deletedImgCount > 0 ? ` (${deletedImgCount} file gambar ikut dibersihkan dari Storage)` : '';
+
+      alert(`Soal #${nomorUrut} berhasil dihapus dari Bank Soal${msgImg}.`);
       await this.loadAndRender();
     } catch (err) {
       alert("Gagal menghapus soal: " + err.message);
     }
   },
 
+  // --- HAPUS SELURUH PAKET SOAL PER MAPEL & KELAS + BERSIHKAN GAMBAR STORAGE ---
   async deleteGroupSoal(encodedMapel, encodedKelas, jumlahSoal) {
     const mapel = decodeURIComponent(encodedMapel);
     const kelas = decodeURIComponent(encodedKelas);
@@ -400,7 +613,7 @@ const SoalModule = {
       `Mata Pelajaran : ${mapel}\n` +
       `Kelas Target   : ${kelas}\n` +
       `Jumlah Butir   : ${jumlahSoal} Soal\n\n` +
-      `Seluruh ${jumlahSoal} soal pada paket ini akan DIHAPUS PERMANEN.\n` +
+      `Seluruh ${jumlahSoal} soal dan file gambar terkait pada paket ini akan DIHAPUS PERMANEN.\n` +
       `Apakah Anda yakin ingin melanjutkan?`
     );
 
@@ -408,19 +621,22 @@ const SoalModule = {
 
     try {
       const client = await DB.getClient();
-      const idsToDelete = (State.questions || [])
-        .filter(q => 
-          String(q.mapel).trim().toUpperCase() === mapel.trim().toUpperCase() &&
-          String(q.kelas).trim().toUpperCase() === kelas.trim().toUpperCase()
-        )
-        .map(q => q.id);
+      const questionsToDelete = (State.questions || []).filter(q => 
+        String(q.mapel).trim().toUpperCase() === mapel.trim().toUpperCase() &&
+        String(q.kelas).trim().toUpperCase() === kelas.trim().toUpperCase()
+      );
+      const idsToDelete = questionsToDelete.map(q => q.id);
+      const remainingQuestions = (State.questions || []).filter(q => !idsToDelete.includes(q.id));
 
       if (idsToDelete.length === 0) return;
 
       const { error } = await client.from('bank_soal').delete().in('id', idsToDelete);
       if (error) throw error;
 
-      alert(`Berhasil menghapus seluruh ${idsToDelete.length} butir soal pada paket "${mapel} (${kelas})".`);
+      const deletedImgCount = await this.cleanupUnusedStorageImages(questionsToDelete, remainingQuestions);
+      const msgImg = deletedImgCount > 0 ? `\n🧹 ${deletedImgCount} file gambar di bucket Storage otomatis dihapus.` : '';
+
+      alert(`Berhasil menghapus seluruh ${idsToDelete.length} butir soal pada paket "${mapel} (${kelas})".${msgImg}`);
       await this.loadAndRender();
     } catch (err) {
       alert("Gagal menghapus paket soal: " + err.message);
