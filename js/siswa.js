@@ -104,7 +104,7 @@ const SiswaModule = {
         <div class="border-2 border-slate-800 rounded-xl p-3.5 bg-slate-50 text-xs break-inside-avoid">
           <div class="text-center border-b-2 border-dashed border-slate-400 pb-2 mb-2.5 leading-tight">
             <div class="font-extrabold text-[13px] text-blue-950 uppercase">KARTU LOGIN</div>
-            <div class="font-bold text-[11px] text-slate-800 uppercase">PENILAIAN SUMATIF SEMESTER GANJIL</div>
+            <div class="font-bold text-[11px] text-slate-800 uppercase">PENILAIAN SUMATIF AKHIR SEMESTER GANJIL</div>
             <div class="font-semibold text-[10px] text-slate-600 uppercase">TAHUN AJARAN 2026/2027</div>
           </div>
           <div class="flex items-start gap-3">
@@ -117,7 +117,6 @@ const SiswaModule = {
             <div class="space-y-1 flex-1 min-w-0 text-[11px]">
               <div class="flex"><span class="w-24 shrink-0 font-semibold">Nama Sekolah</span><span class="mr-1">:</span><strong class="truncate">SMKN 1 Wakatobi</strong></div>
               <div class="flex"><span class="w-24 shrink-0 font-semibold">Nama Peserta</span><span class="mr-1">:</span><strong class="truncate">${s.nama}</strong></div>
-              <div class="flex"><span class="w-24 shrink-0 font-semibold">TTL</span><span class="mr-1">:</span><strong class="truncate">${ttlSiswa}</strong></div>
               <div class="flex"><span class="w-24 shrink-0 font-semibold">Kelas</span><span class="mr-1">:</span><strong>${s.kelas}</strong></div>
               <div class="flex"><span class="w-24 shrink-0 font-semibold">Username</span><span class="mr-1">:</span><strong class="font-mono text-blue-800">${s.nisn}</strong></div>
               <div class="flex"><span class="w-24 shrink-0 font-semibold">Password</span><span class="mr-1">:</span><strong class="font-mono text-emerald-700">${s.pass || 'smk123'}</strong></div>
