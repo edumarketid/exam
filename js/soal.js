@@ -1,4 +1,38 @@
 const SoalModule = {
+  // --- HELPER: FILTER HAK AKSES GURU (EXACT MATCH MULTI-MAPEL & MULTI-KELAS) ---
+  getGuruPermissions() {
+    if (!State.currentUser || State.currentUser.role !== 'guru') {
+      return { isGuru: false, mapels: [], kelas: [] };
+    }
+    const rawMapel = String(State.currentUser.mapel_diampu || '').trim();
+    const rawKelas = String(State.currentUser.kelas_diampu || '').trim();
+
+    const mapels = (!rawMapel || rawMapel === '-' || rawMapel.toUpperCase() === 'ALL')
+      ? []
+      : rawMapel.split(',').map(m => m.trim().toUpperCase()).filter(Boolean);
+
+    const kelas = (!rawKelas || rawKelas === '-' || rawKelas.toUpperCase() === 'ALL')
+      ? []
+      : rawKelas.split(',').map(k => k.trim().toUpperCase()).filter(Boolean);
+
+    return { isGuru: true, mapels, kelas };
+  },
+
+  isMapelAllowed(mapelName) {
+    const perm = this.getGuruPermissions();
+    if (!perm.isGuru) return true;
+    if (perm.mapels.length === 0) return false;
+    return perm.mapels.includes(String(mapelName || '').trim().toUpperCase());
+  },
+
+  isKelasAllowed(kelasStr) {
+    const perm = this.getGuruPermissions();
+    if (!perm.isGuru) return true;
+    if (perm.kelas.length === 0) return true;
+    const targetList = String(kelasStr || '').split(',').map(k => k.trim().toUpperCase()).filter(Boolean);
+    return targetList.some(k => perm.kelas.includes(k));
+  },
+
   async loadAndRender() {
     try {
       console.log("[SoalModule] Menarik data Bank Soal dari Supabase...");
@@ -50,20 +84,17 @@ const SoalModule = {
     if (State.questions) {
       State.questions.forEach(q => { if (q.mapel) mapelSet.add(q.mapel); });
     }
-
-    // PRIVILEGE FILTER: Jika login sebagai GURU, tampilkan hanya mapel diampunya
-    if (State.currentUser && State.currentUser.role === 'guru') {
-      const mapelGuru = String(State.currentUser.mapel_diampu || '').trim().toUpperCase();
-      Array.from(mapelSet).forEach(m => {
-        if (String(m).trim().toUpperCase().includes(mapelGuru) || mapelGuru.includes(String(m).trim().toUpperCase())) {
-          html += `<option value="${m}">${m}</option>`;
-        }
-      });
-    } else {
-      Array.from(mapelSet).forEach(m => {
-        html += `<option value="${m}">${m}</option>`;
+    if (State.currentUser && State.currentUser.role === 'guru' && State.currentUser.mapel_diampu) {
+      String(State.currentUser.mapel_diampu).split(',').forEach(m => {
+        if (m.trim() && m.trim() !== '-') mapelSet.add(m.trim());
       });
     }
+
+    Array.from(mapelSet).sort().forEach(m => {
+      if (this.isMapelAllowed(m)) {
+        html += `<option value="${m}">${m}</option>`;
+      }
+    });
 
     selectUploadMapel.innerHTML = html;
   },
@@ -89,12 +120,21 @@ const SoalModule = {
       });
     }
 
-    const sortedKelas = Array.from(kelasSet).filter(Boolean).sort();
+    if (State.currentUser && State.currentUser.role === 'guru' && State.currentUser.kelas_diampu) {
+      String(State.currentUser.kelas_diampu).split(',').forEach(k => {
+        if (k.trim() && k.trim() !== '-') kelasSet.add(k.trim());
+      });
+    }
+
+    const sortedKelas = Array.from(kelasSet)
+      .filter(Boolean)
+      .filter(k => this.isKelasAllowed(k))
+      .sort();
 
     if (sortedKelas.length === 0) {
       container.innerHTML = `
         <div class="col-span-4 p-2 text-center text-xs text-amber-700 bg-amber-50 rounded">
-          Belum ada data kelas (Pastikan data siswa di Supabase terisi).
+          Belum ada data kelas yang sesuai dengan hak akses Anda.
         </div>`;
       return;
     }
@@ -122,8 +162,12 @@ const SoalModule = {
     const filterMapel = document.getElementById('bank-filter-mapel');
     const filterKelas = document.getElementById('bank-filter-kelas');
 
+    const accessibleQuestions = (State.questions || []).filter(q => 
+      this.isMapelAllowed(q.mapel) && this.isKelasAllowed(q.kelas)
+    );
+
     if (filterMapel) {
-      const listMapel = [...new Set(State.questions.map(q => q.mapel))].filter(Boolean);
+      const listMapel = [...new Set(accessibleQuestions.map(q => q.mapel))].filter(Boolean);
       let optHtml = `<option value="ALL">-- Semua Mapel --</option>`;
       listMapel.forEach(m => {
         optHtml += `<option value="${m}">${m}</option>`;
@@ -132,8 +176,10 @@ const SoalModule = {
     }
 
     if (filterKelas) {
-      const listKelasRaw = State.questions.map(q => q.kelas).join(',').split(',');
-      const listKelas = [...new Set(listKelasRaw.map(k => k.trim()))].filter(Boolean);
+      const listKelasRaw = accessibleQuestions.map(q => q.kelas).join(',').split(',');
+      const listKelas = [...new Set(listKelasRaw.map(k => k.trim()))]
+        .filter(Boolean)
+        .filter(k => this.isKelasAllowed(k));
       let optHtml = `<option value="ALL">-- Semua Kelas --</option>`;
       listKelas.forEach(k => {
         optHtml += `<option value="${k}">${k}</option>`;
@@ -152,13 +198,9 @@ const SoalModule = {
     container.innerHTML = '';
     let filtered = State.questions || [];
 
-    // PRIVILEGE FILTER: Jika login sebagai GURU, filter hanya mapel diampunya
+    // PRIVILEGE FILTER: Jika login sebagai GURU, filter ketat hanya mapel & kelas diampunya
     if (State.currentUser && State.currentUser.role === 'guru') {
-      const mapelGuru = String(State.currentUser.mapel_diampu || '').trim().toUpperCase();
-      filtered = filtered.filter(q => 
-        String(q.mapel).trim().toUpperCase().includes(mapelGuru) || 
-        mapelGuru.includes(String(q.mapel).trim().toUpperCase())
-      );
+      filtered = filtered.filter(q => this.isMapelAllowed(q.mapel) && this.isKelasAllowed(q.kelas));
     }
 
     // Filter Dropdown Tampilan
@@ -399,7 +441,11 @@ const SoalModule = {
 
     try {
       const listGuru = await DB.fetchGuru();
-      const foundGuru = listGuru.find(g => String(g.mapel_diampu).trim().toUpperCase() === mapel.trim().toUpperCase());
+      const targetM = mapel.trim().toUpperCase();
+      const foundGuru = listGuru.find(g => {
+        const mList = String(g.mapel_diampu || '').split(',').map(m => m.trim().toUpperCase());
+        return mList.includes(targetM);
+      });
       if (foundGuru) {
         namaGuru = foundGuru.nama_guru;
         nipGuru = foundGuru.nip;
@@ -480,9 +526,6 @@ const SoalModule = {
     });
 
     printHtml += `
-        </div>
-
-       
         </div>
       </body>
       </html>
