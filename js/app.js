@@ -80,7 +80,12 @@ const App = {
       if (navMapel) navMapel.classList.remove('hidden');
     } else if (user.role === 'guru') {
       if (nameEl) nameEl.textContent = user.nama_guru || 'Guru Pengampu';
-      if (roleEl) roleEl.textContent = `Guru • ${user.mapel_diampu || 'Mapel'}`;
+      const statusKepeg = String(user.status_kepegawaian || user.STATUS_KEPEGAWAIAN || '').trim();
+      let labelStatusGuru = 'Guru';
+      if (statusKepeg) {
+        labelStatusGuru = /^guru\s/i.test(statusKepeg) ? statusKepeg : `Guru ${statusKepeg}`;
+      }
+      if (roleEl) roleEl.textContent = labelStatusGuru;
       if (navGuru) navGuru.classList.add('hidden');
       if (navMapel) navMapel.classList.add('hidden');
     }
