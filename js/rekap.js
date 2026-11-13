@@ -51,6 +51,11 @@ const RekapModule = {
     return pairs.some(p => p.kelas === '*' || p.kelas.toUpperCase() === kUpper);
   },
 
+  // --- HELPER: KUNCI PENCOCOKAN UNIK SISWA (NAMA + KELAS) ---
+  makeStudentMatchKey(nama, kelas) {
+    return `${String(nama || '').trim().toUpperCase()}___${String(kelas || '').trim().toUpperCase()}`;
+  },
+
   async fetchAndNormalizeHasil() {
     try {
       const rawHasil = await DB.fetchHasilUjian();
@@ -61,9 +66,9 @@ const RekapModule = {
         const namaHasilStr = String(h.nama_siswa || h.NAMA_SISWA || h.nama || '').trim().toLowerCase();
         
         const profilSiswa = siswaList.find(s => 
-          String(s.id_siswa || '').trim() === idSiswaStr || 
-          String(s.nisn || s.NISN || '').trim() === idSiswaStr ||
-          String(s.user || '').trim() === idSiswaStr ||
+          (idSiswaStr !== '' && String(s.id_siswa || '').trim() === idSiswaStr) || 
+          (idSiswaStr !== '' && String(s.nisn || s.NISN || '').trim() === idSiswaStr) ||
+          (idSiswaStr !== '' && String(s.user || '').trim() === idSiswaStr) ||
           (namaHasilStr !== '' && String(s.nama || '').trim().toLowerCase() === namaHasilStr)
         );
 
@@ -73,7 +78,7 @@ const RekapModule = {
         const mapelFix = h.mapel || h.MAPEL || h.nama_mapel || '-';
         const nilaiFix = h.nilai !== undefined ? h.nilai : (h.NILAI !== undefined ? h.NILAI : 0);
         const pelanggaranFix = h.jumlah_pelanggaran !== undefined ? h.jumlah_pelanggaran : (h.JUMLAH_PELANGGARAN || 0);
-        const statusFix = String(h.status_selesai || h.STATUS_SELESAI || 'SELESAI').toUpperCase();
+        const statusFix = String(h.status_selesai || h.STATUS_SELESAI || 'SELESAI').trim().toUpperCase();
         const waktuFix = h.waktu_selesai || h.WAKTU_SELESAI || new Date().toISOString();
 
         return {
@@ -115,9 +120,10 @@ const RekapModule = {
       let countMengerjakan = 0;
       let countMelanggar = 0;
 
+      // Gunakan kunci gabungan NAMA + KELAS agar 100% sinkron antara tabel siswa dan hasil_ujian
       const statusPerSiswa = {};
       hasilList.forEach(h => {
-        const key = String(h.id_siswa || h.nama_siswa).trim();
+        const key = this.makeStudentMatchKey(h.nama_siswa, h.kelas);
         statusPerSiswa[key] = h;
       });
 
@@ -276,7 +282,7 @@ const RekapModule = {
       }
       kelasMap[k].total++;
 
-      const keySiswa = String(s.id_siswa || s.nama).trim();
+      const keySiswa = this.makeStudentMatchKey(s.nama, s.kelas);
       const record = statusPerSiswa[keySiswa];
 
       if (record) {
@@ -349,7 +355,6 @@ const RekapModule = {
         hasilList = hasilList.filter(h => this.isAllowedForCurrentUser(h.mapel, h.kelas));
       }
 
-      // Gabungkan opsi kelas & mapel dari hasil ujian maupun profil guru agar Berita Acara & Daftar Hadir tetap bisa dicetak
       const kelasSet = new Set(hasilList.map(h => h.kelas).filter(Boolean));
       const mapelSet = new Set(hasilList.map(h => h.mapel).filter(Boolean));
 
@@ -497,7 +502,6 @@ const RekapModule = {
     }
   },
 
-  // --- HELPER: RESOLVE PENGAWAS / GURU PENGAMPU UNTUK DOKUMEN CETAK ---
   async resolvePenandatangan(filterMapel, filterKelas) {
     let namaGuruTtd = "Guru Mata Pelajaran";
     let nipGuruTtd = "-";
@@ -530,7 +534,6 @@ const RekapModule = {
     return { nama: namaGuruTtd, nip: nipGuruTtd };
   },
 
-  // --- CETAK BERITA ACARA PELAKSANAAN UJIAN ---
   async printBeritaAcara() {
     const filterKelas = (document.getElementById('rekap-filter-kelas')?.value || 'ALL').trim();
     const filterMapel = (document.getElementById('rekap-filter-mapel')?.value || 'ALL').trim();
@@ -658,7 +661,6 @@ const RekapModule = {
     printWindow.document.close();
   },
 
-  // --- CETAK DAFTAR HADIR PESERTA UJIAN ---
   async printDaftarHadir() {
     const filterKelas = (document.getElementById('rekap-filter-kelas')?.value || 'ALL').trim();
     const filterMapel = (document.getElementById('rekap-filter-mapel')?.value || 'ALL').trim();
