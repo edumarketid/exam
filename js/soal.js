@@ -482,23 +482,7 @@ const SoalModule = {
     printHtml += `
         </div>
 
-        <!-- TANDA TANGAN RESMI -->
-        <div class="flex justify-between items-end text-xs pt-8 border-t border-slate-300 mt-6 page-break-inside-avoid">
-          <div class="text-left w-56">
-            <p>Mengetahui,</p>
-            <p class="font-bold">Plt. Kepala Sekolah,</p>
-            <div class="h-16"></div>
-            <p class="font-bold underline">Abdul Kaharuddin, S.Pd.I.</p>
-            <p class="text-[10px] text-slate-500">NIP. 197511222010011007</p>
-          </div>
-
-          <div class="text-left w-64">
-            <p>Wangi-Wangi, ${tglSekarang}</p>
-            <p class="font-bold">Guru Mata Pelajaran,</p>
-            <div class="h-16"></div>
-            <p class="font-bold underline">${namaGuru}</p>
-            <p class="text-[10px] text-slate-500">NIP. ${nipGuru}</p>
-          </div>
+       
         </div>
       </body>
       </html>
