@@ -446,9 +446,9 @@ const SoalModule = {
         <div class="border border-slate-800 rounded-lg p-3 mb-6 bg-slate-50 text-xs">
           <div class="grid grid-cols-2 gap-2">
             <div><strong>Mata Pelajaran:</strong> ${mapel}</div>
-            <div><strong>Satuan Pendidikan:</strong> SMK Negeri 1 Wakatobi</div>
+            <div><strong>Satuan Pendidikan:</strong> SMKN 1 Wakatobi</div>
             <div><strong>Kelas Target:</strong> ${kelas}</div>
-            <div><strong>Bentuk Soal:</strong> Pilihan Ganda (A - E)</div>
+            <div><strong>Bentuk Soal:</strong> Pilihan Ganda</div>
             <div><strong>Jumlah Soal:</strong> ${questionsToPrint.length} Butir</div>
             <div><strong>Tahun Ajaran:</strong> 2026/2027</div>
           </div>
