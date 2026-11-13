@@ -98,7 +98,6 @@ const ExamModule = {
           .select('id, status_selesai')
           .eq('id', this.activeRecordId);
 
-        // Jika record dihapus oleh Admin (Reset Ujian), hentikan ujian di perangkat ini
         if (!rows || rows.length === 0) {
           State.examActive = false;
           clearInterval(State.timerInterval);
@@ -109,7 +108,6 @@ const ExamModule = {
           return;
         }
 
-        // Perbarui timestamp waktu_selesai sebagai penanda perangkat masih aktif online
         await client
           .from('hasil_ujian')
           .update({ waktu_selesai: new Date().toISOString() })
@@ -117,7 +115,7 @@ const ExamModule = {
       } catch (e) {
         console.warn("[ExamModule] Heartbeat dilewati:", e.message);
       }
-    }, 20000); // tiap 20 detik
+    }, 20000);
   },
 
   // --- PERLINDUNGAN ANTI-SCREENSHOT, ANTI-SALIN & BLUR LAYAR ---
@@ -242,15 +240,16 @@ const ExamModule = {
       const client = await DB.getClient();
       if (!client) throw new Error("Koneksi database Supabase tidak tersedia.");
 
+      const sId = String(student.id_siswa || student.nisn || '').trim();
+      const sNisn = String(student.nisn || student.NISN || '').trim();
+      const sNama = String(student.nama || '').trim().toUpperCase();
+      const sKelas = String(student.kelas || '').trim().toUpperCase();
+      const targetMapel = String(activeSchedule.mapel || '').trim().toUpperCase();
+      const deviceLockKey = `cbt_lock_${sId || sNama}_${targetMapel}`;
+
       // 2. CEK RIWAYAT UJIAN SISWA (BLOKIR JIKA SUDAH SELESAI & CEGAH LOGIN GANDA PERANGKAT BERBEDA)
       const { data: existingHasil, error: errHasil } = await client.from('hasil_ujian').select('*');
       if (!errHasil && existingHasil) {
-        const sId = String(student.id_siswa || '').trim();
-        const sNisn = String(student.nisn || student.NISN || '').trim();
-        const sNama = String(student.nama || '').trim().toUpperCase();
-        const sKelas = String(student.kelas || '').trim().toUpperCase();
-        const targetMapel = String(activeSchedule.mapel || '').trim().toUpperCase();
-
         const studentRecords = existingHasil.filter(h => {
           const hMapel = String(h.mapel || h.MAPEL || '').trim().toUpperCase();
           if (hMapel !== targetMapel) return false;
@@ -290,10 +289,10 @@ const ExamModule = {
         });
 
         if (ongoingRec) {
-          const deviceLockKey = `cbt_lock_${sId || sNama}_${targetMapel}`;
-          const isSameDevice = localStorage.getItem(deviceLockKey) === String(ongoingRec.id || ongoingRec.ID);
+          const recIdStr = String(ongoingRec.id || ongoingRec.ID || '');
+          const isSameDevice = localStorage.getItem(deviceLockKey) === recIdStr;
           const lastBeat = new Date(ongoingRec.waktu_selesai || ongoingRec.WAKTU_SELESAI || 0).getTime();
-          const isSessionStillFresh = (Date.now() - lastBeat) < 90 * 1000; // aktif dalam 90 detik terakhir
+          const isSessionStillFresh = (Date.now() - lastBeat) < 90 * 1000;
 
           if (!isSameDevice && isSessionStillFresh) {
             alert(
@@ -305,9 +304,10 @@ const ExamModule = {
             return;
           }
 
-          // Jika perangkat sama (atau sesi lama sudah putus >90 detik), gunakan kembali record ID yang ada agar tidak duplikat baris
           this.activeRecordId = ongoingRec.id || ongoingRec.ID;
-          localStorage.setItem(deviceLockKey, String(this.activeRecordId));
+          if (this.activeRecordId) {
+            localStorage.setItem(deviceLockKey, String(this.activeRecordId));
+          }
         }
       }
 
@@ -341,33 +341,49 @@ const ExamModule = {
         return;
       }
 
-      // 4. Catat status "MENGERJAKAN" jika belum memiliki activeRecordId
-      if (!this.activeRecordId) {
-        try {
-          const { data: insertedData } = await client.from('hasil_ujian').insert([{
-            ID_SISWA: String(student.id_siswa),
-            id_siswa: String(student.id_siswa),
-            nama_siswa: student.nama,
-            kelas: student.kelas,
-            mapel: activeSchedule.mapel,
-            nilai: 0,
-            jumlah_pelanggaran: 0,
-            status_selesai: 'MENGERJAKAN',
-            waktu_selesai: new Date().toISOString()
-          }]).select();
+      // 4. Catat status "MENGERJAKAN" agar muncul di Dashboard Real-Time
+      const payloadMengerjakan = {
+        id_siswa: sId,
+        nama_siswa: student.nama,
+        kelas: student.kelas,
+        mapel: activeSchedule.mapel,
+        nilai: 0,
+        jumlah_pelanggaran: 0,
+        status_selesai: 'MENGERJAKAN',
+        waktu_selesai: new Date().toISOString()
+      };
 
-          if (insertedData && insertedData.length > 0) {
-            this.activeRecordId = insertedData[0].id || insertedData[0].ID;
-            const sId = String(student.id_siswa || '').trim();
-            const sNama = String(student.nama || '').trim().toUpperCase();
-            const targetMapel = String(activeSchedule.mapel || '').trim().toUpperCase();
-            localStorage.setItem(`cbt_lock_${sId || sNama}_${targetMapel}`, String(this.activeRecordId));
+      if (!this.activeRecordId) {
+        const { data: insertedData, error: insertErr } = await client
+          .from('hasil_ujian')
+          .insert([payloadMengerjakan])
+          .select();
+
+        if (!insertErr && insertedData && insertedData.length > 0) {
+          this.activeRecordId = insertedData[0].id || insertedData[0].ID;
+        } else {
+          // Fallback jika .select() dibatasi policy, cari kembali ID baris yang baru saja masuk
+          if (insertErr && typeof DB.insertHasilUjian === 'function') {
+            await DB.insertHasilUjian(payloadMengerjakan);
           }
-        } catch (e) {
-          console.warn("[ExamModule] Log status mengerjakan dilewati:", e.message);
+          const { data: latestRows } = await client
+            .from('hasil_ujian')
+            .select('id')
+            .eq('id_siswa', sId)
+            .eq('mapel', activeSchedule.mapel)
+            .eq('status_selesai', 'MENGERJAKAN')
+            .order('id', { ascending: false })
+            .limit(1);
+
+          if (latestRows && latestRows.length > 0) {
+            this.activeRecordId = latestRows[0].id;
+          }
+        }
+
+        if (this.activeRecordId) {
+          localStorage.setItem(deviceLockKey, String(this.activeRecordId));
         }
       } else {
-        // Perbarui heartbeat segera saat melanjutkan di perangkat yang sama
         await client.from('hasil_ujian').update({
           waktu_selesai: new Date().toISOString()
         }).eq('id', this.activeRecordId);
@@ -620,9 +636,10 @@ const ExamModule = {
     const nilaiAkhir = totalSoal > 0 ? Math.round((skorBenar / totalSoal) * 100) : 0;
     const student = State.currentUser;
     const mapelName = State.questions[0]?.mapel || 'Mata Pelajaran';
+    const sId = String(student.id_siswa || student.nisn || '').trim();
 
     const payloadHasil = {
-      id_siswa: student.id_siswa,
+      id_siswa: sId,
       nama_siswa: student.nama,
       kelas: student.kelas,
       mapel: mapelName,
@@ -646,7 +663,6 @@ const ExamModule = {
       }
 
       this.clearProgressLocal();
-      const sId = String(student.id_siswa || '').trim();
       const sNama = String(student.nama || '').trim().toUpperCase();
       localStorage.removeItem(`cbt_lock_${sId || sNama}_${String(mapelName).trim().toUpperCase()}`);
     } catch (err) {
