@@ -4,7 +4,6 @@ const ExamModule = {
   remainingSeconds: 0,
   heartbeatInterval: null,
 
-  // --- HELPER: TOKEN UNIK PER PERANGKAT / BROWSER ---
   getDeviceToken() {
     const key = 'cbt_device_token_smkn1wkt';
     let token = localStorage.getItem(key);
@@ -15,7 +14,6 @@ const ExamModule = {
     return token;
   },
 
-  // --- HELPER: KUNCI AUTO-SAVE LOCALSTORAGE ---
   getStorageKey(student, mapel) {
     const sId = String(student?.id_siswa || student?.nisn || 'guest').trim();
     const mId = String(mapel || 'mapel').trim().toUpperCase().replace(/[^A-Z0-9]/g, '_');
@@ -84,7 +82,6 @@ const ExamModule = {
     } catch (e) {}
   },
 
-  // --- HEARTBEAT SESI AKTIF PERANGKAT (ANTI-LOGIN GANDA) ---
   startSessionHeartbeat() {
     clearInterval(this.heartbeatInterval);
     this.heartbeatInterval = setInterval(async () => {
@@ -118,7 +115,6 @@ const ExamModule = {
     }, 20000);
   },
 
-  // --- PERLINDUNGAN ANTI-SCREENSHOT, ANTI-SALIN & BLUR LAYAR ---
   setScreenShield(obscure) {
     const examScreen = document.getElementById('screen-exam');
     if (!examScreen) return;
@@ -341,52 +337,40 @@ const ExamModule = {
         return;
       }
 
-      // 4. Catat status "MENGERJAKAN" agar muncul di Dashboard Real-Time
-      const payloadMengerjakan = {
-        id_siswa: sId,
-        nama_siswa: student.nama,
-        kelas: student.kelas,
-        mapel: activeSchedule.mapel,
-        nilai: 0,
-        jumlah_pelanggaran: 0,
-        status_selesai: 'MENGERJAKAN',
-        waktu_selesai: new Date().toISOString()
-      };
-
+      // 4. Catat status "MENGERJAKAN" agar muncul di Dashboard Real-Time (aman jika check constraint belum diubah)
       if (!this.activeRecordId) {
-        const { data: insertedData, error: insertErr } = await client
-          .from('hasil_ujian')
-          .insert([payloadMengerjakan])
-          .select();
+        try {
+          const payloadMengerjakan = {
+            id_siswa: sId,
+            nama_siswa: student.nama,
+            kelas: student.kelas,
+            mapel: activeSchedule.mapel,
+            nilai: 0,
+            jumlah_pelanggaran: 0,
+            status_selesai: 'MENGERJAKAN',
+            waktu_selesai: new Date().toISOString()
+          };
 
-        if (!insertErr && insertedData && insertedData.length > 0) {
-          this.activeRecordId = insertedData[0].id || insertedData[0].ID;
-        } else {
-          // Fallback jika .select() dibatasi policy, cari kembali ID baris yang baru saja masuk
-          if (insertErr && typeof DB.insertHasilUjian === 'function') {
-            await DB.insertHasilUjian(payloadMengerjakan);
-          }
-          const { data: latestRows } = await client
+          const { data: insertedData, error: insertErr } = await client
             .from('hasil_ujian')
-            .select('id')
-            .eq('id_siswa', sId)
-            .eq('mapel', activeSchedule.mapel)
-            .eq('status_selesai', 'MENGERJAKAN')
-            .order('id', { ascending: false })
-            .limit(1);
+            .insert([payloadMengerjakan])
+            .select();
 
-          if (latestRows && latestRows.length > 0) {
-            this.activeRecordId = latestRows[0].id;
+          if (!insertErr && insertedData && insertedData.length > 0) {
+            this.activeRecordId = insertedData[0].id || insertedData[0].ID;
+            localStorage.setItem(deviceLockKey, String(this.activeRecordId));
+          } else if (insertErr) {
+            console.warn("[ExamModule] Log status MENGERJAKAN dilewati karena constraint DB:", insertErr.message);
           }
-        }
-
-        if (this.activeRecordId) {
-          localStorage.setItem(deviceLockKey, String(this.activeRecordId));
+        } catch (e) {
+          console.warn("[ExamModule] Log status mengerjakan dilewati:", e.message);
         }
       } else {
-        await client.from('hasil_ujian').update({
-          waktu_selesai: new Date().toISOString()
-        }).eq('id', this.activeRecordId);
+        try {
+          await client.from('hasil_ujian').update({
+            waktu_selesai: new Date().toISOString()
+          }).eq('id', this.activeRecordId);
+        } catch (e) {}
       }
 
       // 5. Tampilkan Layar Ujian & Acak Soal per Siswa
