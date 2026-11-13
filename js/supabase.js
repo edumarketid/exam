@@ -324,47 +324,61 @@ const DB = {
     const client = await this.getClient();
     if (!client) throw new Error("Database tidak terhubung. Periksa config.js dan koneksi internet.");
 
-    const idVal = /^\d+$/.test(String(payload.id_siswa || '').trim())
-      ? parseInt(String(payload.id_siswa).trim(), 10)
-      : String(payload.id_siswa || '');
+    const rawId = String(payload.id_siswa || '').trim();
+    const numericId = /^\d+$/.test(rawId) ? Number(rawId) : null;
 
-    // Coba dengan nama kolom ID_SISWA (sesuai skema asli hasil_ujian)
-    const primaryPayload = {
-      ID_SISWA: idVal,
-      nama_siswa: payload.nama_siswa,
-      kelas: payload.kelas,
-      mapel: payload.mapel,
-      nilai: payload.nilai,
-      jumlah_pelanggaran: payload.jumlah_pelanggaran,
-      status_selesai: payload.status_selesai,
-      waktu_selesai: payload.waktu_selesai
-    };
+    const attempts = [
+      // 1. Kolom kapital ID_SISWA (angka) + lengkap
+      ...(numericId !== null ? [{
+        ID_SISWA: numericId,
+        nama_siswa: payload.nama_siswa,
+        kelas: payload.kelas,
+        mapel: payload.mapel,
+        nilai: payload.nilai,
+        jumlah_pelanggaran: payload.jumlah_pelanggaran,
+        status_selesai: payload.status_selesai,
+        waktu_selesai: payload.waktu_selesai
+      }] : []),
+      // 2. Kolom kapital ID_SISWA (string) + lengkap
+      {
+        ID_SISWA: rawId,
+        nama_siswa: payload.nama_siswa,
+        kelas: payload.kelas,
+        mapel: payload.mapel,
+        nilai: payload.nilai,
+        jumlah_pelanggaran: payload.jumlah_pelanggaran,
+        status_selesai: payload.status_selesai,
+        waktu_selesai: payload.waktu_selesai
+      },
+      // 3. Kolom huruf kecil id_siswa + lengkap
+      {
+        id_siswa: numericId !== null ? numericId : rawId,
+        nama_siswa: payload.nama_siswa,
+        kelas: payload.kelas,
+        mapel: payload.mapel,
+        nilai: payload.nilai,
+        jumlah_pelanggaran: payload.jumlah_pelanggaran,
+        status_selesai: payload.status_selesai,
+        waktu_selesai: payload.waktu_selesai
+      },
+      // 4. Minimal kolom wajib saja (ID_SISWA)
+      {
+        ID_SISWA: numericId !== null ? numericId : rawId,
+        mapel: payload.mapel,
+        nilai: payload.nilai,
+        jumlah_pelanggaran: payload.jumlah_pelanggaran,
+        status_selesai: payload.status_selesai
+      }
+    ];
 
-    const { data, error } = await client.from('hasil_ujian').insert([primaryPayload]).select();
-    if (!error) return data;
+    let lastError = null;
+    for (const candidate of attempts) {
+      const { data, error } = await client.from('hasil_ujian').insert([candidate]).select();
+      if (!error) return data;
+      lastError = error;
+    }
 
-    // Fallback 1: Jika kolom nama_siswa / kelas / waktu_selesai tidak ada di tabel hasil_ujian
-    const minimalCapPayload = {
-      ID_SISWA: idVal,
-      mapel: payload.mapel,
-      nilai: payload.nilai,
-      jumlah_pelanggaran: payload.jumlah_pelanggaran,
-      status_selesai: payload.status_selesai
-    };
-    const resMinCap = await client.from('hasil_ujian').insert([minimalCapPayload]).select();
-    if (!resMinCap.error) return resMinCap.data;
-
-    // Fallback 2: Jika kolom menggunakan huruf kecil id_siswa
-    const minimalLowerPayload = {
-      id_siswa: idVal,
-      mapel: payload.mapel,
-      nilai: payload.nilai,
-      jumlah_pelanggaran: payload.jumlah_pelanggaran,
-      status_selesai: payload.status_selesai
-    };
-    const resMinLower = await client.from('hasil_ujian').insert([minimalLowerPayload]).select();
-    if (resMinLower.error) throw resMinLower.error;
-    return resMinLower.data;
+    throw lastError || new Error("Gagal insert ke tabel hasil_ujian");
   },
 
   async deleteHasilUjian(id) {
