@@ -1,6 +1,51 @@
 const RekapModule = {
   pieChartInstance: null,
 
+  // --- HELPER INTERNAL: CEK HAK AKSES MAPEL & KELAS GURU ---
+  isAllowedForCurrentUser(targetMapel, targetKelas = null) {
+    if (!State.currentUser || State.currentUser.role !== 'guru') return true;
+
+    if (typeof GuruModule !== 'undefined' && typeof GuruModule.canAccess === 'function') {
+      return GuruModule.canAccess(targetMapel, targetKelas);
+    }
+
+    const rawMapel = String(State.currentUser.mapel_diampu || '').trim();
+    const rawKelas = String(State.currentUser.kelas_diampu || '').trim();
+
+    const mapelList = (!rawMapel || rawMapel === '-' || rawMapel.toUpperCase() === 'ALL')
+      ? []
+      : rawMapel.split(',').map(m => m.trim().toUpperCase()).filter(Boolean);
+
+    const kelasList = (!rawKelas || rawKelas === '-' || rawKelas.toUpperCase() === 'ALL')
+      ? []
+      : rawKelas.split(',').map(k => k.trim().toUpperCase()).filter(Boolean);
+
+    let mapelMatch = true;
+    if (mapelList.length > 0 && targetMapel) {
+      const mUpper = String(targetMapel).trim().toUpperCase();
+      mapelMatch = mapelList.some(m => m === mUpper || mUpper.includes(m) || m.includes(mUpper));
+    } else if (mapelList.length === 0) {
+      mapelMatch = false;
+    }
+
+    let kelasMatch = true;
+    if (targetKelas && kelasList.length > 0) {
+      const kUpper = String(targetKelas).trim().toUpperCase();
+      kelasMatch = kelasList.some(k => k === kUpper);
+    }
+
+    return mapelMatch && kelasMatch;
+  },
+
+  isKelasAllowedForGuru(targetKelas) {
+    if (!State.currentUser || State.currentUser.role !== 'guru') return true;
+    const rawKelas = String(State.currentUser.kelas_diampu || '').trim();
+    if (!rawKelas || rawKelas === '-' || rawKelas.toUpperCase() === 'ALL') return true;
+
+    const kelasList = rawKelas.split(',').map(k => k.trim().toUpperCase()).filter(Boolean);
+    return kelasList.includes(String(targetKelas || '').trim().toUpperCase());
+  },
+
   async fetchAndNormalizeHasil() {
     try {
       const rawHasil = await DB.fetchHasilUjian();
@@ -53,17 +98,15 @@ const RekapModule = {
 
       let hasilList = await this.fetchAndNormalizeHasil();
 
-      // Privilege Filter Guru jika login sebagai Guru
+      // Privilege Filter Guru (Mendukung Multi-Mapel & Multi-Kelas)
       if (State.currentUser && State.currentUser.role === 'guru') {
-        const mapelGuru = String(State.currentUser.mapel_diampu || '').trim().toUpperCase();
-        hasilList = hasilList.filter(h => 
-          String(h.mapel).trim().toUpperCase().includes(mapelGuru) || 
-          mapelGuru.includes(String(h.mapel).trim().toUpperCase())
-        );
+        hasilList = hasilList.filter(h => this.isAllowedForCurrentUser(h.mapel, h.kelas));
       }
 
-      // 1. KALKULASI STATISTIK KESELURUHAN
-      const activeSiswa = siswaList.filter(s => String(s.status).toLowerCase() === 'aktif');
+      // 1. KALKULASI STATISTIK KESELURUHAN (Saring siswa sesuai kelas yang diampu guru)
+      const activeSiswa = siswaList.filter(s => 
+        String(s.status).toLowerCase() === 'aktif' && this.isKelasAllowedForGuru(s.kelas)
+      );
       const totalSiswa = activeSiswa.length;
 
       let countSelesai = 0;
@@ -142,7 +185,7 @@ const RekapModule = {
       if (logContainer) {
         logContainer.innerHTML = '';
         if (!hasilList || hasilList.length === 0) {
-          logContainer.innerHTML = `<p class="text-xs text-slate-500 italic p-4 text-center">Belum ada aktivitas ujian siswa yang tercatat saat ini.</p>`;
+          logContainer.innerHTML = `<p class="text-xs text-slate-500 italic p-4 text-center">Belum ada aktivitas ujian siswa yang tercatat sesuai akses mapel/kelas Anda.</p>`;
         } else {
           hasilList.slice().reverse().forEach((h) => {
             const isMengerjakan = h.status_selesai === 'MENGERJAKAN';
@@ -305,18 +348,15 @@ const RekapModule = {
       // Hanya tampilkan yang sudah selesai/diskualifikasi pada tabel rekap nilai
       hasilList = hasilList.filter(h => h.status_selesai !== 'MENGERJAKAN');
 
+      // Filter berdasarkan Multi-Mapel & Multi-Kelas Guru yang sedang login
       if (State.currentUser && State.currentUser.role === 'guru') {
-        const mapelGuru = String(State.currentUser.mapel_diampu || '').trim().toUpperCase();
-        hasilList = hasilList.filter(h => 
-          String(h.mapel).trim().toUpperCase().includes(mapelGuru) || 
-          mapelGuru.includes(String(h.mapel).trim().toUpperCase())
-        );
+        hasilList = hasilList.filter(h => this.isAllowedForCurrentUser(h.mapel, h.kelas));
       }
 
       if (!hasilList || hasilList.length === 0) {
         container.innerHTML = `
           <div class="p-6 text-center text-xs text-amber-700 bg-amber-50 rounded-xl border border-amber-200">
-            <p class="font-bold">Belum ada hasil ujian selesai yang tersimpan di Supabase.</p>
+            <p class="font-bold">Belum ada hasil ujian selesai yang tersimpan sesuai mapel dan kelas Anda.</p>
           </div>`;
         return;
       }
@@ -459,6 +499,11 @@ const RekapModule = {
     let listToPrint = this.currentHasilList || await this.fetchAndNormalizeHasil();
     listToPrint = listToPrint.filter(h => h.status_selesai !== 'MENGERJAKAN');
 
+    // Pastikan hak akses guru tetap terjaga saat cetak
+    if (State.currentUser && State.currentUser.role === 'guru') {
+      listToPrint = listToPrint.filter(h => this.isAllowedForCurrentUser(h.mapel, h.kelas));
+    }
+
     if (filterKelas !== 'ALL') {
       listToPrint = listToPrint.filter(h => String(h.kelas).trim().toUpperCase() === filterKelas.toUpperCase());
     }
@@ -477,7 +522,14 @@ const RekapModule = {
     try {
       const listGuru = await DB.fetchGuru();
       if (filterMapel !== 'ALL') {
-        const foundG = listGuru.find(g => String(g.mapel_diampu).trim().toUpperCase() === filterMapel.toUpperCase());
+        const targetM = filterMapel.toUpperCase();
+        const foundG = listGuru.find(g => {
+          const mapelsGuru = String(g.mapel_diampu || '').split(',').map(m => m.trim().toUpperCase());
+          const kelasGuru = String(g.kelas_diampu || '').split(',').map(k => k.trim().toUpperCase()).filter(k => k && k !== '-');
+          const matchM = mapelsGuru.includes(targetM);
+          const matchK = (filterKelas === 'ALL' || kelasGuru.length === 0 || kelasGuru.includes(filterKelas.toUpperCase()));
+          return matchM && matchK;
+        });
         if (foundG) {
           namaGuruTtd = foundG.nama_guru;
           nipGuruTtd = foundG.nip;
