@@ -337,10 +337,10 @@ const ExamModule = {
         return;
       }
 
-      // 4. Catat status "MENGERJAKAN" agar muncul di Dashboard Real-Time (aman jika check constraint belum diubah)
+      // 4. Catat status "MENGERJAKAN" agar muncul di Dashboard Real-Time
       if (!this.activeRecordId) {
         try {
-          const payloadMengerjakan = {
+          const insertedData = await DB.insertHasilUjian({
             id_siswa: sId,
             nama_siswa: student.nama,
             kelas: student.kelas,
@@ -349,18 +349,11 @@ const ExamModule = {
             jumlah_pelanggaran: 0,
             status_selesai: 'MENGERJAKAN',
             waktu_selesai: new Date().toISOString()
-          };
+          });
 
-          const { data: insertedData, error: insertErr } = await client
-            .from('hasil_ujian')
-            .insert([payloadMengerjakan])
-            .select();
-
-          if (!insertErr && insertedData && insertedData.length > 0) {
+          if (insertedData && insertedData.length > 0) {
             this.activeRecordId = insertedData[0].id || insertedData[0].ID;
             localStorage.setItem(deviceLockKey, String(this.activeRecordId));
-          } else if (insertErr) {
-            console.warn("[ExamModule] Log status MENGERJAKAN dilewati karena constraint DB:", insertErr.message);
           }
         } catch (e) {
           console.warn("[ExamModule] Log status mengerjakan dilewati:", e.message);
