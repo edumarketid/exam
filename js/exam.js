@@ -1,5 +1,90 @@
 const ExamModule = {
   activeRecordId: null,
+  storageKey: null,
+  remainingSeconds: 0,
+
+  // --- HELPER: KUNCI AUTO-SAVE LOCALSTORAGE ---
+  getStorageKey(student, mapel) {
+    const sId = String(student?.id_siswa || student?.nisn || 'guest').trim();
+    const mId = String(mapel || 'mapel').trim().toUpperCase().replace(/[^A-Z0-9]/g, '_');
+    return `cbt_autosave_${sId}_${mId}`;
+  },
+
+  saveProgressToLocal() {
+    if (!this.storageKey || !State.examActive) return;
+    try {
+      // Simpan jawaban berdasarkan ID soal agar akurat meski urutan soal diacak
+      const answersByQuestionId = {};
+      (State.questions || []).forEach((q, idx) => {
+        if (State.answers[idx]) {
+          answersByQuestionId[String(q.id)] = State.answers[idx];
+        }
+      });
+
+      const snapshot = {
+        answersByQuestionId,
+        currentQuestionIdx: State.currentQuestionIdx,
+        remainingSeconds: this.remainingSeconds,
+        violations: State.violations,
+        updatedAt: Date.now()
+      };
+      localStorage.setItem(this.storageKey, JSON.stringify(snapshot));
+    } catch (e) {
+      console.warn("[ExamModule] Gagal auto-save ke localStorage:", e.message);
+    }
+  },
+
+  restoreProgressFromLocal(questions) {
+    if (!this.storageKey) return null;
+    try {
+      const raw = localStorage.getItem(this.storageKey);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || !parsed.answersByQuestionId) return null;
+
+      // Abaikan snapshot yang sudah lebih dari 12 jam
+      if (Date.now() - (parsed.updatedAt || 0) > 12 * 60 * 60 * 1000) {
+        localStorage.removeItem(this.storageKey);
+        return null;
+      }
+
+      const restoredAnswers = {};
+      questions.forEach((q, idx) => {
+        const savedChoice = parsed.answersByQuestionId[String(q.id)];
+        if (savedChoice) {
+          restoredAnswers[idx] = savedChoice;
+        }
+      });
+
+      return {
+        answers: restoredAnswers,
+        currentQuestionIdx: Math.min(parsed.currentQuestionIdx || 0, Math.max(0, questions.length - 1)),
+        remainingSeconds: parsed.remainingSeconds > 5 ? parsed.remainingSeconds : null,
+        violations: parsed.violations || 0
+      };
+    } catch (e) {
+      return null;
+    }
+  },
+
+  clearProgressLocal() {
+    if (!this.storageKey) return;
+    try {
+      localStorage.removeItem(this.storageKey);
+    } catch (e) {}
+  },
+
+  // --- PERLINDUNGAN ANTI-SCREENSHOT, ANTI-SALIN & BLUR LAYAR ---
+  setScreenShield(obscure) {
+    const examScreen = document.getElementById('screen-exam');
+    if (!examScreen) return;
+    if (obscure) {
+      examScreen.style.filter = 'blur(18px)';
+      examScreen.style.userSelect = 'none';
+    } else {
+      examScreen.style.filter = '';
+    }
+  },
 
   setupSecurityListeners() {
     document.addEventListener('fullscreenchange', () => {
@@ -10,7 +95,75 @@ const ExamModule = {
 
     document.addEventListener('visibilitychange', () => {
       if (document.hidden && State.examActive) {
+        this.setScreenShield(true);
         this.handleViolation("Anda membuka tab lain / meninggalkan layar ujian!");
+      } else if (State.examActive) {
+        this.setScreenShield(false);
+      }
+    });
+
+    // Deteksi split-screen / floating app / kehilangan fokus jendela
+    window.addEventListener('blur', () => {
+      if (State.examActive) {
+        this.setScreenShield(true);
+      }
+    });
+
+    window.addEventListener('focus', () => {
+      if (State.examActive) {
+        this.setScreenShield(false);
+      }
+    });
+
+    // Blokir klik kanan saat ujian aktif
+    document.addEventListener('contextmenu', (e) => {
+      if (State.examActive) {
+        e.preventDefault();
+      }
+    });
+
+    // Blokir copy, cut, paste saat ujian aktif
+    ['copy', 'cut', 'paste'].forEach(evtName => {
+      document.addEventListener(evtName, (e) => {
+        if (State.examActive) {
+          e.preventDefault();
+        }
+      });
+    });
+
+    // Blokir PrintScreen, Snipping Tool, Print (Ctrl+P), Save (Ctrl+S), DevTools
+    document.addEventListener('keyup', (e) => {
+      if (!State.examActive) return;
+      if (e.key === 'PrintScreen' || e.code === 'PrintScreen') {
+        this.setScreenShield(true);
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText('').catch(() => {});
+        }
+        this.handleViolation("Tangkapan layar (Screenshot / PrintScreen) dilarang selama ujian!");
+        setTimeout(() => this.setScreenShield(false), 2000);
+      }
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (!State.examActive) return;
+      const key = String(e.key || '').toLowerCase();
+
+      // Deteksi kombinasi Win+Shift+S atau Cmd+Shift+3/4/5
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && ['s', '3', '4', '5'].includes(key)) {
+        e.preventDefault();
+        this.setScreenShield(true);
+        this.handleViolation("Tangkapan layar (Screenshot) dilarang selama ujian!");
+        setTimeout(() => this.setScreenShield(false), 2000);
+        return;
+      }
+
+      // Blokir Ctrl/Cmd + C, X, A, P, S, U dan F12 / Ctrl+Shift+I/J/C
+      if (
+        e.key === 'F12' ||
+        ((e.ctrlKey || e.metaKey) && ['c', 'x', 'a', 'p', 's', 'u'].includes(key)) ||
+        ((e.ctrlKey || e.metaKey) && e.shiftKey && ['i', 'j', 'c'].includes(key))
+      ) {
+        e.preventDefault();
       }
     });
   },
@@ -101,6 +254,11 @@ const ExamModule = {
 
       // 4. Tampilkan Layar Ujian & Acak Soal per Siswa
       App.showScreen('exam');
+      const examScreen = document.getElementById('screen-exam');
+      if (examScreen) {
+        examScreen.classList.add('select-none');
+      }
+
       State.examActive = true;
       State.violations = 0;
       State.currentQuestionIdx = 0;
@@ -111,6 +269,24 @@ const ExamModule = {
 
       State.questions = this.shuffleArray(filtered);
 
+      // 5. Cek & Pulihkan Progres Auto-Save jika sebelumnya terputus
+      this.storageKey = this.getStorageKey(student, activeSchedule.mapel);
+      const restored = this.restoreProgressFromLocal(State.questions);
+      const durasiUjian = parseInt(activeSchedule.durasi) || 45;
+      let initialSeconds = durasiUjian * 60;
+
+      if (restored && Object.keys(restored.answers).length > 0) {
+        State.answers = restored.answers;
+        State.currentQuestionIdx = restored.currentQuestionIdx;
+        State.violations = restored.violations;
+        if (restored.remainingSeconds) {
+          initialSeconds = restored.remainingSeconds;
+        }
+        setTimeout(() => {
+          alert(`AUTO-SAVE DIPULIHKAN!\n\nSistem memulihkan ${Object.keys(restored.answers).length} jawaban Anda yang tersimpan sebelumnya.`);
+        }, 400);
+      }
+
       this.renderQuestionNav();
       this.renderCurrentQuestion();
 
@@ -120,8 +296,7 @@ const ExamModule = {
         }
       } catch (e) {}
 
-      const durasiUjian = parseInt(activeSchedule.durasi) || 45;
-      this.startTimer(durasiUjian);
+      this.startTimer(initialSeconds, true);
 
     } catch (err) {
       alert("Gagal memuat ujian: " + err.message);
@@ -212,11 +387,13 @@ const ExamModule = {
 
   saveAnswer(choice) {
     State.answers[State.currentQuestionIdx] = choice;
+    this.saveProgressToLocal();
     this.renderQuestionNav();
   },
 
   jumpToQuestion(idx) {
     State.currentQuestionIdx = idx;
+    this.saveProgressToLocal();
     this.renderQuestionNav();
     this.renderCurrentQuestion();
   },
@@ -235,16 +412,22 @@ const ExamModule = {
     }
   },
 
-  startTimer(durationMinutes) {
-    let timer = durationMinutes * 60;
+  startTimer(durationValue, isSeconds = false) {
+    let timer = isSeconds ? durationValue : durationValue * 60;
+    this.remainingSeconds = timer;
     const timerDisplay = document.getElementById('exam-timer');
     clearInterval(State.timerInterval);
 
     State.timerInterval = setInterval(() => {
+      this.remainingSeconds = timer;
       const minutes = Math.floor(timer / 60);
       const seconds = timer % 60;
       if (timerDisplay) {
         timerDisplay.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+      }
+      // Auto-save waktu tersisa setiap 5 detik
+      if (timer > 0 && timer % 5 === 0) {
+        this.saveProgressToLocal();
       }
       if (--timer < 0) {
         clearInterval(State.timerInterval);
@@ -257,6 +440,7 @@ const ExamModule = {
   handleViolation(reason) {
     if (!State.examActive) return;
     State.violations++;
+    this.saveProgressToLocal();
     
     if (State.violations >= CONFIG.MAX_VIOLATIONS) {
       alert(`PELANGGARAN HUKUMAN! ${reason}\n\nAnda telah didiskualifikasi dari ujian.`);
@@ -270,6 +454,7 @@ const ExamModule = {
   },
 
   closeWarningModal() {
+    this.setScreenShield(false);
     const modalWarn = document.getElementById('modal-warning');
     if (modalWarn) modalWarn.classList.add('hidden');
   },
@@ -277,14 +462,24 @@ const ExamModule = {
   confirmFinishExam() {
     const totalSoal = State.questions.length;
     const dijawab = Object.keys(State.answers).length;
+    const belumDijawab = [];
+    for (let i = 0; i < totalSoal; i++) {
+      if (!State.answers[i]) belumDijawab.push(i + 1);
+    }
 
-    if (confirm(`Apakah Anda yakin ingin menyelesaikan ujian?\n\nSoal Terjawab: ${dijawab} dari ${totalSoal} butir.`)) {
+    let infoKosong = "";
+    if (belumDijawab.length > 0) {
+      infoKosong = `\n⚠️ Belum Dijawab (${belumDijawab.length} soal): No. ${belumDijawab.join(', ')}\n`;
+    }
+
+    if (confirm(`Apakah Anda yakin ingin menyelesaikan ujian?\n\nSoal Terjawab: ${dijawab} dari ${totalSoal} butir.${infoKosong}`)) {
       this.submitExamResults(false);
     }
   },
 
   async submitExamResults(isDisqualified = false) {
     State.examActive = false;
+    this.setScreenShield(false);
     clearInterval(State.timerInterval);
 
     if (document.fullscreenElement && document.exitFullscreen) {
@@ -326,6 +521,8 @@ const ExamModule = {
       } else {
         await DB.insertHasilUjian(payloadHasil);
       }
+      // Hapus cache auto-save setelah sukses terkirim ke database
+      this.clearProgressLocal();
     } catch (err) {
       console.error("[ExamModule] Gagal menyimpan nilai ujian:", err.message);
       alert("Peringatan: Gagal menyimpan hasil ke database: " + err.message);
