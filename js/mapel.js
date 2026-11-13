@@ -40,11 +40,23 @@ const MapelModule = {
     
     if (!State.mapelList || State.mapelList.length === 0) return;
 
-    const opts = State.mapelList.map(m => `<option value="${m}">${m}</option>`).join('');
-    if (selectUpload) selectUpload.innerHTML = opts;
-    if (selectJadwal) selectJadwal.innerHTML = opts;
-    if (selectRekap) selectRekap.innerHTML = `<option value="ALL">Semua Mapel</option>` + opts;
-    if (selectBank) selectBank.innerHTML = `<option value="ALL">Semua Mapel</option>` + opts;
+    let allowedMapels = State.mapelList;
+    if (State.currentUser && State.currentUser.role === 'guru') {
+      const rawMapel = String(State.currentUser.mapel_diampu || '').trim();
+      const guruMapelList = (!rawMapel || rawMapel === '-' || rawMapel.toUpperCase() === 'ALL')
+        ? []
+        : rawMapel.split(',').map(m => m.trim().toUpperCase()).filter(Boolean);
+
+      allowedMapels = State.mapelList.filter(m =>
+        guruMapelList.includes(String(m).trim().toUpperCase())
+      );
+    }
+
+    const opts = allowedMapels.map(m => `<option value="${m}">${m}</option>`).join('');
+    if (selectUpload) selectUpload.innerHTML = `<option value="">-- Pilih Mata Pelajaran --</option>` + opts;
+    if (selectJadwal) selectJadwal.innerHTML = `<option value="">-- Pilih Mata Pelajaran --</option>` + opts;
+    if (selectRekap) selectRekap.innerHTML = `<option value="ALL">-- Semua Mapel --</option>` + opts;
+    if (selectBank) selectBank.innerHTML = `<option value="ALL">-- Semua Mapel --</option>` + opts;
   },
 
   async handleAdd(e) {
