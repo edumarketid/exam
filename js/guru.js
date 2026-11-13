@@ -51,12 +51,10 @@ const GuruModule = {
     const mUpper = String(targetMapel || '').trim().toUpperCase();
     if (!mUpper) return false;
 
-    // Jika targetKelas tidak disertakan (misal filter daftar mapel saja)
     if (!targetKelas) {
       return pairs.some(p => p.mapel.toUpperCase() === mUpper);
     }
 
-    // Jika targetKelas berupa string dipisah koma (misal "X TKJ 1, X TKJ 2")
     const targetKelasList = String(targetKelas)
       .split(',')
       .map(k => k.trim().toUpperCase())
@@ -85,10 +83,56 @@ const GuruModule = {
       }
 
       this.guruList = await DB.fetchGuru();
+      this.setupCollapsibleAddForm();
       this.renderChecklistInputs();
       this.renderTable();
     } catch (err) {
       console.error("[GuruModule] Error memuat data guru:", err.message);
+    }
+  },
+
+  // --- LIPAT / BUKA FORM TAMBAH GURU (DEFAULT TERLIPAT) ---
+  setupCollapsibleAddForm() {
+    const formEl = document.getElementById('form-tambah-guru');
+    if (!formEl) return;
+
+    const toggleBarId = 'btn-toggle-tambah-guru';
+    if (!document.getElementById(toggleBarId)) {
+      // Sembunyikan form secara default saat pertama kali dimuat
+      formEl.classList.add('hidden');
+
+      const toggleBar = document.createElement('div');
+      toggleBar.id = toggleBarId;
+      toggleBar.className = "mb-3";
+      toggleBar.innerHTML = `
+        <button type="button" onclick="GuruModule.toggleAddForm()" 
+                class="w-full flex items-center justify-between px-4 py-3 bg-ocean-900 hover:bg-ocean-800 text-white rounded-xl shadow-sm transition font-bold text-xs">
+          <span class="flex items-center gap-2">
+            <span class="bg-white/15 px-2 py-0.5 rounded text-teal-300">+</span>
+            <span>Tambah Akun Guru / Pengawas Baru</span>
+          </span>
+          <span id="label-toggle-tambah-guru" class="bg-white/15 text-teal-200 px-2.5 py-1 rounded-lg text-[11px]">
+            ▼ Buka Formulir
+          </span>
+        </button>
+      `;
+      formEl.parentNode.insertBefore(toggleBar, formEl);
+    }
+  },
+
+  toggleAddForm(forceOpen = null) {
+    const formEl = document.getElementById('form-tambah-guru');
+    const labelEl = document.getElementById('label-toggle-tambah-guru');
+    if (!formEl) return;
+
+    const shouldOpen = forceOpen !== null ? forceOpen : formEl.classList.contains('hidden');
+
+    if (shouldOpen) {
+      formEl.classList.remove('hidden');
+      if (labelEl) labelEl.innerHTML = `▲ Lipat Formulir`;
+    } else {
+      formEl.classList.add('hidden');
+      if (labelEl) labelEl.innerHTML = `▼ Buka Formulir`;
     }
   },
 
@@ -147,12 +191,10 @@ const GuruModule = {
     mapelEl.classList.add('hidden');
     mapelEl.removeAttribute('required');
 
-    // Sembunyikan input kelas lama karena sudah digabung menjadi pasangan (Mapel + Kelas)
     if (kelasEl && kelasEl.parentElement) {
       kelasEl.parentElement.classList.add('hidden');
     }
 
-    // Perluas kolom wadah mapel agar matriks pasangan lebih lega dibaca
     if (mapelEl.parentElement) {
       mapelEl.parentElement.classList.add('md:col-span-2');
     }
@@ -244,7 +286,7 @@ const GuruModule = {
       container.innerHTML = `
         <div class="p-6 text-center text-xs text-amber-700 bg-amber-50 rounded-xl border border-amber-200">
           <p class="font-bold">Belum ada data guru atau pengawas yang terdaftar.</p>
-          <p class="mt-1 text-slate-500">Gunakan formulir di atas untuk menambahkan akun guru baru.</p>
+          <p class="mt-1 text-slate-500">Klik tombol "Tambah Akun Guru / Pengawas Baru" di atas untuk menambahkan akun baru.</p>
         </div>`;
       return;
     }
@@ -349,6 +391,7 @@ const GuruModule = {
       document.getElementById('form-tambah-guru').reset();
       document.getElementById('guru-password').value = 'guru123';
       this.toggleChecklistGroup('add-pair', false);
+      this.toggleAddForm(false); // Otomatis lipat kembali setelah berhasil menyimpan
       await this.loadAndRender();
     } catch (err) {
       alert("Gagal menyimpan data guru: " + err.message);
