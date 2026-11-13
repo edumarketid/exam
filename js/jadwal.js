@@ -1,4 +1,38 @@
 const JadwalModule = {
+  // --- HELPER: FILTER HAK AKSES GURU (EXACT MATCH MULTI-MAPEL & MULTI-KELAS) ---
+  getGuruPermissions() {
+    if (!State.currentUser || State.currentUser.role !== 'guru') {
+      return { isGuru: false, mapels: [], kelas: [] };
+    }
+    const rawMapel = String(State.currentUser.mapel_diampu || '').trim();
+    const rawKelas = String(State.currentUser.kelas_diampu || '').trim();
+
+    const mapels = (!rawMapel || rawMapel === '-' || rawMapel.toUpperCase() === 'ALL')
+      ? []
+      : rawMapel.split(',').map(m => m.trim().toUpperCase()).filter(Boolean);
+
+    const kelas = (!rawKelas || rawKelas === '-' || rawKelas.toUpperCase() === 'ALL')
+      ? []
+      : rawKelas.split(',').map(k => k.trim().toUpperCase()).filter(Boolean);
+
+    return { isGuru: true, mapels, kelas };
+  },
+
+  isMapelAllowed(mapelName) {
+    const perm = this.getGuruPermissions();
+    if (!perm.isGuru) return true;
+    if (perm.mapels.length === 0) return false;
+    return perm.mapels.includes(String(mapelName || '').trim().toUpperCase());
+  },
+
+  isKelasAllowed(kelasStr) {
+    const perm = this.getGuruPermissions();
+    if (!perm.isGuru) return true;
+    if (perm.kelas.length === 0) return true; // Jika kelas '-', diizinkan semua kelas untuk mapelnya
+    const targetList = String(kelasStr || '').split(',').map(k => k.trim().toUpperCase()).filter(Boolean);
+    return targetList.some(k => perm.kelas.includes(k));
+  },
+
   async loadAndRender() {
     try {
       console.log("[JadwalModule] Memuat data jadwal ujian & kelas target...");
@@ -30,26 +64,22 @@ const JadwalModule = {
 
     let html = `<option value="">-- Pilih Mata Pelajaran --</option>`;
     
-    // Ambil gabungan mapel dari tabel mapel & bank soal
+    // Ambil gabungan mapel dari tabel mapel, bank soal, dan profil guru sendiri
     const mapelSet = new Set(State.mapelList || []);
     if (State.questions) {
       State.questions.forEach(q => { if (q.mapel) mapelSet.add(q.mapel); });
     }
-
-    // PRIVILEGE FILTER: Jika login sebagai GURU, tampilkan hanya mapel diampunya
-    if (State.currentUser && State.currentUser.role === 'guru') {
-      const mapelGuru = String(State.currentUser.mapel_diampu || '').trim().toUpperCase();
-      Array.from(mapelSet).forEach(m => {
-        if (String(m).trim().toUpperCase().includes(mapelGuru) || mapelGuru.includes(String(m).trim().toUpperCase())) {
-          html += `<option value="${m}">${m}</option>`;
-        }
-      });
-    } else {
-      // Admin dapat melihat seluruh mapel
-      Array.from(mapelSet).forEach(m => {
-        html += `<option value="${m}">${m}</option>`;
+    if (State.currentUser && State.currentUser.role === 'guru' && State.currentUser.mapel_diampu) {
+      String(State.currentUser.mapel_diampu).split(',').forEach(m => {
+        if (m.trim() && m.trim() !== '-') mapelSet.add(m.trim());
       });
     }
+
+    Array.from(mapelSet).sort().forEach(m => {
+      if (this.isMapelAllowed(m)) {
+        html += `<option value="${m}">${m}</option>`;
+      }
+    });
 
     selectMapel.innerHTML = html;
   },
@@ -76,18 +106,28 @@ const JadwalModule = {
       });
     }
 
-    const sortedKelas = Array.from(kelasSet).filter(Boolean).sort();
+    if (State.currentUser && State.currentUser.role === 'guru' && State.currentUser.kelas_diampu) {
+      String(State.currentUser.kelas_diampu).split(',').forEach(k => {
+        if (k.trim() && k.trim() !== '-') kelasSet.add(k.trim());
+      });
+    }
+
+    // Filter kelas sesuai hak akses guru
+    const sortedKelas = Array.from(kelasSet)
+      .filter(Boolean)
+      .filter(k => this.isKelasAllowed(k))
+      .sort();
 
     if (sortedKelas.length === 0) {
       container.innerHTML = `
         <div class="col-span-4 p-2 text-center text-xs text-amber-700 bg-amber-50 rounded">
-          Belum ada data kelas (Pastikan data siswa di Supabase terisi).
+          Belum ada data kelas yang sesuai dengan hak akses Anda.
         </div>`;
       return;
     }
 
     let html = '';
-    sortedKelas.forEach((k, idx) => {
+    sortedKelas.forEach((k) => {
       html += `
         <label class="flex items-center space-x-2 p-2 rounded hover:bg-purple-100/50 cursor-pointer text-xs font-semibold text-purple-950 border border-purple-100">
           <input type="checkbox" value="${k}" class="chk-jadwal-kelas rounded text-purple-700 focus:ring-purple-500">
@@ -108,16 +148,21 @@ const JadwalModule = {
     const container = document.getElementById('jadwal-list-container');
     if (!container) return;
 
-    if (!State.schedules || State.schedules.length === 0) {
+    let listJadwal = State.schedules || [];
+    if (State.currentUser && State.currentUser.role === 'guru') {
+      listJadwal = listJadwal.filter(j => this.isMapelAllowed(j.mapel) && this.isKelasAllowed(j.kelas));
+    }
+
+    if (listJadwal.length === 0) {
       container.innerHTML = `
         <div class="p-4 text-center text-xs text-slate-500 bg-slate-50 rounded-xl border">
-          Belum ada jadwal ujian yang diaktifkan.
+          Belum ada jadwal ujian aktif untuk mata pelajaran dan kelas Anda.
         </div>`;
       return;
     }
 
     let html = '';
-    State.schedules.forEach((j) => {
+    listJadwal.forEach((j) => {
       html += `
         <div class="p-4 rounded-xl border bg-white shadow-sm flex flex-wrap justify-between items-center gap-3 hover:border-purple-300 transition">
           <div class="space-y-1">
