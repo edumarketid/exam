@@ -1,6 +1,55 @@
 const GuruModule = {
   guruList: [],
 
+  // --- HELPER: CEK HAK AKSES MAPEL & KELAS GURU YANG SEDANG LOGIN ---
+  getGuruAccess(user = State.currentUser) {
+    if (!user || user.role !== 'guru') {
+      return { isGuru: false, mapelList: [], kelasList: [] };
+    }
+
+    const rawMapel = String(user.mapel_diampu || '').trim();
+    const rawKelas = String(user.kelas_diampu || '').trim();
+
+    const mapelList = (!rawMapel || rawMapel === '-' || rawMapel.toUpperCase() === 'ALL')
+      ? []
+      : rawMapel.split(',').map(m => m.trim().toUpperCase()).filter(Boolean);
+
+    const kelasList = (!rawKelas || rawKelas === '-' || rawKelas.toUpperCase() === 'ALL')
+      ? []
+      : rawKelas.split(',').map(k => k.trim().toUpperCase()).filter(Boolean);
+
+    return {
+      isGuru: true,
+      mapelList,
+      kelasList
+    };
+  },
+
+  // Mengembalikan true jika admin, atau jika mapel & kelas cocok dengan yang diampu guru
+  canAccess(targetMapel, targetKelas = null) {
+    const access = this.getGuruAccess();
+    if (!access.isGuru) return true; // Admin/Proktor bebas akses semua
+
+    // 1. Cek Kecocokan Mapel (jika guru punya daftar mapel)
+    let mapelMatch = true;
+    if (access.mapelList.length > 0 && targetMapel) {
+      const mUpper = String(targetMapel).trim().toUpperCase();
+      mapelMatch = access.mapelList.some(m => m === mUpper || mUpper.includes(m) || m.includes(mUpper));
+    } else if (access.mapelList.length === 0) {
+      // Jika mapel '-' (Pengawas saja), tidak punya akses khusus mapel kecuali pengawasan
+      mapelMatch = false;
+    }
+
+    // 2. Cek Kecocokan Kelas (jika targetKelas diberikan dan guru punya daftar kelas spesifik)
+    let kelasMatch = true;
+    if (targetKelas && access.kelasList.length > 0) {
+      const kUpper = String(targetKelas).trim().toUpperCase();
+      kelasMatch = access.kelasList.some(k => k === kUpper);
+    }
+
+    return mapelMatch && kelasMatch;
+  },
+
   async loadAndRender() {
     try {
       console.log("[GuruModule] Memuat data guru & pengawas dari Supabase...");
@@ -25,14 +74,44 @@ const GuruModule = {
     if (State.questions) {
       State.questions.forEach(q => { if (q.mapel) mapelSet.add(q.mapel); });
     }
+    if (this.guruList) {
+      this.guruList.forEach(g => {
+        if (g.mapel_diampu && g.mapel_diampu !== '-') {
+          String(g.mapel_diampu).split(',').forEach(m => {
+            if (m.trim()) mapelSet.add(m.trim());
+          });
+        }
+      });
+    }
 
     let optionsHtml = `<option value="-">-- Umum / Pengawas Saja --</option>`;
     Array.from(mapelSet).sort().forEach(m => {
       optionsHtml += `<option value="${m}">${m}</option>`;
     });
 
-    if (selectAdd) selectAdd.innerHTML = `<option value="">-- Pilih Mata Pelajaran --</option>` + optionsHtml;
-    if (selectEdit) selectEdit.innerHTML = optionsHtml;
+    if (selectAdd) {
+      selectAdd.multiple = true;
+      selectAdd.size = Math.min(5, Math.max(3, mapelSet.size + 1));
+      selectAdd.title = "Tahan tombol Ctrl (Windows) atau Cmd (Mac) untuk memilih lebih dari 1 mapel";
+      selectAdd.innerHTML = optionsHtml;
+    }
+    if (selectEdit) {
+      selectEdit.multiple = true;
+      selectEdit.size = Math.min(5, Math.max(3, mapelSet.size + 1));
+      selectEdit.title = "Tahan tombol Ctrl (Windows) atau Cmd (Mac) untuk memilih lebih dari 1 mapel";
+      selectEdit.innerHTML = optionsHtml;
+    }
+  },
+
+  getSelectedMapelString(selectElement) {
+    if (!selectElement) return '-';
+    if (selectElement.multiple) {
+      const selected = Array.from(selectElement.selectedOptions)
+        .map(opt => opt.value.trim())
+        .filter(val => val !== '' && val !== '-');
+      return selected.length > 0 ? selected.join(', ') : '-';
+    }
+    return selectElement.value || '-';
   },
 
   renderTable() {
@@ -68,6 +147,21 @@ const GuruModule = {
       const isAktif = String(g.status).toLowerCase() === 'aktif';
       const safeNama = String(g.nama_guru).replace(/'/g, "\\'");
 
+      // Tampilkan badge per mapel & per kelas agar rapi jika lebih dari 1
+      const mapelBadges = String(g.mapel_diampu || '-')
+        .split(',')
+        .map(m => m.trim())
+        .filter(Boolean)
+        .map(m => `<span class="inline-block bg-blue-50 text-blue-800 border border-blue-200 px-1.5 py-0.5 rounded text-[10px] font-semibold mr-1 mb-1">${m}</span>`)
+        .join('');
+
+      const kelasBadges = String(g.kelas_diampu || '-')
+        .split(',')
+        .map(k => k.trim())
+        .filter(Boolean)
+        .map(k => `<span class="inline-block bg-purple-50 text-purple-700 border border-purple-200 px-1.5 py-0.5 rounded text-[10px] font-bold mr-1">${k}</span>`)
+        .join('');
+
       html += `
         <tr class="hover:bg-slate-50 transition">
           <td class="p-3 text-center font-bold text-slate-500">${idx + 1}</td>
@@ -78,8 +172,8 @@ const GuruModule = {
           <td class="p-3 font-mono font-bold text-ocean-800">${g.no_hp}</td>
           <td class="p-3 font-mono text-slate-600">${g.password}</td>
           <td class="p-3">
-            <div class="font-semibold text-slate-800">${g.mapel_diampu}</div>
-            <div class="text-[10px] text-purple-700 font-semibold">Kelas: ${g.kelas_diampu || '-'}</div>
+            <div class="mb-1">${mapelBadges}</div>
+            <div class="text-[10px] text-slate-500">Kelas: ${kelasBadges}</div>
           </td>
           <td class="p-3 text-center">
             <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${isAktif ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}">
@@ -109,9 +203,13 @@ const GuruModule = {
     const nip = document.getElementById('guru-nip').value.trim() || '-';
     const noHp = document.getElementById('guru-hp').value.trim();
     const password = document.getElementById('guru-password').value.trim() || 'guru123';
-    const mapel = document.getElementById('guru-mapel').value || '-';
+    const mapel = this.getSelectedMapelString(document.getElementById('guru-mapel'));
     const jabatan = document.getElementById('guru-jabatan').value;
-    const kelas = document.getElementById('guru-kelas').value.trim() || '-';
+    // Rapikan format koma pada input kelas (misal: "XI TKJ 1, XI TKJ 2")
+    const rawKelas = document.getElementById('guru-kelas').value.trim();
+    const kelas = rawKelas
+      ? rawKelas.split(',').map(k => k.trim()).filter(Boolean).join(', ')
+      : '-';
     const kepegawaian = document.getElementById('guru-kepegawaian').value;
 
     if (!nama || !noHp) {
@@ -140,7 +238,7 @@ const GuruModule = {
 
     try {
       await DB.insertGuru(payload);
-      alert(`Berhasil menambahkan akun Guru/Pengawas:\n${nama} (Login: ${noHp} / Pass: ${password})`);
+      alert(`Berhasil menambahkan akun Guru/Pengawas:\n${nama}\nMapel: ${mapel}\nKelas: ${kelas}`);
       document.getElementById('form-tambah-guru').reset();
       document.getElementById('guru-password').value = 'guru123';
       await this.loadAndRender();
@@ -159,9 +257,21 @@ const GuruModule = {
     document.getElementById('edit-guru-hp').value = g.no_hp;
     document.getElementById('edit-guru-password').value = g.password;
     document.getElementById('edit-guru-status').value = g.status;
-    document.getElementById('edit-guru-mapel').value = g.mapel_diampu;
     document.getElementById('edit-guru-jabatan').value = g.jabatan;
     document.getElementById('edit-guru-kelas').value = g.kelas_diampu;
+
+    // Tandai semua mapel yang diampu pada multiple select
+    const selectEdit = document.getElementById('edit-guru-mapel');
+    if (selectEdit) {
+      const currentMapels = String(g.mapel_diampu || '-')
+        .split(',')
+        .map(m => m.trim().toUpperCase())
+        .filter(Boolean);
+
+      Array.from(selectEdit.options).forEach(opt => {
+        opt.selected = currentMapels.includes(opt.value.trim().toUpperCase());
+      });
+    }
 
     document.getElementById('modal-edit-guru').classList.remove('hidden');
   },
@@ -174,15 +284,20 @@ const GuruModule = {
     e.preventDefault();
     const idGuru = parseInt(document.getElementById('edit-guru-id').value);
 
+    const rawKelas = document.getElementById('edit-guru-kelas').value.trim();
+    const kelasFix = rawKelas
+      ? rawKelas.split(',').map(k => k.trim()).filter(Boolean).join(', ')
+      : '-';
+
     const payload = {
       nama_guru: document.getElementById('edit-guru-nama').value.trim(),
       nip: document.getElementById('edit-guru-nip').value.trim() || '-',
       no_hp: document.getElementById('edit-guru-hp').value.trim(),
       password: document.getElementById('edit-guru-password').value.trim(),
       status: document.getElementById('edit-guru-status').value,
-      mapel_diampu: document.getElementById('edit-guru-mapel').value,
+      mapel_diampu: this.getSelectedMapelString(document.getElementById('edit-guru-mapel')),
       jabatan: document.getElementById('edit-guru-jabatan').value.trim(),
-      kelas_diampu: document.getElementById('edit-guru-kelas').value.trim() || '-'
+      kelas_diampu: kelasFix
     };
 
     try {
