@@ -47,6 +47,43 @@ const DB = {
     });
   },
 
+  // --- HELPER PAGINATION: AMBIL SELURUH DATA TANPA BATAS 1000 BARIS SUPABASE ---
+  async fetchAllRows(tableName, orderCol = 'id', ascending = true) {
+    const client = await this.getClient();
+    if (!client) return [];
+
+    let allRows = [];
+    let from = 0;
+    const step = 1000;
+
+    while (true) {
+      let query = client.from(tableName).select('*');
+      if (orderCol) {
+        query = query.order(orderCol, { ascending });
+      }
+      const { data, error } = await query.range(from, from + step - 1);
+
+      if (error) {
+        // Fallback jika kolom orderCol tidak ada di tabel
+        if (from === 0 && orderCol) {
+          const fallbackRes = await client.from(tableName).select('*').range(0, step - 1);
+          if (!fallbackRes.error && fallbackRes.data) {
+            return fallbackRes.data;
+          }
+        }
+        console.warn(`[DB Helper] Gagal fetch tabel ${tableName}:`, error.message);
+        break;
+      }
+
+      if (!data || data.length === 0) break;
+      allRows = allRows.concat(data);
+      if (data.length < step) break;
+      from += step;
+    }
+
+    return allRows;
+  },
+
   // --- MODUL ADMIN / PROKTOR ---
   async fetchAdmin() {
     const client = await this.getClient();
@@ -202,20 +239,19 @@ const DB = {
     return true;
   },
 
-  // --- MODUL SISWA ---
+  // --- MODUL SISWA (AMBIL SELURUH DATA TANPA BATAS 1000 BARIS) ---
   async fetchSiswa() {
     const client = await this.getClient();
     if (!client) return [];
     try {
-      const { data: dataSiswa } = await client.from('siswa').select('*');
+      const dataSiswa = await this.fetchAllRows('siswa', null, true);
       let dataAkun = [];
       try {
-        const { data: dataA } = await client.from('akun_siswa').select('*');
-        dataAkun = dataA || [];
+        dataAkun = await this.fetchAllRows('akun_siswa', null, true);
       } catch (e) {}
 
       return (dataSiswa || []).map(s => {
-        const akun = dataAkun.find(a => a.ID_SISWA === (s.ID_SISWA || s.id_siswa));
+        const akun = dataAkun.find(a => (a.ID_SISWA || a.id_siswa) === (s.ID_SISWA || s.id_siswa));
         return {
           id_siswa: s.ID_SISWA || s.id_siswa || s.id,
           nisn: String(s.NISN || s.nisn || '-').trim(),
@@ -232,14 +268,12 @@ const DB = {
     }
   },
 
-  // --- MODUL BANK SOAL ---
+  // --- MODUL BANK SOAL (AMBIL SELURUH DATA TANPA BATAS 1000 BARIS) ---
   async fetchBankSoal() {
     const client = await this.getClient();
     if (!client) return [];
     try {
-      const { data, error } = await client.from('bank_soal').select('*').order('id', { ascending: true });
-      if (error) return [];
-      return data || [];
+      return await this.fetchAllRows('bank_soal', 'id', true);
     } catch (err) {
       return [];
     }
@@ -296,13 +330,12 @@ const DB = {
     return activeSchedule || null;
   },
 
-  // --- MODUL HASIL UJIAN ---
+  // --- MODUL HASIL UJIAN (AMBIL SELURUH DATA TANPA BATAS 1000 BARIS) ---
   async fetchHasilUjian() {
     const client = await this.getClient();
     if (!client) return [];
     try {
-      const { data, error } = await client.from('hasil_ujian').select('*');
-      if (error) return [];
+      const data = await this.fetchAllRows('hasil_ujian', 'id', true);
       
       return (data || []).map(h => ({
         id: h.id || h.ID,
