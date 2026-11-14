@@ -1,4 +1,44 @@
 const AuthModule = {
+  SAVED_STUDENTS_KEY: 'cbt_saved_students_smkn1wkt_v1',
+
+  saveStudentProfileLocally(student) {
+    if (!student) return;
+    try {
+      const raw = localStorage.getItem(this.SAVED_STUDENTS_KEY);
+      const list = raw ? JSON.parse(raw) : [];
+      const filtered = list.filter(item =>
+        String(item.nisn || '').trim() !== String(student.nisn || '').trim() &&
+        String(item.user || '').trim() !== String(student.user || '').trim()
+      );
+      filtered.push({
+        id_siswa: student.id_siswa,
+        nisn: student.nisn,
+        nama: student.nama,
+        kelas: student.kelas,
+        status: student.status,
+        ttl: student.ttl,
+        user: student.user,
+        pass: student.pass,
+        savedAt: Date.now()
+      });
+      localStorage.setItem(this.SAVED_STUDENTS_KEY, JSON.stringify(filtered));
+    } catch (e) {}
+  },
+
+  findLocalStudent(usernameInput, passwordInput) {
+    try {
+      const raw = localStorage.getItem(this.SAVED_STUDENTS_KEY);
+      if (!raw) return null;
+      const list = JSON.parse(raw);
+      return list.find(s =>
+        (String(s.nisn || '').trim() === usernameInput || String(s.user || '').trim() === usernameInput) &&
+        String(s.pass || '').trim() === passwordInput
+      ) || null;
+    } catch (e) {
+      return null;
+    }
+  },
+
   async login(e) {
     if (e && e.preventDefault) e.preventDefault();
 
@@ -12,7 +52,7 @@ const AuthModule = {
 
     // 1. CEK AKUN ADMIN DI SUPABASE
     try {
-      if (typeof DB !== 'undefined' && DB.fetchAdmin) {
+      if (typeof DB !== 'undefined' && DB.fetchAdmin && navigator.onLine) {
         const listAdmin = await DB.fetchAdmin();
         const foundAdmin = listAdmin.find(a => a.username === usernameInput && a.password === passwordInput);
         if (foundAdmin) {
@@ -41,7 +81,7 @@ const AuthModule = {
 
     // 3. CEK AKUN GURU DI SUPABASE
     try {
-      if (typeof DB !== 'undefined' && DB.fetchGuru) {
+      if (typeof DB !== 'undefined' && DB.fetchGuru && navigator.onLine) {
         const listGuru = await DB.fetchGuru();
         const foundGuru = listGuru.find(g => 
           (g.no_hp === usernameInput || g.nip === usernameInput) && g.password === passwordInput
@@ -60,28 +100,42 @@ const AuthModule = {
       }
     } catch (err) {}
 
-    // 4. CEK AKUN SISWA DI SUPABASE
+    // 4. CEK AKUN SISWA (ONLINE DULU, FALLBACK KE CACHE LOKAL JIKA OFFLINE)
+    let foundSiswa = null;
     try {
-      if (typeof DB !== 'undefined' && DB.fetchSiswa) {
+      if (typeof DB !== 'undefined' && DB.fetchSiswa && navigator.onLine) {
         const listSiswa = await DB.fetchSiswa();
-        const foundSiswa = listSiswa.find(s => 
+        foundSiswa = listSiswa.find(s => 
           (String(s.nisn).trim() === usernameInput || String(s.user).trim() === usernameInput) && 
           String(s.pass).trim() === passwordInput
-        );
-        if (foundSiswa) {
-          if (String(foundSiswa.status).toLowerCase() !== 'aktif') {
-            alert("Status akun Anda Non-Aktif. Hubungi panitia ujian.");
-            return;
-          }
-          State.currentUser = { ...foundSiswa, role: 'siswa' };
-          alert(`Selamat Datang, ${foundSiswa.nama} (${foundSiswa.kelas})`);
-          await ExamModule.startExam();
-          return;
-        }
+        ) || null;
       }
     } catch (err) {}
 
-    alert("Login Gagal! Periksa kembali Username/NISN/No. HP dan Password Anda.");
+    if (!foundSiswa) {
+      foundSiswa = this.findLocalStudent(usernameInput, passwordInput);
+    }
+
+    if (foundSiswa) {
+      if (String(foundSiswa.status).toLowerCase() !== 'aktif') {
+        alert("Status akun Anda Non-Aktif. Hubungi panitia ujian.");
+        return;
+      }
+      this.saveStudentProfileLocally(foundSiswa);
+      State.currentUser = { ...foundSiswa, role: 'siswa' };
+
+      App.showScreen('student-lobby');
+      if (typeof ExamModule !== 'undefined' && ExamModule.openStudentLobby) {
+        await ExamModule.openStudentLobby();
+      }
+      return;
+    }
+
+    if (!navigator.onLine) {
+      alert("Login Offline Gagal!\n\nPerangkat sedang offline dan akun Anda belum pernah login di perangkat ini. Silakan hubungkan ke internet terlebih dahulu.");
+    } else {
+      alert("Login Gagal! Periksa kembali Username/NISN/No. HP dan Password Anda.");
+    }
   },
 
   logout() {
