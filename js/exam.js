@@ -13,6 +13,21 @@ const ExamModule = {
     return String(str || '').replace(/\s+/g, ' ').trim().toUpperCase();
   },
 
+  isMapelMatch(mapelA, mapelB) {
+    const clean = (s) => String(s || '')
+      .toUpperCase()
+      .replace(/&/g, ' DAN ')
+      .replace(/[^A-Z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    const a = clean(mapelA);
+    const b = clean(mapelB);
+    if (!a || !b) return false;
+    if (a === b) return true;
+    return (a.length >= 6 && b.includes(a)) || (b.length >= 6 && a.includes(b));
+  },
+
   getDeviceToken() {
     const key = 'cbt_device_token_smkn1wkt';
     let token = localStorage.getItem(key);
@@ -111,10 +126,9 @@ const ExamModule = {
       const sId = String(student.id_siswa || student.nisn || '').trim();
       const sNisn = String(student.nisn || '').trim();
       const sNama = this.normalizeText(student.nama || '');
-      const mNorm = this.normalizeText(mapel);
 
       return list.find(item => {
-        if (this.normalizeText(item.mapel) !== mNorm) return false;
+        if (!this.isMapelMatch(item.mapel, mapel)) return false;
         const iId = String(item.id_siswa || '').trim();
         const iNama = this.normalizeText(item.nama_siswa || '');
         return (sId && iId === sId) || (sNisn && iId === sNisn) || (sNama && iNama === sNama);
@@ -287,11 +301,13 @@ const ExamModule = {
       };
       localStorage.setItem(this.getOfflinePackageKey(student.kelas), JSON.stringify(pkgData));
 
+      const mapelTersimpan = [...new Set(classQuestions.map(q => q.mapel))];
       alert(
         `PAKET UJIAN OFFLINE SIAP!\n\n` +
         `Kelas : ${student.kelas}\n` +
         `Jadwal Tersimpan : ${classSchedules.length} jadwal\n` +
-        `Butir Soal Tersimpan : ${classQuestions.length} soal (${imgUrls.size} gambar)\n\n` +
+        `Butir Soal Tersimpan : ${classQuestions.length} soal (${imgUrls.size} gambar)\n` +
+        `Mapel Tersedia Offline:\n- ${mapelTersimpan.join('\n- ') || '(Tidak ada)'}\n\n` +
         `Perangkat ini sekarang siap digunakan untuk ujian secara OFFLINE maupun ONLINE.`
       );
 
@@ -412,7 +428,6 @@ const ExamModule = {
     schedulesContainer.innerHTML = '';
 
     schedules.forEach(j => {
-      const mNorm = this.normalizeText(j.mapel);
       const jamMulaiClean = String(j.jamMulai).substring(0, 5);
       const jamSelesaiClean = String(j.jamSelesai).substring(0, 5);
       const isToday = String(j.tanggal).trim() === currentDateStr;
@@ -420,7 +435,7 @@ const ExamModule = {
 
       const localDone = this.findLocalCompletedExam(student, j.mapel);
       const serverDone = (onlineHasil || []).find(h => {
-        if (this.normalizeText(h.mapel) !== mNorm) return false;
+        if (!this.isMapelMatch(h.mapel, j.mapel)) return false;
         const st = this.normalizeText(h.status_selesai);
         if (st !== 'SELESAI' && st !== 'DIDISKUALIFIKASI') return false;
         const hId = String(h.ID_SISWA || '').trim();
@@ -430,7 +445,7 @@ const ExamModule = {
 
       const doneRecord = serverDone || localDone;
       const hasOfflineSoal = offlinePkg && Array.isArray(offlinePkg.questions) &&
-        offlinePkg.questions.some(q => this.normalizeText(q.mapel) === mNorm);
+        offlinePkg.questions.some(q => this.isMapelMatch(q.mapel, j.mapel));
 
       let actionHtml = '';
       let cardBorder = 'border-slate-200 bg-white';
@@ -750,8 +765,7 @@ const ExamModule = {
 
           if (existingHasil) {
             const studentRecords = existingHasil.filter(h => {
-              const hMapel = this.normalizeText(h.mapel || h.MAPEL || '');
-              if (hMapel !== targetMapel) return false;
+              if (!this.isMapelMatch(h.mapel || h.MAPEL || '', activeSchedule.mapel)) return false;
 
               const hId = String(h.id_siswa || h.ID_SISWA || '').trim();
               const hNama = this.normalizeText(h.nama_siswa || h.NAMA_SISWA || '');
@@ -847,7 +861,7 @@ const ExamModule = {
       }));
 
       const filtered = allQuestions.filter(q => {
-        const matchMapel = this.normalizeText(q.mapel) === targetMapel;
+        const matchMapel = this.isMapelMatch(q.mapel, activeSchedule.mapel);
         const listOfKelasTarget = String(q.kelas).split(',').map(k => this.normalizeText(k));
         const matchKelas = listOfKelasTarget.includes(sKelas);
         return matchMapel && matchKelas;
