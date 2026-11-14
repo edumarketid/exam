@@ -1,4 +1,4 @@
-// Pastikan State tersedia (baik dari js/state.js maupun inisialisasi baru)
+// Pastikan State global tersedia
 window.State = window.State || {
   currentUser: null,
   examActive: false,
@@ -14,19 +14,59 @@ window.State = window.State || {
 
 const App = {
   async init() {
-    console.log("[App] Menginisialisasi sistem CBT SMKN 1 Wakatobi...");
+    console.log("[App] Menginisialisasi sistem CBT Semi-Online SMKN 1 Wakatobi...");
 
     if (typeof ExamModule !== 'undefined' && ExamModule.setupSecurityListeners) {
       ExamModule.setupSecurityListeners();
     }
 
-    // Uji koneksi Supabase & update badge status pada layar login
+    this.setupNetworkListeners();
+    await this.updateConnectionBadge();
+
+    this.showScreen('login');
+  },
+
+  setupNetworkListeners() {
+    window.addEventListener('online', async () => {
+      await this.updateConnectionBadge();
+
+      // Jika perangkat kembali online, otomatis kirim antrean nilai ujian offline
+      if (typeof ExamModule !== 'undefined' && ExamModule.syncOfflineResults) {
+        await ExamModule.syncOfflineResults(false);
+      }
+    });
+
+    window.addEventListener('offline', async () => {
+      await this.updateConnectionBadge();
+
+      // Perbarui badge status jaringan jika siswa sedang berada di Lobby Peserta
+      if (
+        State.currentUser &&
+        State.currentUser.role === 'siswa' &&
+        !State.examActive &&
+        typeof ExamModule !== 'undefined' &&
+        ExamModule.renderStudentLobby
+      ) {
+        await ExamModule.renderStudentLobby();
+      }
+    });
+  },
+
+  async updateConnectionBadge() {
     const badge = document.getElementById('db-status-badge');
+    if (!navigator.onLine) {
+      if (badge) {
+        badge.textContent = "Mode Offline (Siap untuk Siswa)";
+        badge.className = "px-3 py-1 text-[10px] rounded-full bg-amber-500 text-slate-900 font-bold shadow";
+      }
+      return;
+    }
+
     try {
       const client = typeof DB !== 'undefined' ? await DB.getClient() : null;
       if (client) {
         if (badge) {
-          badge.textContent = "Terhubung ke Database";
+          badge.textContent = "Terhubung ke Database (Online)";
           badge.className = "px-3 py-1 text-[10px] rounded-full bg-emerald-600 text-white font-bold shadow";
         }
       } else {
@@ -41,12 +81,10 @@ const App = {
         badge.className = "px-3 py-1 text-[10px] rounded-full bg-rose-600 text-white font-bold shadow";
       }
     }
-
-    this.showScreen('login');
   },
 
   showScreen(screenName) {
-    const screens = ['login', 'admin', 'exam'];
+    const screens = ['login', 'student-lobby', 'admin', 'exam'];
     screens.forEach(s => {
       const el = document.getElementById(`screen-${s}`);
       if (el) {
@@ -92,7 +130,6 @@ const App = {
   },
 
   async switchAdminTab(tabName) {
-    // Daftar seluruh ID tab sesuai index.html asli
     const tabIds = [
       'tab-monitoring',
       'tab-jadwal',
@@ -114,7 +151,6 @@ const App = {
       targetTab.classList.remove('hidden');
     }
 
-    // Highlight tombol navigasi aktif di sidebar
     const navBtns = document.querySelectorAll('.admin-nav-btn');
     navBtns.forEach(btn => {
       btn.classList.remove('bg-white/10', 'text-white', 'font-bold');
@@ -127,7 +163,6 @@ const App = {
       activeNav.classList.add('bg-white/10', 'text-white', 'font-bold');
     }
 
-    // Panggil modul pemuat data sesuai tab
     try {
       if (tabName === 'monitoring' && typeof RekapModule !== 'undefined') {
         await RekapModule.refreshMonitoringData();
