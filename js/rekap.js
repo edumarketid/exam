@@ -756,7 +756,6 @@ const RekapModule = {
               <th class="p-2 border border-slate-400 w-10">NO</th>
               <th class="p-2 border border-slate-400 w-28">NISN</th>
               <th class="p-2 border border-slate-400">NAMA LENGKAP PESERTA</th>
-              <th class="p-2 border border-slate-400 w-32">KETERANGAN CBT</th>
               <th class="p-2 border border-slate-400" colspan="2">TANDA TANGAN</th>
             </tr>
           </thead>
