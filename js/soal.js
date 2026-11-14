@@ -390,6 +390,13 @@ const SoalModule = {
           </div>
 
           <div class="flex items-center space-x-2" onclick="event.stopPropagation()">
+            <!-- TOMBOL KISI-KISI SOAL SISWA (DI SAMPING ANALISIS) -->
+            <button onclick="SoalModule.openKisiKisiModal('${encodeURIComponent(groupData.mapel)}', '${encodeURIComponent(groupData.kelas)}')" 
+                    title="Lihat & Cetak Kisi-Kisi Belajar Siswa"
+                    class="bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg shadow transition flex items-center gap-1.5">
+              <span>📋 Kisi-Kisi</span>
+            </button>
+
             <!-- TOMBOL ANALISIS BUTIR SOAL -->
             <button onclick="SoalModule.openAnalisisButirSoal('${encodeURIComponent(groupData.mapel)}', '${encodeURIComponent(groupData.kelas)}')" 
                     title="Lihat Analisis Butir & Kualitas Soal"
@@ -429,6 +436,253 @@ const SoalModule = {
 
       container.appendChild(groupBox);
     });
+  },
+
+  // =========================================================================
+  // MODUL KISI-KISI OTOMATIS PER BUTIR SOAL (UNTUK DIBAGIKAN KE SISWA)
+  // =========================================================================
+  generateKisiKisiItem(q, idx) {
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = q.soal_html;
+    const rawText = (tempDiv.textContent || tempDiv.innerText || '').replace(/\s+/g, ' ').trim();
+    const hasImage = /<img\s|<svg\s/i.test(q.soal_html);
+    const hasTable = /<table\s/i.test(q.soal_html);
+    const hasCode = /<pre|<code|192\.168\.|\/\d{2}|router|mikrotik|vlan|ip address|subnet/i.test(q.soal_html);
+    const lowerText = rawText.toLowerCase();
+
+    // 1. Deteksi Level Kognitif (Taksonomi Bloom) & Kata Kerja Operasional
+    let levelKognitif = 'L2 (Pemahaman / C2)';
+    let kataKerja = 'Menjelaskan';
+
+    if (/(analisis|analisislah|evaluasi|mengevaluasi|penyebab|gangguan|troubleshoot|kesalahan|perbaikan|solusi|bandingkan|perbedaan utama|studi kasus|skenario)/.test(lowerText)) {
+      levelKognitif = 'L3 (Penalaran / C4)';
+      kataKerja = 'Menganalisis';
+    } else if (/(hitung|berapakah|tentukan|konversi|hasil dari|nilai dari|subnet|broadcast|host valid|rumus|langkah|urutan|konfigurasi|penerapan|diterapkan)/.test(lowerText) || hasCode) {
+      levelKognitif = 'L2 (Penerapan / C3)';
+      kataKerja = 'Menentukan / Menerapkan';
+    } else if (/(apakah yang dimaksud|pengertian|definisi|kepanjangan|fungsi utama|disebut dengan|termasuk ke dalam|ciri-ciri)/.test(lowerText)) {
+      levelKognitif = 'L1 (Pengetahuan / C1)';
+      kataKerja = 'Mengidentifikasi';
+    }
+
+    // 2. Ekstraksi Inti Materi / Topik dari kalimat soal tanpa membocorkan opsi
+    let kalimatUtama = rawText
+      .replace(/^(perhatikan\s+(gambar|tabel|ilustrasi|pernyataan|kasus|teks)\s+(berikut|di\s+bawah\s+ini)[.!:,]?\s*)/i, '')
+      .replace(/\s*(berikut\s+ini\s*(adalah|merupakan|yang\s+tepat)[^.?!]*[.?!]?)$/i, '')
+      .replace(/\s*(adalah|yaitu|kecuali|yang\s+benar\s+adalah)\s*[.?!…]*$/i, '')
+      .trim();
+
+    if (!kalimatUtama && hasImage) {
+      kalimatUtama = 'Identifikasi komponen/diagram pada stimulus gambar';
+    } else if (!kalimatUtama) {
+      kalimatUtama = `Konsep dasar ${q.mapel}`;
+    }
+
+    // Ambil ringkasan topik (maksimal 95 karakter, dipotong di batas kata)
+    let topikMateri = kalimatUtama;
+    if (topikMateri.length > 95) {
+      topikMateri = topikMateri.substring(0, 95).replace(/\s+\S*$/, '') + '...';
+    }
+    topikMateri = topikMateri.charAt(0).toUpperCase() + topikMateri.slice(1);
+
+    // 3. Susun Indikator Soal siap belajar siswa
+    let stimulusTag = '';
+    if (hasImage && hasTable) stimulusTag = 'Disajikan gambar dan tabel data, ';
+    else if (hasImage) stimulusTag = 'Disajikan gambar/diagram ilustrasi, ';
+    else if (hasTable) stimulusTag = 'Disajikan tabel data, ';
+    else if (rawText.length > 160) stimulusTag = 'Disajikan studi kasus/narasi, ';
+
+    const indikator = `${stimulusTag}peserta didik dapat ${kataKerja.toLowerCase()} materi tentang "${topikMateri}".`;
+
+    return {
+      no: idx + 1,
+      topik: topikMateri,
+      indikator,
+      level: levelKognitif,
+      bentuk: 'Pilihan Ganda'
+    };
+  },
+
+  openKisiKisiModal(encodedMapel, encodedKelas) {
+    const mapel = decodeURIComponent(encodedMapel);
+    const kelas = decodeURIComponent(encodedKelas);
+
+    const questionsPkg = (State.questions || []).filter(q =>
+      this.normalizeText(q.mapel) === this.normalizeText(mapel) &&
+      this.normalizeText(q.kelas) === this.normalizeText(kelas)
+    );
+
+    if (questionsPkg.length === 0) {
+      alert("Paket soal tidak ditemukan.");
+      return;
+    }
+
+    const kisiList = questionsPkg.map((q, idx) => this.generateKisiKisiItem(q, idx));
+
+    let modalEl = document.getElementById('modal-kisi-kisi-soal');
+    if (!modalEl) {
+      modalEl = document.createElement('div');
+      modalEl.id = 'modal-kisi-kisi-soal';
+      modalEl.className = "fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4";
+      document.body.appendChild(modalEl);
+    }
+
+    let rowsHtml = '';
+    kisiList.forEach(item => {
+      rowsHtml += `
+        <tr class="hover:bg-slate-50 border-b border-slate-100">
+          <td class="p-2.5 text-center font-bold text-slate-700">${item.no}</td>
+          <td class="p-2.5 font-semibold text-ocean-900">${item.topik}</td>
+          <td class="p-2.5 text-slate-700 leading-relaxed">${item.indikator}</td>
+          <td class="p-2.5 text-center">
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-50 text-teal-800 border border-teal-200 whitespace-nowrap">
+              ${item.level}
+            </span>
+          </td>
+        </tr>
+      `;
+    });
+
+    modalEl.innerHTML = `
+      <div class="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden border border-slate-200">
+        <div class="p-4 bg-teal-900 text-white flex flex-wrap justify-between items-center gap-2">
+          <div>
+            <h3 class="font-bold text-sm">📋 Kisi-Kisi Penulisan Soal & Panduan Belajar Siswa</h3>
+            <p class="text-[11px] text-teal-200 mt-0.5">${mapel} • Kelas: ${kelas} (${kisiList.length} Butir Soal)</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button onclick="SoalModule.printKisiKisiSiswa('${encodeURIComponent(mapel)}', '${encodeURIComponent(kelas)}')"
+                    class="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow flex items-center gap-1.5">
+              <i class="fa-solid fa-print"></i>
+              <span>Cetak / Bagikan ke Siswa</span>
+            </button>
+            <button onclick="document.getElementById('modal-kisi-kisi-soal').classList.add('hidden')"
+                    class="bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg text-xs font-bold">
+              ✕ Tutup
+            </button>
+          </div>
+        </div>
+
+        <div class="p-4 overflow-y-auto space-y-3 text-xs">
+          <div class="p-3 rounded-xl bg-teal-50 border border-teal-200 text-teal-900 flex items-center justify-between gap-2">
+            <span>
+              <strong>Info untuk Guru:</strong> Kisi-kisi ini disusun otomatis dari setiap butir soal tanpa mencantumkan kunci jawaban, sehingga aman dibagikan kepada peserta didik sebagai panduan belajar mandiri.
+            </span>
+          </div>
+
+          <div class="border border-slate-200 rounded-xl overflow-hidden">
+            <table class="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr class="bg-slate-100 border-b border-slate-200 text-[10px] font-bold text-slate-600 uppercase">
+                  <th class="p-2.5 text-center w-12">No</th>
+                  <th class="p-2.5 w-1/3">Lingkup Materi / Topik</th>
+                  <th class="p-2.5">Indikator Pencapaian Kompetensi</th>
+                  <th class="p-2.5 text-center w-36">Level Kognitif</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rowsHtml}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    `;
+    modalEl.classList.remove('hidden');
+  },
+
+  printKisiKisiSiswa(encodedMapel, encodedKelas) {
+    const mapel = decodeURIComponent(encodedMapel);
+    const kelas = decodeURIComponent(encodedKelas);
+
+    const questionsPkg = (State.questions || []).filter(q =>
+      this.normalizeText(q.mapel) === this.normalizeText(mapel) &&
+      this.normalizeText(q.kelas) === this.normalizeText(kelas)
+    );
+
+    if (questionsPkg.length === 0) {
+      alert("Paket soal tidak ditemukan.");
+      return;
+    }
+
+    const kisiList = questionsPkg.map((q, idx) => this.generateKisiKisiItem(q, idx));
+    const kopUrl = "https://nbwpnhshhpfqtmbwewgk.supabase.co/storage/v1/object/public/media-sekolah/kop_sekolah.png";
+    const guruNama = State.currentUser?.nama_guru || State.currentUser?.nama || 'Guru Mata Pelajaran';
+    const printWindow = window.open('', '_blank');
+
+    let rowsHtml = '';
+    kisiList.forEach(item => {
+      rowsHtml += `
+        <tr>
+          <td class="border border-slate-800 p-2 text-center font-bold">${item.no}</td>
+          <td class="border border-slate-800 p-2 font-semibold">${item.topik}</td>
+          <td class="border border-slate-800 p-2">${item.indikator}</td>
+          <td class="border border-slate-800 p-2 text-center">${item.level}</td>
+          <td class="border border-slate-800 p-2 text-center">${item.bentuk}</td>
+        </tr>
+      `;
+    });
+
+    const html = `
+      <!DOCTYPE html>
+      <html lang="id">
+      <head>
+        <meta charset="UTF-8">
+        <title>KISI-KISI UJIAN SISWA - ${mapel} (${kelas})</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <style>
+          @page { size: A4 portrait; margin: 12mm; }
+          body { font-family: 'Inter', sans-serif; color: #0f172a; font-size: 10pt; }
+          tr { page-break-inside: avoid; }
+        </style>
+      </head>
+      <body class="p-4 bg-white" onload="window.print()">
+        <div class="mb-4 border-b-4 border-double border-slate-900 pb-2 text-center">
+          <img src="${kopUrl}" alt="Kop Surat SMKN 1 Wakatobi" class="w-full max-h-32 object-contain mx-auto"
+               onerror="this.style.display='none'; document.getElementById('fallback-header').style.display='block';">
+          <div id="fallback-header" class="hidden text-center">
+            <h1 class="font-extrabold text-sm uppercase">PEMERINTAH PROVINSI SULAWESI TENGGARA</h1>
+            <h2 class="font-bold text-base uppercase">DINAS PENDIDIKAN DAN KEBUDAYAAN</h2>
+            <h3 class="font-black text-lg uppercase text-blue-900">SMK NEGERI 1 WAKATOBI</h3>
+            <p class="text-[10px] text-slate-600 italic">Desa Numana, Kec. Wangi-Wangi Selatan, Kab. Wakatobi, Sulawesi Tenggara</p>
+          </div>
+        </div>
+
+        <h4 class="font-black text-center text-sm uppercase tracking-wide mb-3">KISI-KISI PENILAIAN SUMATIF (PANDUAN BELAJAR PESERTA DIDIK)</h4>
+
+        <div class="border border-slate-800 rounded-lg p-3 mb-4 bg-slate-50 text-xs grid grid-cols-2 gap-1.5">
+          <div><strong>Satuan Pendidikan:</strong> SMK Negeri 1 Wakatobi</div>
+          <div><strong>Tahun Pelajaran:</strong> 2026/2027</div>
+          <div><strong>Mata Pelajaran:</strong> ${mapel}</div>
+          <div><strong>Jumlah Soal:</strong> ${kisiList.length} Butir</div>
+          <div><strong>Kelas / Kompetensi:</strong> ${kelas}</div>
+          <div><strong>Penyusun / Pengampu:</strong> ${guruNama}</div>
+        </div>
+
+        <table class="w-full border-collapse border border-slate-800 text-xs">
+          <thead>
+            <tr class="bg-slate-200 font-bold text-center">
+              <th class="border border-slate-800 p-2 w-10">No</th>
+              <th class="border border-slate-800 p-2 w-1/4">Lingkup Materi / Topik</th>
+              <th class="border border-slate-800 p-2">Indikator Pencapaian Kompetensi</th>
+              <th class="border border-slate-800 p-2 w-32">Level Kognitif</th>
+              <th class="border border-slate-800 p-2 w-24">Bentuk Soal</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+
+        <div class="mt-4 text-[11px] text-slate-600 italic">
+          * Catatan: Pelajari seluruh indikator di atas melalui buku paket, modul ajar, dan catatan praktik sebelum pelaksanaan ujian dimulai.
+        </div>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.write(html);
+    printWindow.document.close();
   },
 
   // --- ANALISIS BUTIR SOAL & KUALITAS PAKET SOAL ---
