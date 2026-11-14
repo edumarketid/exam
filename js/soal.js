@@ -1,4 +1,9 @@
 const SoalModule = {
+  // --- HELPER: NORMALISASI TEKS (SPASI GANDA & HURUF BESAR) ---
+  normalizeText(str) {
+    return String(str || '').replace(/\s+/g, ' ').trim().toUpperCase();
+  },
+
   // --- HELPER: CEK PASANGAN (MAPEL + KELAS) MILIK GURU ---
   getGuruPairs() {
     if (!State.currentUser || State.currentUser.role !== 'guru') return [];
@@ -33,15 +38,15 @@ const SoalModule = {
     const pairs = this.getGuruPairs();
     if (pairs.length === 0) return false;
 
-    const mUpper = String(targetMapel || '').trim().toUpperCase();
+    const mUpper = this.normalizeText(targetMapel);
     if (!targetKelas) {
-      return pairs.some(p => p.mapel.toUpperCase() === mUpper);
+      return pairs.some(p => this.normalizeText(p.mapel) === mUpper);
     }
 
-    const targetKelasList = String(targetKelas).split(',').map(k => k.trim().toUpperCase()).filter(Boolean);
+    const targetKelasList = String(targetKelas).split(',').map(k => this.normalizeText(k)).filter(Boolean);
     return pairs.some(p => {
-      const matchM = p.mapel.toUpperCase() === mUpper;
-      const matchK = p.kelas === '*' || targetKelasList.includes(p.kelas.toUpperCase());
+      const matchM = this.normalizeText(p.mapel) === mUpper;
+      const matchK = p.kelas === '*' || targetKelasList.includes(this.normalizeText(p.kelas));
       return matchM && matchK;
     });
   },
@@ -96,7 +101,7 @@ const SoalModule = {
 
   async loadAndRender() {
     try {
-      console.log("[SoalModule] Menarik data Bank Soal dari Supabase...");
+      console.log("[SoalModule] Menarik seluruh data Bank Soal dari Supabase...");
       
       if (!State.mapelList || State.mapelList.length === 0) {
         State.mapelList = await DB.fetchMapel();
@@ -162,13 +167,13 @@ const SoalModule = {
     const container = document.getElementById('container-upload-kelas-checkboxes');
     if (!container) return;
 
-    const selectedMapel = (document.getElementById('select-upload-mapel')?.value || '').trim().toUpperCase();
+    const selectedMapel = this.normalizeText(document.getElementById('select-upload-mapel')?.value || '');
     const kelasSet = new Set();
 
     if (State.currentUser && State.currentUser.role === 'guru') {
       const pairs = this.getGuruPairs();
       const relevantPairs = selectedMapel
-        ? pairs.filter(p => p.mapel.toUpperCase() === selectedMapel)
+        ? pairs.filter(p => this.normalizeText(p.mapel) === selectedMapel)
         : pairs;
 
       relevantPairs.forEach(p => {
@@ -226,6 +231,9 @@ const SoalModule = {
     const filterMapel = document.getElementById('bank-filter-mapel');
     const filterKelas = document.getElementById('bank-filter-kelas');
 
+    const prevMapel = filterMapel ? filterMapel.value : 'ALL';
+    const prevKelas = filterKelas ? filterKelas.value : 'ALL';
+
     const accessibleQuestions = (State.questions || []).filter(q => this.isPairAllowed(q.mapel, q.kelas));
 
     if (filterMapel) {
@@ -235,6 +243,7 @@ const SoalModule = {
         optHtml += `<option value="${m}">${m}</option>`;
       });
       filterMapel.innerHTML = optHtml;
+      if (listMapel.includes(prevMapel)) filterMapel.value = prevMapel;
     }
 
     if (filterKelas) {
@@ -244,13 +253,14 @@ const SoalModule = {
         .filter(k => {
           if (!State.currentUser || State.currentUser.role !== 'guru') return true;
           const pairs = this.getGuruPairs();
-          return pairs.some(p => p.kelas === '*' || p.kelas.toUpperCase() === k.toUpperCase());
+          return pairs.some(p => p.kelas === '*' || this.normalizeText(p.kelas) === this.normalizeText(k));
         });
       let optHtml = `<option value="ALL">-- Semua Kelas --</option>`;
       listKelas.forEach(k => {
         optHtml += `<option value="${k}">${k}</option>`;
       });
       filterKelas.innerHTML = optHtml;
+      if (listKelas.includes(prevKelas)) filterKelas.value = prevKelas;
     }
   },
 
@@ -258,8 +268,8 @@ const SoalModule = {
     const container = document.getElementById('bank-soal-list');
     if (!container) return;
 
-    const filterKelas = (document.getElementById('bank-filter-kelas')?.value || 'ALL').trim().toUpperCase();
-    const filterMapel = (document.getElementById('bank-filter-mapel')?.value || 'ALL').trim().toUpperCase();
+    const filterKelas = this.normalizeText(document.getElementById('bank-filter-kelas')?.value || 'ALL');
+    const filterMapel = this.normalizeText(document.getElementById('bank-filter-mapel')?.value || 'ALL');
 
     container.innerHTML = '';
     let filtered = State.questions || [];
@@ -270,13 +280,13 @@ const SoalModule = {
 
     if (filterKelas !== 'ALL') {
       filtered = filtered.filter(q => {
-        const kList = String(q.kelas).toUpperCase().split(',').map(k => k.trim());
+        const kList = String(q.kelas).split(',').map(k => this.normalizeText(k));
         return kList.includes(filterKelas);
       });
     }
 
     if (filterMapel !== 'ALL') {
-      filtered = filtered.filter(q => String(q.mapel).trim().toUpperCase() === filterMapel);
+      filtered = filtered.filter(q => this.normalizeText(q.mapel) === filterMapel);
     }
 
     if (filtered.length === 0) {
@@ -427,8 +437,8 @@ const SoalModule = {
     const kelas = decodeURIComponent(encodedKelas);
 
     const questionsPkg = (State.questions || []).filter(q => 
-      String(q.mapel).trim().toUpperCase() === mapel.trim().toUpperCase() &&
-      String(q.kelas).trim().toUpperCase() === kelas.trim().toUpperCase()
+      this.normalizeText(q.mapel) === this.normalizeText(mapel) &&
+      this.normalizeText(q.kelas) === this.normalizeText(kelas)
     );
 
     if (questionsPkg.length === 0) {
@@ -443,11 +453,11 @@ const SoalModule = {
         ? await RekapModule.fetchAndNormalizeHasil()
         : await DB.fetchHasilUjian();
 
-      const targetKelasArr = kelas.split(',').map(k => k.trim().toUpperCase());
+      const targetKelasArr = kelas.split(',').map(k => this.normalizeText(k));
       hasilList = (normalized || []).filter(h => 
         String(h.status_selesai || '').toUpperCase() !== 'MENGERJAKAN' &&
-        String(h.mapel || '').trim().toUpperCase() === mapel.trim().toUpperCase() &&
-        targetKelasArr.includes(String(h.kelas || '').trim().toUpperCase())
+        this.normalizeText(h.mapel) === this.normalizeText(mapel) &&
+        targetKelasArr.includes(this.normalizeText(h.kelas))
       );
     } catch (e) {}
 
@@ -483,7 +493,6 @@ const SoalModule = {
       const wordCount = plainText.split(/\s+/).filter(Boolean).length;
       const opsiCount = [q.opsi_a, q.opsi_b, q.opsi_c, q.opsi_d, q.opsi_e].filter(o => String(o || '').trim() !== '').length;
 
-      // Estimasi indeks kesukaran berbasis panjang stimulus, keberadaan gambar/tabel, & rata-rata kelas
       let kategori = 'Sedang';
       let badgeCls = 'bg-amber-100 text-amber-800';
       if (hasImage || wordCount > 35 || (scores.length > 0 && Number(avgScore) < 60)) {
@@ -523,7 +532,6 @@ const SoalModule = {
         </div>
 
         <div class="p-4 overflow-y-auto space-y-4 text-xs">
-          <!-- RINGKASAN STATISTIK UJIAN & KUNCI -->
           <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div class="p-3 rounded-xl bg-slate-50 border">
               <div class="text-[10px] font-bold text-slate-400 uppercase">Peserta Selesai</div>
@@ -547,7 +555,6 @@ const SoalModule = {
             </div>
           </div>
 
-          <!-- TABEL ANALISIS PER BUTIR SOAL -->
           <div class="border border-slate-200 rounded-xl overflow-hidden">
             <table class="w-full text-left border-collapse text-xs">
               <thead>
@@ -622,8 +629,8 @@ const SoalModule = {
     try {
       const client = await DB.getClient();
       const questionsToDelete = (State.questions || []).filter(q => 
-        String(q.mapel).trim().toUpperCase() === mapel.trim().toUpperCase() &&
-        String(q.kelas).trim().toUpperCase() === kelas.trim().toUpperCase()
+        this.normalizeText(q.mapel) === this.normalizeText(mapel) &&
+        this.normalizeText(q.kelas) === this.normalizeText(kelas)
       );
       const idsToDelete = questionsToDelete.map(q => q.id);
       const remainingQuestions = (State.questions || []).filter(q => !idsToDelete.includes(q.id));
@@ -648,8 +655,8 @@ const SoalModule = {
     const kelas = decodeURIComponent(encodedKelas);
 
     const questionsToPrint = (State.questions || []).filter(q => 
-      String(q.mapel).trim().toUpperCase() === mapel.trim().toUpperCase() &&
-      String(q.kelas).trim().toUpperCase() === kelas.trim().toUpperCase()
+      this.normalizeText(q.mapel) === this.normalizeText(mapel) &&
+      this.normalizeText(q.kelas) === this.normalizeText(kelas)
     );
 
     if (questionsToPrint.length === 0) {
@@ -834,7 +841,15 @@ const SoalModule = {
         if (error) throw error;
 
         alert(`Berhasil mengunggah ${payloadBatch.length} butir soal ke Supabase untuk kelas (${kelasTargetStr})!`);
+        fileInput.value = '';
         await this.loadAndRender();
+
+        const fMapel = document.getElementById('bank-filter-mapel');
+        const fKelas = document.getElementById('bank-filter-kelas');
+        if (fMapel) fMapel.value = 'ALL';
+        if (fKelas) fKelas.value = 'ALL';
+        this.renderBankSoalList();
+
         App.switchAdminTab('bank-soal');
       } catch (err) {
         alert("Gagal menyimpan soal ke database: " + err.message);
