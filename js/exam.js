@@ -4,6 +4,10 @@ const ExamModule = {
   remainingSeconds: 0,
   heartbeatInterval: null,
 
+  normalizeText(str) {
+    return String(str || '').replace(/\s+/g, ' ').trim().toUpperCase();
+  },
+
   getDeviceToken() {
     const key = 'cbt_device_token_smkn1wkt';
     let token = localStorage.getItem(key);
@@ -238,21 +242,24 @@ const ExamModule = {
 
       const sId = String(student.id_siswa || student.nisn || '').trim();
       const sNisn = String(student.nisn || student.NISN || '').trim();
-      const sNama = String(student.nama || '').trim().toUpperCase();
-      const sKelas = String(student.kelas || '').trim().toUpperCase();
-      const targetMapel = String(activeSchedule.mapel || '').trim().toUpperCase();
+      const sNama = this.normalizeText(student.nama || '');
+      const sKelas = this.normalizeText(student.kelas || '');
+      const targetMapel = this.normalizeText(activeSchedule.mapel || '');
       const deviceLockKey = `cbt_lock_${sId || sNama}_${targetMapel}`;
 
       // 2. CEK RIWAYAT UJIAN SISWA (BLOKIR JIKA SUDAH SELESAI & CEGAH LOGIN GANDA PERANGKAT BERBEDA)
-      const { data: existingHasil, error: errHasil } = await client.from('hasil_ujian').select('*');
-      if (!errHasil && existingHasil) {
+      const existingHasil = typeof DB.fetchAllRows === 'function'
+        ? await DB.fetchAllRows('hasil_ujian', 'id', true)
+        : (await client.from('hasil_ujian').select('*')).data;
+
+      if (existingHasil) {
         const studentRecords = existingHasil.filter(h => {
-          const hMapel = String(h.mapel || h.MAPEL || '').trim().toUpperCase();
+          const hMapel = this.normalizeText(h.mapel || h.MAPEL || '');
           if (hMapel !== targetMapel) return false;
 
           const hId = String(h.id_siswa || h.ID_SISWA || '').trim();
-          const hNama = String(h.nama_siswa || h.NAMA_SISWA || '').trim().toUpperCase();
-          const hKelas = String(h.kelas || h.KELAS || '').trim().toUpperCase();
+          const hNama = this.normalizeText(h.nama_siswa || h.NAMA_SISWA || '');
+          const hKelas = this.normalizeText(h.kelas || h.KELAS || '');
 
           const matchId = (sId !== '' && hId === sId) || (sNisn !== '' && hId === sNisn);
           const matchNamaKelas = (sNama !== '' && hNama === sNama && hKelas === sKelas);
@@ -261,12 +268,12 @@ const ExamModule = {
 
         // A. Cek apakah sudah SELESAI atau DIDISKUALIFIKASI
         const finishedRec = studentRecords.find(h => {
-          const st = String(h.status_selesai || h.STATUS_SELESAI || '').trim().toUpperCase();
+          const st = this.normalizeText(h.status_selesai || h.STATUS_SELESAI || '');
           return st === 'SELESAI' || st === 'DIDISKUALIFIKASI';
         });
 
         if (finishedRec) {
-          const stLabel = String(finishedRec.status_selesai || finishedRec.STATUS_SELESAI || 'SELESAI').toUpperCase();
+          const stLabel = this.normalizeText(finishedRec.status_selesai || finishedRec.STATUS_SELESAI || 'SELESAI');
           const nilaiPrev = finishedRec.nilai !== undefined ? finishedRec.nilai : (finishedRec.NILAI || 0);
           alert(
             `AKSES UJIAN DITOLAK!\n\n` +
@@ -280,7 +287,7 @@ const ExamModule = {
 
         // B. Cek apakah sedang MENGERJAKAN di perangkat lain
         const ongoingRec = studentRecords.find(h => {
-          const st = String(h.status_selesai || h.STATUS_SELESAI || '').trim().toUpperCase();
+          const st = this.normalizeText(h.status_selesai || h.STATUS_SELESAI || '');
           return st === 'MENGERJAKAN';
         });
 
@@ -307,9 +314,15 @@ const ExamModule = {
         }
       }
 
-      // 3. Ambil Bank Soal Khusus untuk Mapel Terjadwal & Kelas Siswa
-      const { data, error } = await client.from('bank_soal').select('*');
-      if (error) throw error;
+      // 3. Ambil Seluruh Bank Soal (Tanpa Batas 1000 Baris) Khusus untuk Mapel Terjadwal & Kelas Siswa
+      let data = [];
+      if (typeof DB.fetchBankSoal === 'function') {
+        data = await DB.fetchBankSoal();
+      } else {
+        const resSoal = await client.from('bank_soal').select('*');
+        if (resSoal.error) throw resSoal.error;
+        data = resSoal.data || [];
+      }
 
       const allQuestions = (data || []).map(q => ({
         id: q.id || q.ID,
@@ -325,9 +338,9 @@ const ExamModule = {
       }));
 
       const filtered = allQuestions.filter(q => {
-        const matchMapel = String(q.mapel).trim().toUpperCase() === String(activeSchedule.mapel).trim().toUpperCase();
-        const listOfKelasTarget = String(q.kelas).toUpperCase().split(',').map(k => k.trim());
-        const matchKelas = listOfKelasTarget.includes(String(student.kelas).trim().toUpperCase());
+        const matchMapel = this.normalizeText(q.mapel) === targetMapel;
+        const listOfKelasTarget = String(q.kelas).split(',').map(k => this.normalizeText(k));
+        const matchKelas = listOfKelasTarget.includes(sKelas);
         return matchMapel && matchKelas;
       });
 
@@ -640,8 +653,8 @@ const ExamModule = {
       }
 
       this.clearProgressLocal();
-      const sNama = String(student.nama || '').trim().toUpperCase();
-      localStorage.removeItem(`cbt_lock_${sId || sNama}_${String(mapelName).trim().toUpperCase()}`);
+      const sNama = this.normalizeText(student.nama || '');
+      localStorage.removeItem(`cbt_lock_${sId || sNama}_${this.normalizeText(mapelName)}`);
     } catch (err) {
       console.error("[ExamModule] Gagal menyimpan nilai ujian:", err.message);
       alert("Peringatan: Gagal menyimpan hasil ke database: " + err.message);
