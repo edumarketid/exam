@@ -1,8 +1,13 @@
 const ExamModule = {
   activeRecordId: null,
+  activeScheduleObj: null,
   storageKey: null,
   remainingSeconds: 0,
   heartbeatInterval: null,
+
+  OFFLINE_PKG_PREFIX: 'cbt_offline_pkg_kelas_',
+  PENDING_SYNC_KEY: 'cbt_pending_hasil_ujian_v1',
+  LOCAL_COMPLETED_KEY: 'cbt_local_completed_exams_v1',
 
   normalizeText(str) {
     return String(str || '').replace(/\s+/g, ' ').trim().toUpperCase();
@@ -24,6 +29,464 @@ const ExamModule = {
     return `cbt_autosave_${sId}_${mId}`;
   },
 
+  // =========================================================================
+  // MODUL SEMI-ONLINE: PAKET OFFLINE, LOBBY PESERTA & SINKRONISASI ANTREAN
+  // =========================================================================
+  getOfflinePackageKey(kelas) {
+    return this.OFFLINE_PKG_PREFIX + this.normalizeText(kelas).replace(/[^A-Z0-9]/g, '_');
+  },
+
+  getOfflinePackage(kelas) {
+    try {
+      const raw = localStorage.getItem(this.getOfflinePackageKey(kelas));
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      return null;
+    }
+  },
+
+  getPendingSyncQueue() {
+    try {
+      const raw = localStorage.getItem(this.PENDING_SYNC_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      return [];
+    }
+  },
+
+  savePendingSyncQueue(queue) {
+    try {
+      localStorage.setItem(this.PENDING_SYNC_KEY, JSON.stringify(queue || []));
+    } catch (e) {}
+  },
+
+  enqueueOfflineResult(payloadHasil) {
+    const queue = this.getPendingSyncQueue();
+    const sId = String(payloadHasil.id_siswa || '').trim();
+    const mNorm = this.normalizeText(payloadHasil.mapel);
+
+    const filtered = queue.filter(item =>
+      !(String(item.id_siswa || '').trim() === sId && this.normalizeText(item.mapel) === mNorm)
+    );
+    filtered.push({
+      ...payloadHasil,
+      queuedAt: Date.now()
+    });
+    this.savePendingSyncQueue(filtered);
+    this.markExamCompletedLocally(payloadHasil);
+  },
+
+  markExamCompletedLocally(payloadHasil) {
+    try {
+      const raw = localStorage.getItem(this.LOCAL_COMPLETED_KEY);
+      const list = raw ? JSON.parse(raw) : [];
+      const sId = String(payloadHasil.id_siswa || '').trim();
+      const sNama = this.normalizeText(payloadHasil.nama_siswa || '');
+      const mNorm = this.normalizeText(payloadHasil.mapel);
+
+      const filtered = list.filter(item =>
+        !(
+          (String(item.id_siswa || '').trim() === sId || this.normalizeText(item.nama_siswa) === sNama) &&
+          this.normalizeText(item.mapel) === mNorm
+        )
+      );
+      filtered.push({
+        id_siswa: sId,
+        nama_siswa: payloadHasil.nama_siswa,
+        kelas: payloadHasil.kelas,
+        mapel: payloadHasil.mapel,
+        nilai: payloadHasil.nilai,
+        status_selesai: payloadHasil.status_selesai,
+        waktu_selesai: payloadHasil.waktu_selesai
+      });
+      localStorage.setItem(this.LOCAL_COMPLETED_KEY, JSON.stringify(filtered));
+    } catch (e) {}
+  },
+
+  findLocalCompletedExam(student, mapel) {
+    try {
+      const raw = localStorage.getItem(this.LOCAL_COMPLETED_KEY);
+      if (!raw) return null;
+      const list = JSON.parse(raw);
+      const sId = String(student.id_siswa || student.nisn || '').trim();
+      const sNisn = String(student.nisn || '').trim();
+      const sNama = this.normalizeText(student.nama || '');
+      const mNorm = this.normalizeText(mapel);
+
+      return list.find(item => {
+        if (this.normalizeText(item.mapel) !== mNorm) return false;
+        const iId = String(item.id_siswa || '').trim();
+        const iNama = this.normalizeText(item.nama_siswa || '');
+        return (sId && iId === sId) || (sNisn && iId === sNisn) || (sNama && iNama === sNama);
+      }) || null;
+    } catch (e) {
+      return null;
+    }
+  },
+
+  async syncOfflineResults(manualTrigger = false) {
+    const queue = this.getPendingSyncQueue();
+    if (queue.length === 0) {
+      if (manualTrigger) alert("Semua hasil ujian sudah tersinkronisasi dengan server.");
+      return 0;
+    }
+
+    if (!navigator.onLine) {
+      if (manualTrigger) {
+        alert("Perangkat masih OFFLINE.\n\nHubungkan HP ke WiFi sekolah atau hotspot pengawas terlebih dahulu lalu tekan tombol Sinkronkan Sekarang.");
+      }
+      return 0;
+    }
+
+    const client = await DB.getClient();
+    if (!client) {
+      if (manualTrigger) alert("Gagal terhubung ke server Supabase. Coba beberapa saat lagi.");
+      return 0;
+    }
+
+    let syncedCount = 0;
+    const remaining = [];
+
+    for (const item of queue) {
+      try {
+        const sId = String(item.id_siswa || '').trim();
+
+        const { data: existingRows } = await client
+          .from('hasil_ujian')
+          .select('*')
+          .eq('mapel', item.mapel);
+
+        const matchedRow = (existingRows || []).find(r => {
+          const rId = String(r.ID_SISWA || r.id_siswa || '').trim();
+          const rNama = this.normalizeText(r.nama_siswa || r.NAMA_SISWA || '');
+          return (sId && rId === sId) || (rNama && rNama === this.normalizeText(item.nama_siswa));
+        });
+
+        if (matchedRow) {
+          const rowId = matchedRow.id || matchedRow.ID;
+          const { error: updErr } = await client
+            .from('hasil_ujian')
+            .update({
+              nilai: item.nilai,
+              jumlah_pelanggaran: item.jumlah_pelanggaran,
+              status_selesai: item.status_selesai,
+              waktu_selesai: item.waktu_selesai
+            })
+            .eq('id', rowId);
+          if (updErr) throw updErr;
+        } else {
+          await DB.insertHasilUjian({
+            id_siswa: item.id_siswa,
+            nama_siswa: item.nama_siswa,
+            kelas: item.kelas,
+            mapel: item.mapel,
+            nilai: item.nilai,
+            jumlah_pelanggaran: item.jumlah_pelanggaran,
+            status_selesai: item.status_selesai,
+            waktu_selesai: item.waktu_selesai
+          });
+        }
+
+        syncedCount++;
+      } catch (err) {
+        console.warn("[ExamModule] Gagal sync item antrean:", err.message);
+        remaining.push(item);
+      }
+    }
+
+    this.savePendingSyncQueue(remaining);
+
+    if (manualTrigger) {
+      if (remaining.length === 0) {
+        alert(`SINKRONISASI BERHASIL!\n\n${syncedCount} hasil ujian telah berhasil dikirim ke server pusat.`);
+      } else {
+        alert(`${syncedCount} hasil terkirim, ${remaining.length} hasil masih menunggu koneksi stabil.`);
+      }
+    }
+
+    if (State.currentUser && State.currentUser.role === 'siswa') {
+      await this.renderStudentLobby();
+    }
+
+    return syncedCount;
+  },
+
+  async downloadOfflinePackage() {
+    const student = State.currentUser;
+    if (!student || !student.kelas) return;
+
+    if (!navigator.onLine) {
+      alert("Tidak ada koneksi internet!\n\nHubungkan perangkat ke internet/WiFi terlebih dahulu untuk mengunduh paket ujian offline.");
+      return;
+    }
+
+    const btn = document.getElementById('btn-download-offline-pkg');
+    const origHtml = btn ? btn.innerHTML : '';
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i><span>Mengunduh Paket Soal & Gambar...</span>`;
+    }
+
+    try {
+      const sKelasNorm = this.normalizeText(student.kelas);
+
+      // 1. Ambil seluruh jadwal untuk kelas siswa
+      const allSchedules = await DB.fetchSchedules();
+      const classSchedules = (allSchedules || []).filter(j => {
+        const targetList = String(j.kelas).split(',').map(k => this.normalizeText(k));
+        return targetList.includes(sKelasNorm);
+      });
+
+      // 2. Ambil seluruh bank soal & saring khusus kelas siswa
+      const rawBank = await DB.fetchBankSoal();
+      const classQuestions = (rawBank || [])
+        .map(q => ({
+          id: q.id || q.ID,
+          mapel: q.mapel || q.MAPEL || q.nama_mapel || 'Lainnya',
+          kelas: q.kelas || q.KELAS || 'Umum',
+          soal_html: q.soal_html || q.SOAL_HTML || q.soal || '',
+          opsi_a: q.opsi_a || q.OPSI_A || '',
+          opsi_b: q.opsi_b || q.OPSI_B || '',
+          opsi_c: q.opsi_c || q.OPSI_C || '',
+          opsi_d: q.opsi_d || q.OPSI_D || '',
+          opsi_e: q.opsi_e || q.OPSI_E || '',
+          kunci_jawaban: q.kunci_jawaban || q.KUNCI_JAWABAN || 'A'
+        }))
+        .filter(q => {
+          const targetList = String(q.kelas).split(',').map(k => this.normalizeText(k));
+          return targetList.includes(sKelasNorm);
+        });
+
+      // 3. Pre-cache semua URL gambar soal & opsi agar tampil saat offline
+      const imgUrls = new Set();
+      classQuestions.forEach(q => {
+        const htmlAll = [q.soal_html, q.opsi_a, q.opsi_b, q.opsi_c, q.opsi_d, q.opsi_e].join(' ');
+        const regex = /<img[^>]+src=["']([^"']+)["']/gi;
+        let m;
+        while ((m = regex.exec(htmlAll)) !== null) {
+          if (m[1]) imgUrls.add(m[1]);
+        }
+      });
+
+      if ('caches' in window && imgUrls.size > 0) {
+        try {
+          const imgCache = await caches.open('cbt-smkn1wkt-images-v1');
+          await Promise.allSettled(
+            Array.from(imgUrls).map(url => imgCache.add(url).catch(() => null))
+          );
+        } catch (e) {}
+      }
+
+      // 4. Simpan ke localStorage
+      const pkgData = {
+        kelas: student.kelas,
+        schedules: classSchedules,
+        questions: classQuestions,
+        imageCount: imgUrls.size,
+        downloadedAt: new Date().toISOString()
+      };
+      localStorage.setItem(this.getOfflinePackageKey(student.kelas), JSON.stringify(pkgData));
+
+      alert(
+        `PAKET UJIAN OFFLINE SIAP!\n\n` +
+        `Kelas : ${student.kelas}\n` +
+        `Jadwal Tersimpan : ${classSchedules.length} jadwal\n` +
+        `Butir Soal Tersimpan : ${classQuestions.length} soal (${imgUrls.size} gambar)\n\n` +
+        `Perangkat ini sekarang siap digunakan untuk ujian secara OFFLINE maupun ONLINE.`
+      );
+
+      await this.renderStudentLobby();
+    } catch (err) {
+      alert("Gagal mengunduh paket offline: " + err.message);
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+      }
+    }
+  },
+
+  async openStudentLobby() {
+    if (navigator.onLine && this.getPendingSyncQueue().length > 0) {
+      await this.syncOfflineResults(false);
+    }
+    await this.renderStudentLobby();
+  },
+
+  async renderStudentLobby() {
+    const student = State.currentUser;
+    if (!student) return;
+
+    const nameEl = document.getElementById('lobby-student-name');
+    const nisnEl = document.getElementById('lobby-student-nisn');
+    const kelasEl = document.getElementById('lobby-student-kelas');
+    const netBadge = document.getElementById('lobby-network-badge');
+    const offlineBadge = document.getElementById('lobby-offline-status-badge');
+    const lastSyncEl = document.getElementById('lobby-last-sync-text');
+    const syncBanner = document.getElementById('lobby-sync-banner');
+    const schedulesContainer = document.getElementById('lobby-schedules-container');
+
+    if (nameEl) nameEl.textContent = student.nama || '-';
+    if (nisnEl) nisnEl.textContent = student.nisn || '-';
+    if (kelasEl) kelasEl.textContent = student.kelas || '-';
+
+    const isOnline = navigator.onLine;
+    if (netBadge) {
+      netBadge.textContent = isOnline ? 'Online' : 'Offline';
+      netBadge.className = isOnline
+        ? 'px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-600 text-white'
+        : 'px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500 text-slate-900';
+    }
+
+    const pendingQueue = this.getPendingSyncQueue();
+    if (syncBanner) {
+      if (pendingQueue.length > 0) {
+        syncBanner.classList.remove('hidden');
+        const syncTitle = document.getElementById('lobby-sync-title');
+        if (syncTitle) {
+          syncTitle.textContent = `${pendingQueue.length} Hasil Ujian Menunggu Sinkronisasi Internet`;
+        }
+      } else {
+        syncBanner.classList.add('hidden');
+      }
+    }
+
+    const offlinePkg = this.getOfflinePackage(student.kelas);
+    if (offlineBadge) {
+      if (offlinePkg && Array.isArray(offlinePkg.questions) && offlinePkg.questions.length > 0) {
+        offlineBadge.textContent = `✅ Siap Ujian Offline (${offlinePkg.questions.length} Soal)`;
+        offlineBadge.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300';
+        if (lastSyncEl && offlinePkg.downloadedAt) {
+          const dt = new Date(offlinePkg.downloadedAt);
+          lastSyncEl.textContent = `Terakhir diperbarui: ${dt.toLocaleDateString('id-ID')} ${dt.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`;
+        }
+      } else {
+        offlineBadge.textContent = '⚠️ Paket Offline Belum Diunduh';
+        offlineBadge.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300';
+        if (lastSyncEl) lastSyncEl.textContent = '';
+      }
+    }
+
+    if (!schedulesContainer) return;
+    schedulesContainer.innerHTML = `<p class="text-xs text-slate-400 italic">Memuat daftar jadwal ujian...</p>`;
+
+    const sKelasNorm = this.normalizeText(student.kelas);
+    let schedules = [];
+    if (isOnline) {
+      try {
+        const onlineAll = await DB.fetchSchedules();
+        schedules = (onlineAll || []).filter(j => {
+          const targetList = String(j.kelas).split(',').map(k => this.normalizeText(k));
+          return targetList.includes(sKelasNorm);
+        });
+      } catch (e) {}
+    }
+    if (schedules.length === 0 && offlinePkg && Array.isArray(offlinePkg.schedules)) {
+      schedules = offlinePkg.schedules;
+    }
+
+    let onlineHasil = [];
+    if (isOnline) {
+      try {
+        onlineHasil = await DB.fetchHasilUjian();
+      } catch (e) {}
+    }
+
+    if (schedules.length === 0) {
+      schedulesContainer.innerHTML = `
+        <div class="p-6 text-center rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600">
+          <p class="font-bold text-slate-700">Belum Ada Jadwal Ujian untuk Kelas ${student.kelas}</p>
+          <p class="mt-1 text-slate-500">Silakan tekan "Simpan / Perbarui Paket Offline" jika jadwal baru saja diaktifkan oleh proktor.</p>
+        </div>`;
+      return;
+    }
+
+    const now = new Date();
+    const currentDateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const currentTimeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    const sId = String(student.id_siswa || student.nisn || '').trim();
+    const sNisn = String(student.nisn || '').trim();
+    const sNama = this.normalizeText(student.nama || '');
+
+    schedulesContainer.innerHTML = '';
+
+    schedules.forEach(j => {
+      const mNorm = this.normalizeText(j.mapel);
+      const jamMulaiClean = String(j.jamMulai).substring(0, 5);
+      const jamSelesaiClean = String(j.jamSelesai).substring(0, 5);
+      const isToday = String(j.tanggal).trim() === currentDateStr;
+      const isInWindow = isToday && currentTimeStr >= jamMulaiClean && currentTimeStr <= jamSelesaiClean;
+
+      const localDone = this.findLocalCompletedExam(student, j.mapel);
+      const serverDone = (onlineHasil || []).find(h => {
+        if (this.normalizeText(h.mapel) !== mNorm) return false;
+        const st = this.normalizeText(h.status_selesai);
+        if (st !== 'SELESAI' && st !== 'DIDISKUALIFIKASI') return false;
+        const hId = String(h.ID_SISWA || '').trim();
+        const hNama = this.normalizeText(h.nama_siswa || '');
+        return (sId && hId === sId) || (sNisn && hId === sNisn) || (sNama && hNama === sNama);
+      });
+
+      const doneRecord = serverDone || localDone;
+      const hasOfflineSoal = offlinePkg && Array.isArray(offlinePkg.questions) &&
+        offlinePkg.questions.some(q => this.normalizeText(q.mapel) === mNorm);
+
+      let actionHtml = '';
+      let cardBorder = 'border-slate-200 bg-white';
+
+      if (doneRecord) {
+        const nilaiTampil = doneRecord.nilai !== undefined ? doneRecord.nilai : 0;
+        const statusTampil = this.normalizeText(doneRecord.status_selesai || 'SELESAI');
+        cardBorder = 'border-emerald-200 bg-emerald-50/40';
+        actionHtml = `
+          <div class="text-right">
+            <span class="inline-block px-3 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+              ✅ ${statusTampil} • Nilai: ${nilaiTampil}
+            </span>
+          </div>`;
+      } else if (isInWindow) {
+        cardBorder = 'border-ocean-500 bg-ocean-50/50 ring-2 ring-ocean-500/20';
+        const btnDisabled = !isOnline && !hasOfflineSoal;
+        actionHtml = `
+          <button ${btnDisabled ? 'disabled' : ''}
+            onclick='ExamModule.startExam(${JSON.stringify(j).replace(/'/g, "&#39;")})'
+            class="${btnDisabled ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-md'} font-bold text-xs px-4 py-2.5 rounded-xl transition flex items-center gap-2">
+            <i class="fa-solid fa-play"></i>
+            <span>${btnDisabled ? 'Paket Offline Belum Ada' : 'Mulai Ujian Sekarang'}</span>
+          </button>`;
+      } else {
+        actionHtml = `
+          <span class="inline-block px-3 py-1.5 rounded-xl text-[11px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+            ⏳ Belum Waktu Ujian
+          </span>`;
+      }
+
+      const card = document.createElement('div');
+      card.className = `p-4 rounded-2xl border ${cardBorder} flex flex-wrap items-center justify-between gap-3`;
+      card.innerHTML = `
+        <div class="space-y-1">
+          <div class="flex flex-wrap items-center gap-2">
+            <h4 class="font-extrabold text-sm text-slate-800">${j.mapel}</h4>
+            ${hasOfflineSoal
+              ? `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-teal-100 text-teal-800">Tersedia Offline</span>`
+              : `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-500">Online Only</span>`
+            }
+          </div>
+          <p class="text-xs text-slate-600">
+            <i class="fa-regular fa-calendar mr-1 text-ocean-700"></i> ${j.tanggal} &bull;
+            <i class="fa-regular fa-clock ml-1 mr-1 text-ocean-700"></i> ${jamMulaiClean} - ${jamSelesaiClean} (${j.durasi} Menit)
+          </p>
+        </div>
+        <div>${actionHtml}</div>
+      `;
+      schedulesContainer.appendChild(card);
+    });
+  },
+
+  // =========================================================================
+  // AUTO-SAVE PROGRES JAWABAN LOKAL
+  // =========================================================================
   saveProgressToLocal() {
     if (!this.storageKey || !State.examActive) return;
     try {
@@ -89,7 +552,7 @@ const ExamModule = {
   startSessionHeartbeat() {
     clearInterval(this.heartbeatInterval);
     this.heartbeatInterval = setInterval(async () => {
-      if (!State.examActive || !this.activeRecordId) return;
+      if (!State.examActive || !this.activeRecordId || !navigator.onLine) return;
       try {
         const client = await DB.getClient();
         if (!client) return;
@@ -215,7 +678,10 @@ const ExamModule = {
     return arr;
   },
 
-  async startExam() {
+  // =========================================================================
+  // MULAI UJIAN (MENDUKUNG MODE ONLINE MAUPUN 100% OFFLINE)
+  // =========================================================================
+  async startExam(selectedSchedule = null) {
     State.examActive = false;
     this.activeRecordId = null;
     clearInterval(this.heartbeatInterval);
@@ -228,17 +694,34 @@ const ExamModule = {
     }
 
     try {
-      // 1. Memeriksa Jadwal Ujian Aktif di Supabase
-      const activeSchedule = await DB.fetchActiveScheduleForStudent(student.kelas);
+      const isOnline = navigator.onLine;
+      const offlinePkg = this.getOfflinePackage(student.kelas);
+
+      // 1. Tentukan Jadwal Ujian Aktif (Online -> fallback ke Offline Package)
+      let activeSchedule = selectedSchedule;
+      if (!activeSchedule && isOnline) {
+        activeSchedule = await DB.fetchActiveScheduleForStudent(student.kelas);
+      }
+      if (!activeSchedule && offlinePkg && Array.isArray(offlinePkg.schedules)) {
+        const now = new Date();
+        const currentDateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        const currentTimeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        activeSchedule = offlinePkg.schedules.find(j => {
+          const matchTanggal = String(j.tanggal).trim() === currentDateStr;
+          const jm = String(j.jamMulai).substring(0, 5);
+          const js = String(j.jamSelesai).substring(0, 5);
+          return matchTanggal && currentTimeStr >= jm && currentTimeStr <= js;
+        }) || null;
+      }
 
       if (!activeSchedule) {
-        alert(`TIDAK ADA JADWAL UJIAN AKTIF!\n\nHai ${student.nama}, saat ini tidak ada jadwal ujian yang aktif untuk kelas ${student.kelas}.\n\nPastikan tanggal, jam pelaksanaan, dan status jadwal sudah diatur oleh proktor/guru.`);
-        AuthModule.logout();
+        alert(`TIDAK ADA JADWAL UJIAN AKTIF!\n\nHai ${student.nama}, saat ini tidak ada jadwal ujian yang aktif untuk kelas ${student.kelas}.`);
+        App.showScreen('student-lobby');
+        await this.renderStudentLobby();
         return;
       }
 
-      const client = await DB.getClient();
-      if (!client) throw new Error("Koneksi database Supabase tidak tersedia.");
+      this.activeScheduleObj = activeSchedule;
 
       const sId = String(student.id_siswa || student.nisn || '').trim();
       const sNisn = String(student.nisn || student.NISN || '').trim();
@@ -247,84 +730,110 @@ const ExamModule = {
       const targetMapel = this.normalizeText(activeSchedule.mapel || '');
       const deviceLockKey = `cbt_lock_${sId || sNama}_${targetMapel}`;
 
-      // 2. CEK RIWAYAT UJIAN SISWA (BLOKIR JIKA SUDAH SELESAI & CEGAH LOGIN GANDA PERANGKAT BERBEDA)
-      const existingHasil = typeof DB.fetchAllRows === 'function'
-        ? await DB.fetchAllRows('hasil_ujian', 'id', true)
-        : (await client.from('hasil_ujian').select('*')).data;
+      // 2. Cek apakah sudah selesai secara lokal
+      const localFinished = this.findLocalCompletedExam(student, activeSchedule.mapel);
+      if (localFinished) {
+        alert(`AKSES UJIAN DITOLAK!\n\nHalo ${student.nama}, Anda tercatat SUDAH MENYELESAIKAN ujian "${activeSchedule.mapel}" di perangkat ini (Nilai: ${localFinished.nilai}).`);
+        App.showScreen('student-lobby');
+        await this.renderStudentLobby();
+        return;
+      }
 
-      if (existingHasil) {
-        const studentRecords = existingHasil.filter(h => {
-          const hMapel = this.normalizeText(h.mapel || h.MAPEL || '');
-          if (hMapel !== targetMapel) return false;
+      // 3. Jika ONLINE, cek riwayat di Supabase & cegah login ganda perangkat lain
+      let client = null;
+      if (isOnline) {
+        client = await DB.getClient();
+        if (client) {
+          const existingHasil = typeof DB.fetchAllRows === 'function'
+            ? await DB.fetchAllRows('hasil_ujian', 'id', true)
+            : (await client.from('hasil_ujian').select('*')).data;
 
-          const hId = String(h.id_siswa || h.ID_SISWA || '').trim();
-          const hNama = this.normalizeText(h.nama_siswa || h.NAMA_SISWA || '');
-          const hKelas = this.normalizeText(h.kelas || h.KELAS || '');
+          if (existingHasil) {
+            const studentRecords = existingHasil.filter(h => {
+              const hMapel = this.normalizeText(h.mapel || h.MAPEL || '');
+              if (hMapel !== targetMapel) return false;
 
-          const matchId = (sId !== '' && hId === sId) || (sNisn !== '' && hId === sNisn);
-          const matchNamaKelas = (sNama !== '' && hNama === sNama && hKelas === sKelas);
-          return matchId || matchNamaKelas;
-        });
+              const hId = String(h.id_siswa || h.ID_SISWA || '').trim();
+              const hNama = this.normalizeText(h.nama_siswa || h.NAMA_SISWA || '');
+              const hKelas = this.normalizeText(h.kelas || h.KELAS || '');
 
-        // A. Cek apakah sudah SELESAI atau DIDISKUALIFIKASI
-        const finishedRec = studentRecords.find(h => {
-          const st = this.normalizeText(h.status_selesai || h.STATUS_SELESAI || '');
-          return st === 'SELESAI' || st === 'DIDISKUALIFIKASI';
-        });
+              const matchId = (sId !== '' && hId === sId) || (sNisn !== '' && hId === sNisn);
+              const matchNamaKelas = (sNama !== '' && hNama === sNama && hKelas === sKelas);
+              return matchId || matchNamaKelas;
+            });
 
-        if (finishedRec) {
-          const stLabel = this.normalizeText(finishedRec.status_selesai || finishedRec.STATUS_SELESAI || 'SELESAI');
-          const nilaiPrev = finishedRec.nilai !== undefined ? finishedRec.nilai : (finishedRec.NILAI || 0);
-          alert(
-            `AKSES UJIAN DITOLAK!\n\n` +
-            `Halo ${student.nama}, Anda tercatat SUDAH MENYELESAIKAN ujian mata pelajaran "${activeSchedule.mapel}".\n` +
-            `Status: ${stLabel} | Nilai: ${nilaiPrev}\n\n` +
-            `Siswa tidak diperbolehkan mengerjakan ujian lebih dari satu kali tanpa izin Reset dari Pengawas/Admin.`
-          );
-          AuthModule.logout();
-          return;
-        }
+            const finishedRec = studentRecords.find(h => {
+              const st = this.normalizeText(h.status_selesai || h.STATUS_SELESAI || '');
+              return st === 'SELESAI' || st === 'DIDISKUALIFIKASI';
+            });
 
-        // B. Cek apakah sedang MENGERJAKAN di perangkat lain
-        const ongoingRec = studentRecords.find(h => {
-          const st = this.normalizeText(h.status_selesai || h.STATUS_SELESAI || '');
-          return st === 'MENGERJAKAN';
-        });
+            if (finishedRec) {
+              const stLabel = this.normalizeText(finishedRec.status_selesai || 'SELESAI');
+              const nilaiPrev = finishedRec.nilai !== undefined ? finishedRec.nilai : (finishedRec.NILAI || 0);
+              this.markExamCompletedLocally({
+                id_siswa: sId,
+                nama_siswa: student.nama,
+                kelas: student.kelas,
+                mapel: activeSchedule.mapel,
+                nilai: nilaiPrev,
+                status_selesai: stLabel,
+                waktu_selesai: finishedRec.waktu_selesai || new Date().toISOString()
+              });
+              alert(
+                `AKSES UJIAN DITOLAK!\n\n` +
+                `Halo ${student.nama}, Anda tercatat SUDAH MENYELESAIKAN ujian mata pelajaran "${activeSchedule.mapel}".\n` +
+                `Status: ${stLabel} | Nilai: ${nilaiPrev}`
+              );
+              App.showScreen('student-lobby');
+              await this.renderStudentLobby();
+              return;
+            }
 
-        if (ongoingRec) {
-          const recIdStr = String(ongoingRec.id || ongoingRec.ID || '');
-          const isSameDevice = localStorage.getItem(deviceLockKey) === recIdStr;
-          const lastBeat = new Date(ongoingRec.waktu_selesai || ongoingRec.WAKTU_SELESAI || 0).getTime();
-          const isSessionStillFresh = (Date.now() - lastBeat) < 90 * 1000;
+            const ongoingRec = studentRecords.find(h => {
+              const st = this.normalizeText(h.status_selesai || h.STATUS_SELESAI || '');
+              return st === 'MENGERJAKAN';
+            });
 
-          if (!isSameDevice && isSessionStillFresh) {
-            alert(
-              `LOGIN GANDA TERDETEKSI!\n\n` +
-              `Akun atas nama "${student.nama}" saat ini SEDANG AKTIF mengerjakan ujian "${activeSchedule.mapel}" di perangkat/browser lain!\n\n` +
-              `Satu akun hanya diizinkan aktif pada satu perangkat. Jika perangkat sebelumnya bermasalah/mati, hubungi Pengawas untuk mereset sesi.`
-            );
-            AuthModule.logout();
-            return;
-          }
+            if (ongoingRec) {
+              const recIdStr = String(ongoingRec.id || ongoingRec.ID || '');
+              const isSameDevice = localStorage.getItem(deviceLockKey) === recIdStr;
+              const lastBeat = new Date(ongoingRec.waktu_selesai || ongoingRec.WAKTU_SELESAI || 0).getTime();
+              const isSessionStillFresh = (Date.now() - lastBeat) < 90 * 1000;
 
-          this.activeRecordId = ongoingRec.id || ongoingRec.ID;
-          if (this.activeRecordId) {
-            localStorage.setItem(deviceLockKey, String(this.activeRecordId));
+              if (!isSameDevice && isSessionStillFresh) {
+                alert(
+                  `LOGIN GANDA TERDETEKSI!\n\n` +
+                  `Akun atas nama "${student.nama}" saat ini SEDANG AKTIF mengerjakan ujian "${activeSchedule.mapel}" di perangkat/browser lain!`
+                );
+                App.showScreen('student-lobby');
+                await this.renderStudentLobby();
+                return;
+              }
+
+              this.activeRecordId = ongoingRec.id || ongoingRec.ID;
+              if (this.activeRecordId) {
+                localStorage.setItem(deviceLockKey, String(this.activeRecordId));
+              }
+            }
           }
         }
       }
 
-      // 3. Ambil Seluruh Bank Soal (Tanpa Batas 1000 Baris) Khusus untuk Mapel Terjadwal & Kelas Siswa
-      let data = [];
-      if (typeof DB.fetchBankSoal === 'function') {
-        data = await DB.fetchBankSoal();
-      } else {
-        const resSoal = await client.from('bank_soal').select('*');
-        if (resSoal.error) throw resSoal.error;
-        data = resSoal.data || [];
+      // 4. Ambil Bank Soal (Online dari Supabase -> fallback ke Offline Package)
+      let rawQuestions = [];
+      if (isOnline && client) {
+        try {
+          rawQuestions = typeof DB.fetchBankSoal === 'function'
+            ? await DB.fetchBankSoal()
+            : ((await client.from('bank_soal').select('*')).data || []);
+        } catch (e) {}
       }
 
-      const allQuestions = (data || []).map(q => ({
+      if ((!rawQuestions || rawQuestions.length === 0) && offlinePkg && Array.isArray(offlinePkg.questions)) {
+        rawQuestions = offlinePkg.questions;
+      }
+
+      const allQuestions = (rawQuestions || []).map(q => ({
         id: q.id || q.ID,
         mapel: q.mapel || q.MAPEL || q.nama_mapel || 'Lainnya',
         kelas: q.kelas || q.KELAS || 'Umum',
@@ -345,41 +854,44 @@ const ExamModule = {
       });
 
       if (filtered.length === 0) {
-        alert(`Jadwal Ujian "${activeSchedule.mapel}" terdeteksi AKTIF, namun berkas naskah soal belum diunggah oleh guru mapel.\n\nSilakan hubungi pengawas.`);
-        AuthModule.logout();
+        alert(`Naskah soal untuk "${activeSchedule.mapel}" tidak ditemukan (baik di server maupun di paket offline perangkat ini).\n\nSilakan hubungi pengawas.`);
+        App.showScreen('student-lobby');
+        await this.renderStudentLobby();
         return;
       }
 
-      // 4. Catat status "MENGERJAKAN" agar muncul di Dashboard Real-Time
-      if (!this.activeRecordId) {
-        try {
-          const insertedData = await DB.insertHasilUjian({
-            id_siswa: sId,
-            nama_siswa: student.nama,
-            kelas: student.kelas,
-            mapel: activeSchedule.mapel,
-            nilai: 0,
-            jumlah_pelanggaran: 0,
-            status_selesai: 'MENGERJAKAN',
-            waktu_selesai: new Date().toISOString()
-          });
+      // 5. Jika ONLINE, catat status "MENGERJAKAN" agar muncul di Dashboard Real-Time
+      if (isOnline && client) {
+        if (!this.activeRecordId) {
+          try {
+            const insertedData = await DB.insertHasilUjian({
+              id_siswa: sId,
+              nama_siswa: student.nama,
+              kelas: student.kelas,
+              mapel: activeSchedule.mapel,
+              nilai: 0,
+              jumlah_pelanggaran: 0,
+              status_selesai: 'MENGERJAKAN',
+              waktu_selesai: new Date().toISOString()
+            });
 
-          if (insertedData && insertedData.length > 0) {
-            this.activeRecordId = insertedData[0].id || insertedData[0].ID;
-            localStorage.setItem(deviceLockKey, String(this.activeRecordId));
+            if (insertedData && insertedData.length > 0) {
+              this.activeRecordId = insertedData[0].id || insertedData[0].ID;
+              localStorage.setItem(deviceLockKey, String(this.activeRecordId));
+            }
+          } catch (e) {
+            console.warn("[ExamModule] Log status mengerjakan dilewati:", e.message);
           }
-        } catch (e) {
-          console.warn("[ExamModule] Log status mengerjakan dilewati:", e.message);
+        } else {
+          try {
+            await client.from('hasil_ujian').update({
+              waktu_selesai: new Date().toISOString()
+            }).eq('id', this.activeRecordId);
+          } catch (e) {}
         }
-      } else {
-        try {
-          await client.from('hasil_ujian').update({
-            waktu_selesai: new Date().toISOString()
-          }).eq('id', this.activeRecordId);
-        } catch (e) {}
       }
 
-      // 5. Tampilkan Layar Ujian & Acak Soal per Siswa
+      // 6. Tampilkan Layar Ujian & Acak Soal per Siswa
       App.showScreen('exam');
       const examScreen = document.getElementById('screen-exam');
       if (examScreen) {
@@ -391,12 +903,13 @@ const ExamModule = {
       State.currentQuestionIdx = 0;
       State.answers = {};
 
-      document.getElementById('exam-student-info').textContent = `Peserta: ${student.nama} (${student.kelas})`;
+      const modeTag = navigator.onLine ? 'ONLINE' : 'OFFLINE';
+      document.getElementById('exam-student-info').textContent = `Peserta: ${student.nama} (${student.kelas}) • Mode ${modeTag}`;
       document.getElementById('exam-mapel-title').textContent = `Ujian Sumatif: ${activeSchedule.mapel}`;
 
       State.questions = this.shuffleArray(filtered);
 
-      // 6. Cek & Pulihkan Progres Auto-Save jika sebelumnya terputus di perangkat ini
+      // 7. Cek & Pulihkan Progres Auto-Save jika sebelumnya terputus di perangkat ini
       this.storageKey = this.getStorageKey(student, activeSchedule.mapel);
       const restored = this.restoreProgressFromLocal(State.questions);
       const durasiUjian = parseInt(activeSchedule.durasi) || 45;
@@ -428,7 +941,8 @@ const ExamModule = {
 
     } catch (err) {
       alert("Gagal memuat ujian: " + err.message);
-      AuthModule.logout();
+      App.showScreen('student-lobby');
+      await this.renderStudentLobby();
     }
   },
 
@@ -625,7 +1139,7 @@ const ExamModule = {
     const totalSoal = State.questions.length;
     const nilaiAkhir = totalSoal > 0 ? Math.round((skorBenar / totalSoal) * 100) : 0;
     const student = State.currentUser;
-    const mapelName = State.questions[0]?.mapel || 'Mata Pelajaran';
+    const mapelName = this.activeScheduleObj?.mapel || State.questions[0]?.mapel || 'Mata Pelajaran';
     const sId = String(student.id_siswa || student.nisn || '').trim();
 
     const payloadHasil = {
@@ -639,29 +1153,45 @@ const ExamModule = {
       waktu_selesai: new Date().toISOString()
     };
 
-    try {
-      const client = await DB.getClient();
-      if (this.activeRecordId && client) {
-        await client.from('hasil_ujian').update({
-          nilai: payloadHasil.nilai,
-          jumlah_pelanggaran: payloadHasil.jumlah_pelanggaran,
-          status_selesai: payloadHasil.status_selesai,
-          waktu_selesai: payloadHasil.waktu_selesai
-        }).eq('id', this.activeRecordId);
-      } else {
-        await DB.insertHasilUjian(payloadHasil);
+    let savedDirectlyOnline = false;
+    if (navigator.onLine) {
+      try {
+        const client = await DB.getClient();
+        if (this.activeRecordId && client) {
+          const { error: updErr } = await client.from('hasil_ujian').update({
+            nilai: payloadHasil.nilai,
+            jumlah_pelanggaran: payloadHasil.jumlah_pelanggaran,
+            status_selesai: payloadHasil.status_selesai,
+            waktu_selesai: payloadHasil.waktu_selesai
+          }).eq('id', this.activeRecordId);
+          if (updErr) throw updErr;
+        } else {
+          await DB.insertHasilUjian(payloadHasil);
+        }
+        savedDirectlyOnline = true;
+      } catch (err) {
+        console.warn("[ExamModule] Gagal kirim langsung, dialihkan ke antrean offline:", err.message);
       }
-
-      this.clearProgressLocal();
-      const sNama = this.normalizeText(student.nama || '');
-      localStorage.removeItem(`cbt_lock_${sId || sNama}_${this.normalizeText(mapelName)}`);
-    } catch (err) {
-      console.error("[ExamModule] Gagal menyimpan nilai ujian:", err.message);
-      alert("Peringatan: Gagal menyimpan hasil ke database: " + err.message);
     }
 
-    alert(isDisqualified ? "Status Ujian: DIDISKUALIFIKASI" : `Ujian Selesai!\nNilai Akhir Anda: ${nilaiAkhir}`);
-    AuthModule.logout();
+    this.markExamCompletedLocally(payloadHasil);
+    this.clearProgressLocal();
+    const sNama = this.normalizeText(student.nama || '');
+    localStorage.removeItem(`cbt_lock_${sId || sNama}_${this.normalizeText(mapelName)}`);
+
+    if (!savedDirectlyOnline) {
+      this.enqueueOfflineResult(payloadHasil);
+      alert(
+        (isDisqualified ? "Status Ujian: DIDISKUALIFIKASI\n\n" : `Ujian Selesai!\nNilai Akhir Anda: ${nilaiAkhir}\n\n`) +
+        `Mode Offline: Hasil ujian Anda telah tersimpan aman di perangkat ini.\n` +
+        `Silakan hubungkan HP ke WiFi sekolah/hotspot pengawas agar nilai otomatis terkirim ke server.`
+      );
+    } else {
+      alert(isDisqualified ? "Status Ujian: DIDISKUALIFIKASI" : `Ujian Selesai!\nNilai Akhir Anda: ${nilaiAkhir}\n\nHasil ujian berhasil dikirim ke server.`);
+    }
+
+    App.showScreen('student-lobby');
+    await this.renderStudentLobby();
   }
 };
 
