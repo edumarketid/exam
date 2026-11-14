@@ -102,6 +102,108 @@
 
 
   <!-- ======================================================== -->
+  <!-- 1B. SCREEN LOBBY PESERTA (PORTAL SEMI-ONLINE SISWA)      -->
+  <!-- ======================================================== -->
+  <section id="screen-student-lobby" class="hidden min-h-screen bg-slate-100 flex flex-col">
+    <header class="bg-ocean-900 text-white shadow-lg sticky top-0 z-30">
+      <div class="max-w-4xl mx-auto px-4 sm:px-6 py-4 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center text-teal-300">
+            <i class="fa-solid fa-user-graduate text-lg"></i>
+          </div>
+          <div>
+            <h1 class="text-sm sm:text-base font-bold leading-tight">Portal Peserta CBT &bull; SMKN 1 Wakatobi</h1>
+            <p class="text-[11px] text-ocean-100">Mode Semi-Online (Mendukung Pengerjaan Offline &amp; Online)</p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <span id="lobby-network-badge" class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-600 text-white">
+            Online
+          </span>
+          <button onclick="AuthModule.logout()" class="bg-rose-600/90 hover:bg-rose-700 text-white font-bold text-xs px-3 py-1.5 rounded-xl transition flex items-center gap-1.5">
+            <i class="fa-solid fa-right-from-bracket"></i>
+            <span>Keluar</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main class="max-w-4xl mx-auto w-full px-4 sm:px-6 py-6 space-y-5 flex-1">
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
+        <div class="flex flex-wrap justify-between items-start gap-3 border-b border-slate-100 pb-4">
+          <div class="space-y-1">
+            <div class="text-[10px] font-bold uppercase tracking-wider text-ocean-700">Kartu Identitas Peserta</div>
+            <h2 id="lobby-student-name" class="text-base sm:text-lg font-extrabold text-slate-800">-</h2>
+            <div class="flex flex-wrap items-center gap-3 text-xs text-slate-600">
+              <span><strong>NISN:</strong> <span id="lobby-student-nisn" class="font-mono">-</span></span>
+              <span>&bull;</span>
+              <span><strong>Kelas:</strong> <span id="lobby-student-kelas" class="font-bold text-ocean-800">-</span></span>
+            </div>
+          </div>
+
+          <div class="flex flex-col items-end gap-1.5">
+            <span id="lobby-offline-status-badge" class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+              ⚠️ Paket Offline Belum Diunduh
+            </span>
+            <span id="lobby-last-sync-text" class="text-[10px] text-slate-400"></span>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-between gap-3 bg-ocean-50/70 border border-ocean-200 rounded-xl p-3.5">
+          <div class="text-xs text-ocean-950 space-y-0.5 max-w-xl">
+            <div class="font-bold">Persiapan Ujian Offline (Disarankan Sebelum Masuk Ruang Ujian)</div>
+            <p class="text-[11px] text-slate-600">
+              Simpan naskah soal, jadwal, dan gambar ke memori perangkat agar ujian tetap berjalan lancar meskipun internet terputus.
+            </p>
+          </div>
+          <button id="btn-download-offline-pkg" onclick="ExamModule.downloadOfflinePackage()"
+                  class="bg-ocean-700 hover:bg-ocean-800 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow transition flex items-center gap-2">
+            <i class="fa-solid fa-cloud-arrow-down"></i>
+            <span>Simpan / Perbarui Paket Offline</span>
+          </button>
+        </div>
+      </div>
+
+      <div id="lobby-sync-banner" class="hidden bg-amber-50 border-2 border-amber-400 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3 shadow-sm">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold text-lg flex-shrink-0">
+            <i class="fa-solid fa-cloud-arrow-up"></i>
+          </div>
+          <div>
+            <h3 id="lobby-sync-title" class="font-extrabold text-xs sm:text-sm text-amber-950">
+              Hasil Ujian Menunggu Sinkronisasi Internet
+            </h3>
+            <p class="text-[11px] text-amber-800">
+              Nilai tersimpan aman di HP ini. Hubungkan ke WiFi sekolah/hotspot pengawas lalu klik tombol di samping.
+            </p>
+          </div>
+        </div>
+        <button onclick="ExamModule.syncOfflineResults(true)"
+                class="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow transition flex items-center gap-2">
+          <i class="fa-solid fa-rotate"></i>
+          <span>Sinkronkan Sekarang</span>
+        </button>
+      </div>
+
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+          <h3 class="font-bold text-sm text-slate-800 flex items-center gap-2">
+            <i class="fa-solid fa-calendar-check text-ocean-700"></i>
+            <span>Daftar Jadwal Ujian Kelas Anda</span>
+          </h3>
+          <button onclick="ExamModule.renderStudentLobby()" class="text-xs font-bold text-ocean-700 hover:underline">
+            <i class="fa-solid fa-rotate mr-1"></i> Muat Ulang
+          </button>
+        </div>
+
+        <div id="lobby-schedules-container" class="space-y-3"></div>
+      </div>
+    </main>
+  </section>
+
+
+  <!-- ======================================================== -->
   <!-- 2. SCREEN EXAM (SISWA) -->
   <!-- ======================================================== -->
   <section id="screen-exam" class="hidden flex flex-col min-h-screen bg-slate-100">
@@ -722,7 +824,7 @@
   </div>
 
 
-  <!-- MODUL JS UTAMA APLIKASI (SESUAI STRUKTUR ASLI) -->
+  <!-- MODUL JS UTAMA APLIKASI -->
   <script src="./js/supabase.js"></script>
   <script src="./js/state.js"></script>
   <script src="./js/mapel.js"></script>
@@ -734,6 +836,14 @@
   <script src="./js/auth.js"></script>
   <script src="./js/exam.js"></script>
   <script src="./js/app.js"></script>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(() => {});
+      });
+    }
+  </script>
 
 </body>
 </html>
