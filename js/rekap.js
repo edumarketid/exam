@@ -680,28 +680,12 @@ const RekapModule = {
       return;
     }
 
-    const hasilList = await this.fetchAndNormalizeHasil();
-    const hasilPaket = hasilList.filter(h =>
-      String(h.kelas).trim().toUpperCase() === filterKelas.toUpperCase() &&
-      (filterMapel === 'ALL' || String(h.mapel).trim().toUpperCase() === filterMapel.toUpperCase())
-    );
-
     const ttd = await this.resolvePenandatangan(filterMapel, filterKelas);
     const kopUrl = "https://nbwpnhshhpfqtmbwewgk.supabase.co/storage/v1/object/public/media-sekolah/kop_sekolah.png";
     const tglStr = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
 
     let rowsHtml = '';
     pesertaKelas.forEach((s, idx) => {
-      const k1 = String(s.id_siswa || '').trim().toUpperCase();
-      const k2 = String(s.nisn || s.NISN || '').trim().toUpperCase();
-      const k3 = String(s.nama || '').trim().toUpperCase();
-
-      const rec = hasilPaket.find(h => {
-        const hk = String(h.id_siswa || h.nisn || h.nama_siswa).trim().toUpperCase();
-        return hk === k1 || hk === k2 || String(h.nama_siswa || '').trim().toUpperCase() === k3;
-      });
-
-      const ketStatus = rec ? `Hadir (${rec.status_selesai})` : 'Belum / Tidak Hadir';
       const ttdCell = idx % 2 === 0
         ? `<td class="p-2 border border-slate-400 text-left w-28">${idx + 1}. ..........</td><td class="p-2 border border-slate-400 w-28"></td>`
         : `<td class="p-2 border border-slate-400 w-28"></td><td class="p-2 border border-slate-400 text-left w-28">${idx + 1}. ..........</td>`;
@@ -711,7 +695,6 @@ const RekapModule = {
           <td class="p-2 border border-slate-400 text-center font-bold">${idx + 1}</td>
           <td class="p-2 border border-slate-400 text-center font-mono">${s.nisn || s.NISN || '-'}</td>
           <td class="p-2 border border-slate-400 font-bold">${s.nama}</td>
-          <td class="p-2 border border-slate-400 text-center text-[10px] font-semibold">${ketStatus}</td>
           ${ttdCell}
         </tr>
       `;
