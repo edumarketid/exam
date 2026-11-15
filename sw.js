@@ -17,6 +17,7 @@ const ASSETS_TO_CACHE = [
   './js/auth.js',
   './js/exam.js',
   './js/app.js',
+  './icon-sekolah.png',
   './icon-cbt.png'
 ];
 
