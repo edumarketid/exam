@@ -1,5 +1,5 @@
-const CACHE_NAME = 'cbt-exam-v4';
-const IMG_CACHE_NAME = 'cbt-smkn1wkt-images-v2';
+const CACHE_NAME = 'cbt-exam-v5';
+const IMG_CACHE_NAME = 'cbt-smkn1wkt-images-v3';
 
 const ASSETS_TO_CACHE = [
   './',
@@ -17,7 +17,7 @@ const ASSETS_TO_CACHE = [
   './js/auth.js',
   './js/exam.js',
   './js/app.js',
-  './icon-sekolah.png'
+  './icon-cbt.png'
 ];
 
 self.addEventListener('install', (event) => {
