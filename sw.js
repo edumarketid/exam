@@ -16,7 +16,8 @@ const ASSETS_TO_CACHE = [
   './js/rekap.js',
   './js/auth.js',
   './js/exam.js',
-  './js/app.js'
+  './js/app.js',
+  './icon-sekolah.png'
 ];
 
 self.addEventListener('install', (event) => {
