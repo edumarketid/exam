@@ -1,5 +1,5 @@
 const CACHE_NAME = 'cbt-exam-v5';
-const IMG_CACHE_NAME = 'cbt-smkn1wkt-images-v3';
+const IMG_CACHE_NAME = 'cbt-smkn1wkt-images-v4';
 
 const ASSETS_TO_CACHE = [
   './',
