@@ -49,9 +49,12 @@ const JadwalModule = {
     try {
       console.log("[JadwalModule] Memuat data jadwal ujian & kelas target...");
       
-      if (!State.mapelList || State.mapelList.length === 0) {
+      if (typeof MapelModule !== 'undefined' && MapelModule.ensureMapelLoaded) {
+        await MapelModule.ensureMapelLoaded();
+      } else if (!State.mapelList || State.mapelList.length === 0) {
         State.mapelList = await DB.fetchMapel();
       }
+
       if (!State.siswaList || State.siswaList.length === 0) {
         State.siswaList = await DB.fetchSiswa();
       }
@@ -73,24 +76,16 @@ const JadwalModule = {
 
     let html = `<option value="">-- Pilih Mata Pelajaran --</option>`;
 
-    if (State.currentUser && State.currentUser.role === 'guru') {
-      const pairs = this.getGuruPairs();
-      const uniqueMapels = [...new Set(pairs.map(p => p.mapel))];
-      uniqueMapels.forEach(m => {
-        html += `<option value="${m}">${m}</option>`;
-      });
-      selectMapel.onchange = () => this.renderKelasCheckboxes();
-    } else {
-      const mapelSet = new Set(State.mapelList || []);
-      if (State.questions) {
-        State.questions.forEach(q => { if (q.mapel) mapelSet.add(q.mapel); });
-      }
-      Array.from(mapelSet).sort().forEach(m => {
-        html += `<option value="${m}">${m}</option>`;
-      });
-    }
+    const mapelList = (typeof MapelModule !== 'undefined' && MapelModule.getMapelListForCurrentUser)
+      ? MapelModule.getMapelListForCurrentUser()
+      : [...new Set((State.mapelList || []).map(m => String(m || '').trim()).filter(Boolean))].sort();
+
+    mapelList.forEach(m => {
+      html += `<option value="${m}">${m}</option>`;
+    });
 
     selectMapel.innerHTML = html;
+    selectMapel.onchange = () => this.renderKelasCheckboxes();
   },
 
   renderKelasCheckboxes() {
