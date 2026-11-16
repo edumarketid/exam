@@ -1,6 +1,10 @@
 const GuruModule = {
   guruList: [],
 
+  normalizeText(str) {
+    return String(str || '').replace(/\s+/g, ' ').trim().toUpperCase();
+  },
+
   // --- PARSER PASANGAN (MAPEL + KELAS) DARI PROFIL GURU ---
   // Mendukung format baru: "Mapel A (X TKJ 1), Mapel B (XI TKJ 2)"
   // Maupun format lama: mapel_diampu="Mapel A, Mapel B" & kelas_diampu="X TKJ 1, XI TKJ 2"
@@ -48,25 +52,25 @@ const GuruModule = {
     const pairs = this.getGuruPairs(State.currentUser);
     if (pairs.length === 0) return false;
 
-    const mUpper = String(targetMapel || '').trim().toUpperCase();
+    const mUpper = this.normalizeText(targetMapel);
     if (!mUpper) return false;
 
     if (!targetKelas) {
-      return pairs.some(p => p.mapel.toUpperCase() === mUpper);
+      return pairs.some(p => this.normalizeText(p.mapel) === mUpper);
     }
 
     const targetKelasList = String(targetKelas)
       .split(',')
-      .map(k => k.trim().toUpperCase())
+      .map(k => this.normalizeText(k))
       .filter(Boolean);
 
     if (targetKelasList.length === 0) {
-      return pairs.some(p => p.mapel.toUpperCase() === mUpper);
+      return pairs.some(p => this.normalizeText(p.mapel) === mUpper);
     }
 
     return pairs.some(p => {
-      const matchM = p.mapel.toUpperCase() === mUpper;
-      const matchK = p.kelas === '*' || targetKelasList.includes(p.kelas.toUpperCase());
+      const matchM = this.normalizeText(p.mapel) === mUpper;
+      const matchK = p.kelas === '*' || targetKelasList.includes(this.normalizeText(p.kelas));
       return matchM && matchK;
     });
   },
@@ -74,10 +78,13 @@ const GuruModule = {
   async loadAndRender() {
     try {
       console.log("[GuruModule] Memuat data guru & pengawas dari Supabase...");
-      
-      if (!State.mapelList || State.mapelList.length === 0) {
+
+      if (typeof MapelModule !== 'undefined' && MapelModule.ensureMapelLoaded) {
+        await MapelModule.ensureMapelLoaded();
+      } else if (!State.mapelList || State.mapelList.length === 0) {
         State.mapelList = await DB.fetchMapel();
       }
+
       if (!State.siswaList || State.siswaList.length === 0) {
         State.siswaList = await DB.fetchSiswa();
       }
@@ -98,7 +105,6 @@ const GuruModule = {
 
     const toggleBarId = 'btn-toggle-tambah-guru';
     if (!document.getElementById(toggleBarId)) {
-      // Sembunyikan form secara default saat pertama kali dimuat
       formEl.classList.add('hidden');
 
       const toggleBar = document.createElement('div');
@@ -136,44 +142,21 @@ const GuruModule = {
     }
   },
 
+  // --- AMBIL DAFTAR MAPEL & KELAS MURNI DARI MEMORI LOKAL APLIKASI ---
   getAvailableOptions() {
-    const mapelSet = new Set(State.mapelList || []);
-    if (State.questions) {
-      State.questions.forEach(q => { if (q.mapel) mapelSet.add(String(q.mapel).trim()); });
-    }
-    if (this.guruList) {
-      this.guruList.forEach(g => {
-        if (g.mapel_diampu && g.mapel_diampu !== '-') {
-          String(g.mapel_diampu).split(',').forEach(token => {
-            const m = token.replace(/\s*\([^()]+\)$/, '').trim();
-            if (m && m !== '-') mapelSet.add(m);
-          });
-        }
-      });
-    }
+    const mapels = [...new Set(
+      (State.mapelList || [])
+        .map(m => String(m || '').trim())
+        .filter(Boolean)
+    )].sort((a, b) => a.localeCompare(b, 'id'));
 
-    const kelasSet = new Set();
-    if (State.siswaList) {
-      State.siswaList.forEach(s => {
-        if (s.kelas && String(s.kelas).trim() !== '-') {
-          kelasSet.add(String(s.kelas).trim());
-        }
-      });
-    }
-    if (this.guruList) {
-      this.guruList.forEach(g => {
-        if (g.kelas_diampu && g.kelas_diampu !== '-') {
-          String(g.kelas_diampu).split(',').forEach(k => {
-            if (k.trim()) kelasSet.add(k.trim());
-          });
-        }
-      });
-    }
+    const kelas = [...new Set(
+      (State.siswaList || [])
+        .map(s => String(s.kelas || '').trim())
+        .filter(k => k && k !== '-')
+    )].sort((a, b) => a.localeCompare(b, 'id'));
 
-    return {
-      mapels: Array.from(mapelSet).filter(Boolean).sort(),
-      kelas: Array.from(kelasSet).filter(Boolean).sort()
-    };
+    return { mapels, kelas };
   },
 
   renderChecklistInputs() {
@@ -208,7 +191,7 @@ const GuruModule = {
     }
 
     if (mapels.length === 0 || kelasList.length === 0) {
-      boxEl.innerHTML = `<div class="p-2.5 text-[11px] text-slate-400 italic border rounded-lg bg-slate-50">Pastikan data Mapel dan data Kelas di tabel Siswa sudah terisi.</div>`;
+      boxEl.innerHTML = `<div class="p-2.5 text-[11px] text-slate-400 italic border rounded-lg bg-slate-50">Pastikan data Mata Pelajaran dan data Kelas di tabel Siswa sudah terisi.</div>`;
       return;
     }
 
@@ -272,9 +255,12 @@ const GuruModule = {
     if (pairs.length === 0) return;
 
     document.querySelectorAll(`input[name="chk-${groupName}"]`).forEach(cb => {
-      const m = cb.getAttribute('data-mapel').trim().toUpperCase();
-      const k = cb.getAttribute('data-kelas').trim().toUpperCase();
-      cb.checked = pairs.some(p => p.mapel.toUpperCase() === m && (p.kelas === '*' || p.kelas.toUpperCase() === k));
+      const m = this.normalizeText(cb.getAttribute('data-mapel'));
+      const k = this.normalizeText(cb.getAttribute('data-kelas'));
+      cb.checked = pairs.some(p =>
+        this.normalizeText(p.mapel) === m &&
+        (p.kelas === '*' || this.normalizeText(p.kelas) === k)
+      );
     });
   },
 
@@ -391,7 +377,7 @@ const GuruModule = {
       document.getElementById('form-tambah-guru').reset();
       document.getElementById('guru-password').value = 'guru123';
       this.toggleChecklistGroup('add-pair', false);
-      this.toggleAddForm(false); // Otomatis lipat kembali setelah berhasil menyimpan
+      this.toggleAddForm(false);
       await this.loadAndRender();
     } catch (err) {
       alert("Gagal menyimpan data guru: " + err.message);
@@ -401,6 +387,9 @@ const GuruModule = {
   openEditModal(idGuru) {
     const g = this.guruList.find(item => item.id_guru === idGuru);
     if (!g) return;
+
+    // Pastikan checklist selalu ter-render dari State.mapelList terbaru sebelum modal dibuka
+    this.renderChecklistInputs();
 
     document.getElementById('edit-guru-id').value = g.id_guru;
     document.getElementById('edit-guru-nama').value = g.nama_guru;
