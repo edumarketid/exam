@@ -64,7 +64,6 @@ const DB = {
       const { data, error } = await query.range(from, from + step - 1);
 
       if (error) {
-        // Fallback jika kolom orderCol tidak ada di tabel
         if (from === 0 && orderCol) {
           const fallbackRes = await client.from(tableName).select('*').range(0, step - 1);
           if (!fallbackRes.error && fallbackRes.data) {
@@ -361,7 +360,6 @@ const DB = {
     const numericId = /^\d+$/.test(rawId) ? Number(rawId) : null;
 
     const attempts = [
-      // 1. Kolom kapital ID_SISWA (angka) + lengkap
       ...(numericId !== null ? [{
         ID_SISWA: numericId,
         nama_siswa: payload.nama_siswa,
@@ -372,7 +370,6 @@ const DB = {
         status_selesai: payload.status_selesai,
         waktu_selesai: payload.waktu_selesai
       }] : []),
-      // 2. Kolom kapital ID_SISWA (string) + lengkap
       {
         ID_SISWA: rawId,
         nama_siswa: payload.nama_siswa,
@@ -383,7 +380,6 @@ const DB = {
         status_selesai: payload.status_selesai,
         waktu_selesai: payload.waktu_selesai
       },
-      // 3. Kolom huruf kecil id_siswa + lengkap
       {
         id_siswa: numericId !== null ? numericId : rawId,
         nama_siswa: payload.nama_siswa,
@@ -394,7 +390,6 @@ const DB = {
         status_selesai: payload.status_selesai,
         waktu_selesai: payload.waktu_selesai
       },
-      // 4. Minimal kolom wajib saja (ID_SISWA)
       {
         ID_SISWA: numericId !== null ? numericId : rawId,
         mapel: payload.mapel,
@@ -423,6 +418,22 @@ const DB = {
       if (errCap) throw errCap;
     }
     return true;
+  },
+
+  // --- HAPUS MASSAL HASIL UJIAN (1X QUERY UNTUK SELURUH RECORD PER KELAS & MAPEL) ---
+  async deleteHasilUjianMassal(ids = []) {
+    const client = await this.getClient();
+    if (!client) throw new Error("Database tidak terhubung. Periksa config.js dan koneksi internet.");
+
+    const validIds = (ids || []).filter(id => id !== null && id !== undefined && id !== '');
+    if (validIds.length === 0) return 0;
+
+    const { error } = await client.from('hasil_ujian').delete().in('id', validIds);
+    if (error) {
+      const { error: errCap } = await client.from('hasil_ujian').delete().in('ID', validIds);
+      if (errCap) throw errCap;
+    }
+    return validIds.length;
   }
 };
 
