@@ -103,9 +103,12 @@ const SoalModule = {
     try {
       console.log("[SoalModule] Menarik seluruh data Bank Soal dari Supabase...");
       
-      if (!State.mapelList || State.mapelList.length === 0) {
+      if (typeof MapelModule !== 'undefined' && MapelModule.ensureMapelLoaded) {
+        await MapelModule.ensureMapelLoaded();
+      } else if (!State.mapelList || State.mapelList.length === 0) {
         State.mapelList = await DB.fetchMapel();
       }
+
       if (!State.siswaList || State.siswaList.length === 0) {
         State.siswaList = await DB.fetchSiswa();
       }
@@ -136,31 +139,23 @@ const SoalModule = {
     }
   },
 
-  // --- POPULATE FORM UNGGAH SOAL HTML ---
+  // --- POPULATE FORM UNGGAH SOAL HTML (SUMBER TUNGGAL: State.mapelList) ---
   populateUploadMapelDropdown() {
     const selectUploadMapel = document.getElementById('select-upload-mapel');
     if (!selectUploadMapel) return;
 
     let html = `<option value="">-- Pilih Mata Pelajaran --</option>`;
 
-    if (State.currentUser && State.currentUser.role === 'guru') {
-      const pairs = this.getGuruPairs();
-      const uniqueMapels = [...new Set(pairs.map(p => p.mapel))];
-      uniqueMapels.forEach(m => {
-        html += `<option value="${m}">${m}</option>`;
-      });
-      selectUploadMapel.onchange = () => this.renderUploadKelasCheckboxes();
-    } else {
-      const mapelSet = new Set(State.mapelList || []);
-      if (State.questions) {
-        State.questions.forEach(q => { if (q.mapel) mapelSet.add(q.mapel); });
-      }
-      Array.from(mapelSet).sort().forEach(m => {
-        html += `<option value="${m}">${m}</option>`;
-      });
-    }
+    const mapelList = (typeof MapelModule !== 'undefined' && MapelModule.getMapelListForCurrentUser)
+      ? MapelModule.getMapelListForCurrentUser()
+      : [...new Set((State.mapelList || []).map(m => String(m || '').trim()).filter(Boolean))].sort();
+
+    mapelList.forEach(m => {
+      html += `<option value="${m}">${m}</option>`;
+    });
 
     selectUploadMapel.innerHTML = html;
+    selectUploadMapel.onchange = () => this.renderUploadKelasCheckboxes();
   },
 
   renderUploadKelasCheckboxes() {
