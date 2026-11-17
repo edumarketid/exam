@@ -1,7 +1,7 @@
 const CONFIG = {
   SUPABASE_URL: "https://nbwpnhshhpfqtmbwewgk.supabase.co",
   SUPABASE_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5id3BuaHNoaHBmcXRtYndld2drIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI0MTQ1ODUsImV4cCI6MjEwNzk5MDU4NX0.2Ah6o8svWPMDEI1O3zOxytNyqBIjED7GXTxowNm1Ai4",
-  MAX_VIOLATIONS: 3
+  MAX_VIOLATIONS: 2
 };
 
 // Inisialisasi Supabase Klien Global
