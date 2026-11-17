@@ -849,7 +849,7 @@ const ExamModule = {
               const recIdStr = String(ongoingRec.id || ongoingRec.ID || '');
               const isSameDevice = localStorage.getItem(deviceLockKey) === recIdStr;
               const lastBeat = new Date(ongoingRec.waktu_selesai || ongoingRec.WAKTU_SELESAI || 0).getTime();
-              const isSessionStillFresh = (Date.now() - lastBeat) < 90 * 1000;
+              const isSessionStillFresh = (Date.now() - lastBeat) < 35 * 1000;
 
               if (!isSameDevice && isSessionStillFresh) {
                 alert(
