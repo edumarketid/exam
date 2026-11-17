@@ -4,6 +4,7 @@ const ExamModule = {
   storageKey: null,
   remainingSeconds: 0,
   heartbeatInterval: null,
+  lastViolationTime: 0,
 
   OFFLINE_PKG_PREFIX: 'cbt_offline_pkg_kelas_',
   PENDING_SYNC_KEY: 'cbt_pending_hasil_ujian_v1',
@@ -695,29 +696,9 @@ const ExamModule = {
       });
     });
 
-    document.addEventListener('keyup', (e) => {
-      if (!State.examActive) return;
-      if (e.key === 'PrintScreen' || e.code === 'PrintScreen') {
-        this.setScreenShield(true);
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText('').catch(() => {});
-        }
-        this.handleViolation("Tangkapan layar (Screenshot / PrintScreen) dilarang selama ujian!");
-        setTimeout(() => this.setScreenShield(false), 2000);
-      }
-    });
-
     document.addEventListener('keydown', (e) => {
       if (!State.examActive) return;
       const key = String(e.key || '').toLowerCase();
-
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && ['s', '3', '4', '5'].includes(key)) {
-        e.preventDefault();
-        this.setScreenShield(true);
-        this.handleViolation("Tangkapan layar (Screenshot) dilarang selama ujian!");
-        setTimeout(() => this.setScreenShield(false), 2000);
-        return;
-      }
 
       if (
         e.key === 'F12' ||
@@ -744,6 +725,7 @@ const ExamModule = {
   async startExam(selectedSchedule = null) {
     State.examActive = false;
     this.activeRecordId = null;
+    this.lastViolationTime = 0;
     clearInterval(this.heartbeatInterval);
     const student = State.currentUser;
 
@@ -1149,6 +1131,11 @@ const ExamModule = {
 
   handleViolation(reason) {
     if (!State.examActive) return;
+
+    const now = Date.now();
+    if (now - this.lastViolationTime < 3000) return;
+    this.lastViolationTime = now;
+
     State.violations++;
     this.saveProgressToLocal();
     
