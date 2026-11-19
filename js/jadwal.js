@@ -9,6 +9,15 @@ const JadwalModule = {
     return String(str || '').replace(/\s+/g, ' ').trim().toUpperCase();
   },
 
+  getKopUrl() {
+    if (typeof DB !== 'undefined' && typeof DB.getKopSekolahUrl === 'function') {
+      return DB.getKopSekolahUrl();
+    }
+    return (typeof CONFIG !== 'undefined' && CONFIG.KOP_SEKOLAH_URL)
+      ? CONFIG.KOP_SEKOLAH_URL
+      : 'https://nbwpnhshhpfqtmbwewgk.supabase.co/storage/v1/object/public/media-sekolah/kop_sekolah.png';
+  },
+
   shuffleArray(array) {
     const arr = [...array];
     for (let i = arr.length - 1; i > 0; i--) {
@@ -27,7 +36,6 @@ const JadwalModule = {
       };
     }
 
-    // Sesuai aturan: nama pertama di tabel guru adalah Kepala Sekolah
     const firstRow = list[0];
     const nama = String(firstRow.nama_guru || firstRow.nama || '').trim() || '..................................................';
     const rawNip = String(firstRow.nip || '').trim();
@@ -84,8 +92,6 @@ const JadwalModule = {
 
   async loadAndRender() {
     try {
-      console.log("[JadwalModule] Memuat data jadwal ujian & kelas target...");
-      
       if (typeof MapelModule !== 'undefined' && MapelModule.ensureMapelLoaded) {
         await MapelModule.ensureMapelLoaded();
       } else if (!State.mapelList || State.mapelList.length === 0) {
@@ -254,9 +260,6 @@ const JadwalModule = {
     container.innerHTML = html;
   },
 
-  // =========================================================================
-  // LOGIKA PEMBAGIAN RUANG, KODE GURU/MAPEL & 2 PENGAWAS PENUH PER RUANG
-  // =========================================================================
   isTimeOverlap(startA, endA, startB, endB) {
     const toMinutes = (t) => {
       const parts = String(t || '00:00').substring(0, 5).split(':');
@@ -288,14 +291,14 @@ const JadwalModule = {
       State.siswaList = await DB.fetchSiswa();
     }
 
+    // Gunakan cache daftar guru jika sudah ada di memori (tanpa query ulang)
     let rawGuru = (typeof GuruModule !== 'undefined' && Array.isArray(GuruModule.guruList) && GuruModule.guruList.length > 0)
       ? GuruModule.guruList
-      : await DB.fetchGuru();
+      : (Array.isArray(DB._cachedGuruList) && DB._cachedGuruList.length > 0 ? DB._cachedGuruList : await DB.fetchGuru());
 
-    // Ambil nama & NIP Kepala Sekolah langsung dari baris pertama daftar guru (tanpa query DB tambahan)
     this.lastKepalaSekolah = this.extractKepalaSekolah(rawGuru);
+    if (typeof DB !== 'undefined') DB._cachedKepsek = this.lastKepalaSekolah;
 
-    // Filter status Aktif & jabatan GURU (non-guru termasuk Kepala Sekolah tidak ikut mengawas), lalu beri kode 01, 02, ...
     const eligibleGuru = (rawGuru || [])
       .filter(g => {
         const isAktif = this.normalizeText(g.status || 'AKTIF') === 'AKTIF';
@@ -311,7 +314,6 @@ const JadwalModule = {
 
     this.lastGuruCodeList = eligibleGuru;
 
-    // Kelompokkan & urutkan daftar siswa aktif per kelas
     const siswaGroupByKelas = {};
     (State.siswaList || []).forEach(s => {
       const kRaw = String(s.kelas || '').trim();
@@ -327,7 +329,6 @@ const JadwalModule = {
     const sortedClassEntries = Object.values(siswaGroupByKelas)
       .sort((a, b) => a.label.localeCompare(b.label, 'id'));
 
-    // Bentuk Master Daftar Ruang Permanen (Maks. 20 siswa/ruang)
     const MAX_PER_RUANG = 20;
     const masterRooms = [];
     let ruangCounter = 1;
@@ -362,7 +363,6 @@ const JadwalModule = {
       schedules = schedules.filter(j => String(j.tanggal || '').trim() === filterTanggal);
     }
 
-    // Buat daftar Kode Mata Pelajaran unik (MP-01, MP-02, dst.)
     const uniqueMapels = [...new Set(
       schedules.map(j => String(j.mapel || '').trim()).filter(Boolean)
     )].sort((a, b) => a.localeCompare(b, 'id'));
@@ -384,7 +384,6 @@ const JadwalModule = {
         .join(' / ');
     };
 
-    // Kelompokkan jadwal berdasarkan (Tanggal + Jam Mulai + Jam Selesai) -> Sesi Ujian
     const sessionMap = {};
     schedules.forEach(j => {
       const tgl = String(j.tanggal || '').trim();
@@ -485,7 +484,6 @@ const JadwalModule = {
       }
     });
 
-    // Pasangkan 2 GURU PENGAWAS per ruangan
     const assignedIntervalsByGuru = {};
     const assignedRoomsTodayByGuru = {};
     const sessionAssignCountByGuru = {};
@@ -654,7 +652,7 @@ const JadwalModule = {
         <div class="px-5 py-3.5 bg-ocean-950 text-white flex flex-wrap items-center justify-between gap-3 shrink-0">
           <div>
             <h3 class="font-extrabold text-sm">Pratinjau Jadwal Ujian, Daftar Hadir Pengawas &amp; Daftar Hadir Siswa</h3>
-            <p class="text-[11px] text-teal-300">Total Ruang: ${totalMasterRooms} &bull; Guru Aktif: ${totalEligibleGuru} &bull; Plt. Kepala Sekolah: <strong>${kepsek.nama}</strong></p>
+            <p class="text-[11px] text-teal-300">Total Ruang: ${totalMasterRooms} &bull; Guru Aktif: ${totalEligibleGuru} &bull; Kepala Sekolah: <strong>${kepsek.nama}</strong></p>
           </div>
           <div class="flex flex-wrap items-center gap-2">
             <button type="button" onclick="JadwalModule.openPrintJadwalModal()" class="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs px-3 py-2 rounded-lg transition">
@@ -703,7 +701,7 @@ const JadwalModule = {
   getPrintToolbarHtml() {
     return `
       <div class="no-print" style="background:#0f172a;color:#fff;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;border-radius:8px;">
-        <span style="font-size:12px;font-weight:bold;">Pratinjau Dokumen Siap Cetak — SMKN 1 Wakatobi</span>
+        <span style="font-size:12px;font-weight:bold;">Pratinjau Dokumen Siap Cetak — SMK Negeri 1 Wakatobi</span>
         <div style="display:flex;gap:8px;">
           <button onclick="window.print()" style="background:#10b981;color:#fff;border:none;padding:7px 14px;border-radius:6px;font-weight:bold;font-size:12px;cursor:pointer;">🖨️ Cetak / Simpan PDF</button>
           <button onclick="window.close()" style="background:#e11d48;color:#fff;border:none;padding:7px 14px;border-radius:6px;font-weight:bold;font-size:12px;cursor:pointer;">✕ Tutup Tab Ini</button>
@@ -712,9 +710,6 @@ const JadwalModule = {
     `;
   },
 
-  // =========================================================================
-  // 1. CETAK JADWAL FORMAT MATRIKS RINGKAS (KODE MAPEL & KODE GURU)
-  // =========================================================================
   executePrintJadwal() {
     const allocations = this.lastGeneratedAllocation || [];
     const rooms = this.lastMasterRooms || [];
@@ -723,10 +718,7 @@ const JadwalModule = {
     const kepsek = this.lastKepalaSekolah;
     if (allocations.length === 0) return;
 
-    const kopUrl = (typeof CONFIG !== 'undefined' && CONFIG.KOP_SEKOLAH_URL)
-      ? CONFIG.KOP_SEKOLAH_URL
-      : 'https://nbwpnhshhpfqtmbwewgk.supabase.co/storage/v1/object/public/media-sekolah/kop_sekolah.png';
-
+    const kopUrl = this.getKopUrl();
     const todayStr = new Date().toLocaleDateString('id-ID', {
       day: 'numeric',
       month: 'long',
@@ -825,7 +817,7 @@ const JadwalModule = {
       <html lang="id">
       <head>
         <meta charset="UTF-8">
-        <title>Jadwal Ujian & Kode Pengawas Ruang - SMKN 1 Wakatobi</title>
+        <title>Jadwal Ujian & Kode Pengawas Ruang - SMK Negeri 1 Wakatobi</title>
         <style>
           @page { size: A4 landscape; margin: 9mm; }
           @media print { .no-print { display: none !important; } }
@@ -852,7 +844,7 @@ const JadwalModule = {
         <img src="${kopUrl}" class="kop" alt="Kop Sekolah" onerror="this.style.display='none'">
         <div class="title">
           <h2>JADWAL PELAKSANAAN UJIAN &amp; PEMBAGIAN PENGAWAS RUANG</h2>
-          <p>SMKN 1 WAKATOBI &bull; TAHUN AJARAN 2026/2027</p>
+          <p>SMK NEGERI 1 WAKATOBI &bull; TAHUN AJARAN 2026/2027</p>
         </div>
 
         <table class="matrix">
@@ -883,8 +875,8 @@ const JadwalModule = {
 
         <div class="ttd-wrap">
           <div class="ttd-box">
-            Wangi-Wangi, ${todayStr}<br>
-            Plt. Kepala SMKN 1 Wakatobi,
+            Wangi-Wangi Selatan, ${todayStr}<br>
+            Kepala SMK Negeri 1 Wakatobi,
             <div class="ttd-space"></div>
             <strong><u>${kepsek.nama}</u></strong><br>
             NIP. ${kepsek.nip}
@@ -902,19 +894,13 @@ const JadwalModule = {
     printWin.document.close();
   },
 
-  // =========================================================================
-  // 2. CETAK DAFTAR HADIR PENGAWAS RUANG (DIPISAH PER HARI & TTD KEPSEK)
-  // =========================================================================
   executePrintDaftarHadirPengawas() {
     const allocations = this.lastGeneratedAllocation || [];
     const kepsek = this.lastKepalaSekolah;
     if (allocations.length === 0) return;
 
-    const kopUrl = (typeof CONFIG !== 'undefined' && CONFIG.KOP_SEKOLAH_URL)
-      ? CONFIG.KOP_SEKOLAH_URL
-      : 'https://nbwpnhshhpfqtmbwewgk.supabase.co/storage/v1/object/public/media-sekolah/kop_sekolah2.jpg';
+    const kopUrl = this.getKopUrl();
 
-    // Kelompokkan allocations berdasarkan tanggal (1 hari = 1 halaman terpisah)
     const dayGroupsMap = {};
     allocations.forEach(r => {
       if (!dayGroupsMap[r.tanggal]) {
@@ -985,7 +971,7 @@ const JadwalModule = {
           <img src="${kopUrl}" class="kop" alt="Kop Sekolah" onerror="this.style.display='none'">
           <div class="title">
             <h2>DAFTAR HADIR PENGAWAS RUANG UJIAN</h2>
-            <p>SMKN 1 WAKATOBI &bull; TAHUN AJARAN 2026/2027</p>
+            <p>SMK NEGERI 1 WAKATOBI &bull; TAHUN AJARAN 2026/2027</p>
           </div>
 
           <div style="margin:6px 0 8px 0; font-size:11.5px; font-weight:bold;">
@@ -1010,7 +996,7 @@ const JadwalModule = {
           <div class="ttd-wrap">
             <div class="ttd-box">
               Mengetahui,<br>
-              Plt. Kepala SMKN 1 Wakatobi,
+              Kepala SMK Negeri 1 Wakatobi,
               <div class="ttd-space"></div>
               <strong><u>${kepsek.nama}</u></strong><br>
               NIP. ${kepsek.nip}
@@ -1031,7 +1017,7 @@ const JadwalModule = {
       <html lang="id">
       <head>
         <meta charset="UTF-8">
-        <title>Daftar Hadir Pengawas Ruang Ujian (Per Hari) - SMKN 1 Wakatobi</title>
+        <title>Daftar Hadir Pengawas Ruang Ujian (Per Hari) - SMK Negeri 1 Wakatobi</title>
         <style>
           @page { size: A4 portrait; margin: 11mm; }
           @media print {
@@ -1065,9 +1051,6 @@ const JadwalModule = {
     printWin.document.close();
   },
 
-  // =========================================================================
-  // 3. CETAK DAFTAR HADIR SISWA (OTOMATIS PENGAWAS DARI JADWAL & KEPSEK RATA TENGAH)
-  // =========================================================================
   executePrintDaftarHadirSiswa() {
     const allocations = this.lastGeneratedAllocation || [];
     const rooms = this.lastMasterRooms || [];
@@ -1078,12 +1061,8 @@ const JadwalModule = {
       return;
     }
 
-    const kopUrl = (typeof CONFIG !== 'undefined' && CONFIG.KOP_SEKOLAH_URL)
-      ? CONFIG.KOP_SEKOLAH_URL
-      : 'https://nbwpnhshhpfqtmbwewgk.supabase.co/storage/v1/object/public/media-sekolah/kop_sekolah2.jpg';
+    const kopUrl = this.getKopUrl();
 
-    // Jika ada alokasi jadwal aktif, cetak daftar hadir per sesi & ruangan agar nama Pengawas 1, Pengawas 2, Mapel, & Tanggal terisi otomatis dari jadwal
-    // Jika belum ada jadwal yang dibuat, tetap bisa cetak template per ruangan
     const sheetEntries = allocations.length > 0
       ? allocations.map(a => {
           const masterMatch = rooms.find(r => r.nomorRuang === a.nomorRuang);
@@ -1144,7 +1123,7 @@ const JadwalModule = {
           <img src="${kopUrl}" class="kop" alt="Kop Sekolah" onerror="this.style.display='none'">
           <div class="title">
             <h2>DAFTAR HADIR PESERTA UJIAN</h2>
-            <p>SMKN 1 WAKATOBI &bull; TAHUN AJARAN 2026/2027</p>
+            <p>SMK NEGERI 1 WAKATOBI &bull; TAHUN AJARAN 2026/2027</p>
           </div>
 
           <table class="meta-table">
@@ -1202,7 +1181,7 @@ const JadwalModule = {
             <div class="ttd-kepsek-center">
               <div class="ttd-box-center">
                 Mengetahui,<br>
-                Plt. Kepala SMKN 1 Wakatobi,
+                Kepala SMK Negeri 1 Wakatobi,
                 <div class="ttd-space"></div>
                 <strong><u>${kepsek.nama}</u></strong><br>
                 NIP. ${kepsek.nip}
@@ -1224,7 +1203,7 @@ const JadwalModule = {
       <html lang="id">
       <head>
         <meta charset="UTF-8">
-        <title>Daftar Hadir Peserta Ujian per Ruang - SMKN 1 Wakatobi</title>
+        <title>Daftar Hadir Peserta Ujian per Ruang - SMK Negeri 1 Wakatobi</title>
         <style>
           @page { size: A4 portrait; margin: 10mm; }
           @media print {
