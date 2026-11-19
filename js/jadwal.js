@@ -1,5 +1,6 @@
 const JadwalModule = {
   lastGeneratedAllocation: [],
+  lastMasterRooms: [],
 
   normalizeText(str) {
     return String(str || '').replace(/\s+/g, ' ').trim().toUpperCase();
@@ -191,8 +192,8 @@ const JadwalModule = {
     let html = `
       <div class="p-3.5 mb-3 rounded-xl bg-ocean-50 border border-ocean-200 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p class="text-xs font-extrabold text-ocean-950">🖨️ Cetak Jadwal & Daftar Hadir Pengawas Ruang (Maks. 20 Siswa/Ruang)</p>
-          <p class="text-[11px] text-slate-600">Otomatis 2 sesi/hari (hari terakhir 1 sesi), ruang konsisten, & pengawas jabatan <strong>Guru</strong> dirotasi agar tidak mengawas ruang sama 2x sehari.</p>
+          <p class="text-xs font-extrabold text-ocean-950">🖨️ Cetak Jadwal, Daftar Hadir Pengawas (2/Ruang) & Daftar Hadir Siswa</p>
+          <p class="text-[11px] text-slate-600">Kapasitas maks. 20 siswa/ruang &bull; 2 pengawas jabatan <strong>Guru</strong> per ruang &bull; Otomatis rotasi ruang antar sesi.</p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <select id="filter-cetak-jadwal-tanggal" class="text-xs font-semibold border border-ocean-300 rounded-lg px-2.5 py-2 bg-white text-slate-800">
@@ -200,7 +201,7 @@ const JadwalModule = {
             ${dateOptionsHtml}
           </select>
           <button type="button" onclick="JadwalModule.openPrintJadwalModal()" class="bg-ocean-800 hover:bg-ocean-900 text-white font-bold text-xs px-3.5 py-2 rounded-lg shadow-sm transition flex items-center gap-1.5">
-            <span>🖨️ Lihat & Cetak Jadwal / Daftar Hadir</span>
+            <span>🖨️ Kelola & Cetak Dokumen Ujian</span>
           </button>
         </div>
       </div>
@@ -233,7 +234,7 @@ const JadwalModule = {
   },
 
   // =========================================================================
-  // LOGIKA PEMBAGIAN RUANG KONSISTEN & ROTASI PENGAWAS HARIAN
+  // LOGIKA PEMBAGIAN RUANG (MAKS. 20 SISWA) & 2 PENGAWAS PER RUANG
   // =========================================================================
   isTimeOverlap(startA, endA, startB, endB) {
     const toMinutes = (t) => {
@@ -278,42 +279,48 @@ const JadwalModule = {
       return isAktif && isGuruRole;
     });
 
-    // Hitung jumlah siswa aktif per kelas & urutkan nama kelas secara konsisten
-    const siswaCountByKelas = {};
+    // Kelompokkan & urutkan daftar siswa aktif per kelas agar sekaligus siap dicetak di Daftar Hadir Siswa
+    const siswaGroupByKelas = {};
     (State.siswaList || []).forEach(s => {
       const kRaw = String(s.kelas || '').trim();
       const kNorm = this.normalizeText(kRaw);
       const st = this.normalizeText(s.status || 'AKTIF');
       if (!kNorm || kNorm === '-' || st === 'NONAKTIF') return;
-      if (!siswaCountByKelas[kNorm]) {
-        siswaCountByKelas[kNorm] = { label: kRaw, count: 0 };
+      if (!siswaGroupByKelas[kNorm]) {
+        siswaGroupByKelas[kNorm] = { label: kRaw, students: [] };
       }
-      siswaCountByKelas[kNorm].count += 1;
+      siswaGroupByKelas[kNorm].students.push(s);
     });
 
-    const sortedClassEntries = Object.values(siswaCountByKelas)
+    const sortedClassEntries = Object.values(siswaGroupByKelas)
       .sort((a, b) => a.label.localeCompare(b.label, 'id'));
 
-    // Bentuk Master Daftar Ruang Permanen (Maks. 20 siswa/ruang) agar Ruang 1..N konsisten sepanjang hari & sesi
+    // Bentuk Master Daftar Ruang Permanen (Maks. 20 siswa/ruang) lengkap dengan potongan daftar siswanya
     const MAX_PER_RUANG = 20;
     const masterRooms = [];
     let ruangCounter = 1;
 
     sortedClassEntries.forEach(cls => {
-      let sisa = cls.count;
-      while (sisa > 0) {
-        const isi = Math.min(MAX_PER_RUANG, sisa);
+      const sortedStudents = [...cls.students].sort((a, b) =>
+        String(a.nama || a.nama_siswa || '').localeCompare(String(b.nama || b.nama_siswa || ''), 'id')
+      );
+
+      for (let startIdx = 0; startIdx < sortedStudents.length; startIdx += MAX_PER_RUANG) {
+        const chunkStudents = sortedStudents.slice(startIdx, startIdx + MAX_PER_RUANG);
+        const isi = chunkStudents.length;
         masterRooms.push({
           nomorRuang: ruangCounter,
           kelasNorm: this.normalizeText(cls.label),
           kelasLabel: cls.label,
           jumlahSiswa: isi,
+          students: chunkStudents,
           ruangLabel: `Ruang ${ruangCounter} (${cls.label} ${isi})`
         });
         ruangCounter++;
-        sisa -= isi;
       }
     });
+
+    this.lastMasterRooms = masterRooms;
 
     let schedules = [...(State.schedules || [])];
     if (State.currentUser && State.currentUser.role === 'guru') {
@@ -393,6 +400,7 @@ const JadwalModule = {
             ruangLabel: r.ruangLabel,
             kelas: r.kelasLabel,
             jumlahSiswa: r.jumlahSiswa,
+            students: r.students,
             mapel: mapelByKelasNorm[r.kelasNorm]
           });
         });
@@ -413,6 +421,7 @@ const JadwalModule = {
               ruangLabel: `Ruang ${fallbackNo} (${k} 0)`,
               kelas: k,
               jumlahSiswa: 0,
+              students: [],
               mapel: j.mapel
             });
             fallbackNo++;
@@ -421,20 +430,14 @@ const JadwalModule = {
       }
     });
 
-    // Acak guru pengawas per sesi:
-    // (1) Tidak bentrok jam pada tanggal yang sama
-    // (2) Dirotasi: tidak mengawas nomorRuang yang sama dua kali dalam sehari
+    // Acak 2 GURU PENGAWAS per ruangan:
+    // (1) Tidak bentrok jam pada tanggal yang sama (baik sbg Pengawas 1 maupun Pengawas 2)
+    // (2) Dirotasi: sebisa mungkin tidak mengawas nomorRuang yang sama dua kali dalam sehari
     const assignedIntervalsByGuru = {};
     const assignedRoomsTodayByGuru = {};
     const sessionShuffledPool = {};
 
-    const allocations = rawSlotRooms.map(room => {
-      if (!sessionShuffledPool[room.sessionKey]) {
-        sessionShuffledPool[room.sessionKey] = this.shuffleArray(eligibleGuru);
-      }
-
-      const pool = sessionShuffledPool[room.sessionKey];
-
+    const pickOneSupervisor = (room, pool) => {
       const freeCandidates = pool.filter(candidate => {
         const gKey = String(candidate.id_guru || candidate.no_hp || candidate.nama_guru);
         const bookedList = assignedIntervalsByGuru[gKey] || [];
@@ -444,18 +447,18 @@ const JadwalModule = {
         );
       });
 
-      let chosenGuru = freeCandidates.find(candidate => {
+      let chosen = freeCandidates.find(candidate => {
         const gKey = String(candidate.id_guru || candidate.no_hp || candidate.nama_guru);
         const roomsToday = assignedRoomsTodayByGuru[`${gKey}|${room.tanggal}`];
         return !roomsToday || !roomsToday.has(room.nomorRuang);
       });
 
-      if (!chosenGuru && freeCandidates.length > 0) {
-        chosenGuru = freeCandidates[0];
+      if (!chosen && freeCandidates.length > 0) {
+        chosen = freeCandidates[0];
       }
 
-      if (chosenGuru) {
-        const gKey = String(chosenGuru.id_guru || chosenGuru.no_hp || chosenGuru.nama_guru);
+      if (chosen) {
+        const gKey = String(chosen.id_guru || chosen.no_hp || chosen.nama_guru);
         if (!assignedIntervalsByGuru[gKey]) assignedIntervalsByGuru[gKey] = [];
         assignedIntervalsByGuru[gKey].push({
           tanggal: room.tanggal,
@@ -468,11 +471,26 @@ const JadwalModule = {
         assignedRoomsTodayByGuru[dayKey].add(room.nomorRuang);
       }
 
+      return chosen || null;
+    };
+
+    const allocations = rawSlotRooms.map(room => {
+      if (!sessionShuffledPool[room.sessionKey]) {
+        sessionShuffledPool[room.sessionKey] = this.shuffleArray(eligibleGuru);
+      }
+      const pool = sessionShuffledPool[room.sessionKey];
+
+      const p1 = pickOneSupervisor(room, pool);
+      const p2 = pickOneSupervisor(room, pool);
+
       return {
         ...room,
-        pengawasNama: chosenGuru ? chosenGuru.nama_guru : '⚠️ Belum Ada Pengawas (Stok Guru Habis)',
-        pengawasNip: chosenGuru ? (chosenGuru.nip || '-') : '-',
-        isUnassigned: !chosenGuru
+        pengawas1Nama: p1 ? p1.nama_guru : '⚠️ Belum Ada Pengawas 1',
+        pengawas1Nip: p1 ? (p1.nip || '-') : '-',
+        isP1Unassigned: !p1,
+        pengawas2Nama: p2 ? p2.nama_guru : '⚠️ Belum Ada Pengawas 2',
+        pengawas2Nip: p2 ? (p2.nip || '-') : '-',
+        isP2Unassigned: !p2
       };
     });
 
@@ -482,6 +500,15 @@ const JadwalModule = {
       totalEligibleGuru: eligibleGuru.length,
       totalMasterRooms: masterRooms.length
     };
+  },
+
+  closePrintJadwalModal() {
+    const modal = document.getElementById('modal-cetak-jadwal-ruang');
+    if (modal) modal.remove();
+    if (this._escHandler) {
+      document.removeEventListener('keydown', this._escHandler);
+      this._escHandler = null;
+    }
   },
 
   async openPrintJadwalModal() {
@@ -497,8 +524,18 @@ const JadwalModule = {
     if (!modal) {
       modal = document.createElement('div');
       modal.id = 'modal-cetak-jadwal-ruang';
-      modal.className = 'fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-3 overflow-y-auto';
+      modal.className = 'fixed inset-0 z-50 bg-slate-900/75 backdrop-blur-sm flex items-center justify-center p-3 overflow-y-auto';
+      modal.onclick = (e) => {
+        if (e.target === modal) this.closePrintJadwalModal();
+      };
       document.body.appendChild(modal);
+    }
+
+    if (!this._escHandler) {
+      this._escHandler = (e) => {
+        if (e.key === 'Escape') this.closePrintJadwalModal();
+      };
+      document.addEventListener('keydown', this._escHandler);
     }
 
     let lastSessionKey = '';
@@ -522,38 +559,49 @@ const JadwalModule = {
           <td class="p-2.5 font-semibold text-slate-700">${row.sesiLabel}<div class="text-[10px] font-mono text-slate-500">${row.jamMulai} - ${row.jamSelesai}</div></td>
           <td class="p-2.5 font-bold text-ocean-900">${row.ruangLabel}</td>
           <td class="p-2.5 text-slate-800 font-semibold">${row.mapel}</td>
-          <td class="p-2.5 ${row.isUnassigned ? 'text-rose-600 font-bold' : 'text-slate-800 font-semibold'}">
-            ${row.pengawasNama}
-            ${!row.isUnassigned && row.pengawasNip !== '-' ? `<div class="text-[10px] text-slate-500 font-mono">NIP. ${row.pengawasNip}</div>` : ''}
+          <td class="p-2.5 text-slate-800 space-y-1">
+            <div class="${row.isP1Unassigned ? 'text-rose-600 font-bold' : 'font-semibold'}">
+              1. ${row.pengawas1Nama}
+              ${!row.isP1Unassigned && row.pengawas1Nip !== '-' ? `<span class="text-[10px] text-slate-500 font-mono"> (NIP. ${row.pengawas1Nip})</span>` : ''}
+            </div>
+            <div class="${row.isP2Unassigned ? 'text-rose-600 font-bold' : 'font-semibold'}">
+              2. ${row.pengawas2Nama}
+              ${!row.isP2Unassigned && row.pengawas2Nip !== '-' ? `<span class="text-[10px] text-slate-500 font-mono"> (NIP. ${row.pengawas2Nip})</span>` : ''}
+            </div>
           </td>
         </tr>
       `;
     }).join('');
 
     modal.innerHTML = `
-      <div class="bg-white w-full max-w-5xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden my-4">
-        <div class="px-5 py-4 bg-ocean-950 text-white flex flex-wrap items-center justify-between gap-3">
+      <div class="bg-white w-full max-w-6xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden my-4 flex flex-col max-h-[92vh]">
+        <!-- HEADER MODAL DENGAN TOMBOL TUTUP -->
+        <div class="px-5 py-3.5 bg-ocean-950 text-white flex flex-wrap items-center justify-between gap-3 shrink-0">
           <div>
-            <h3 class="font-extrabold text-sm">Pratinjau Jadwal Ujian, Pembagian Ruang & Daftar Hadir Pengawas</h3>
-            <p class="text-[11px] text-teal-300">Total Ruang: ${totalMasterRooms} Ruang (Maks. 20 Siswa) &bull; Guru Aktif: ${totalEligibleGuru} Guru &bull; Rotasi Anti-Ruang Sama Aktif</p>
+            <h3 class="font-extrabold text-sm">Pratinjau Jadwal Ujian, Pembagian 2 Pengawas/Ruang & Daftar Hadir</h3>
+            <p class="text-[11px] text-teal-300">Total Ruang: ${totalMasterRooms} Ruang (Maks. 20 Siswa) &bull; Kebutuhan per Sesi: ${totalMasterRooms * 2} Pengawas &bull; Stok Guru Aktif: ${totalEligibleGuru} Guru</p>
           </div>
           <div class="flex flex-wrap items-center gap-2">
             <button type="button" onclick="JadwalModule.openPrintJadwalModal()" class="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs px-3 py-2 rounded-lg transition">
               🔀 Acak Ulang Pengawas
             </button>
-            <button type="button" onclick="JadwalModule.executePrintJadwal()" class="bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs px-3.5 py-2 rounded-lg shadow transition">
+            <button type="button" onclick="JadwalModule.executePrintJadwal()" class="bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs px-3 py-2 rounded-lg shadow transition">
               🖨️ Cetak Jadwal Ruang
             </button>
-            <button type="button" onclick="JadwalModule.executePrintDaftarHadirPengawas()" class="bg-sky-500 hover:bg-sky-600 text-white font-bold text-xs px-3.5 py-2 rounded-lg shadow transition">
+            <button type="button" onclick="JadwalModule.executePrintDaftarHadirPengawas()" class="bg-sky-500 hover:bg-sky-600 text-white font-bold text-xs px-3 py-2 rounded-lg shadow transition">
               📋 Cetak Daftar Hadir Pengawas
             </button>
-            <button type="button" onclick="document.getElementById('modal-cetak-jadwal-ruang').remove()" class="bg-white/15 hover:bg-white/25 text-white font-bold text-xs px-3 py-2 rounded-lg transition">
-              ✕ Tutup
+            <button type="button" onclick="JadwalModule.executePrintDaftarHadirSiswa()" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold text-xs px-3 py-2 rounded-lg shadow transition">
+              🧑‍🎓 Cetak Daftar Hadir Siswa
+            </button>
+            <button type="button" onclick="JadwalModule.closePrintJadwalModal()" class="bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs px-3.5 py-2 rounded-lg shadow transition">
+              ⬅️ Tutup / Kembali
             </button>
           </div>
         </div>
 
-        <div class="p-4 max-h-[75vh] overflow-y-auto">
+        <!-- ISI TABEL PRATINJAU -->
+        <div class="p-4 overflow-y-auto flex-1">
           <table class="w-full text-left border-collapse text-xs border border-slate-200">
             <thead>
               <tr class="bg-slate-100 border-b border-slate-300 text-[11px] font-extrabold text-slate-700 uppercase">
@@ -561,11 +609,31 @@ const JadwalModule = {
                 <th class="p-2.5 w-36">Sesi / Waktu</th>
                 <th class="p-2.5">Nama Ruang & Peserta</th>
                 <th class="p-2.5">Mata Pelajaran</th>
-                <th class="p-2.5">Guru Pengawas Ruang</th>
+                <th class="p-2.5">Guru Pengawas Ruang (2 Orang)</th>
               </tr>
             </thead>
             <tbody>${rowsHtml}</tbody>
           </table>
+        </div>
+
+        <!-- FOOTER MODAL DENGAN TOMBOL TUTUP -->
+        <div class="px-5 py-3 bg-slate-100 border-t border-slate-200 flex items-center justify-between shrink-0">
+          <span class="text-[11px] text-slate-500">Tekan tombol <strong>ESC</strong> atau klik tombol Tutup untuk kembali ke halaman Jadwal Ujian.</span>
+          <button type="button" onclick="JadwalModule.closePrintJadwalModal()" class="bg-slate-700 hover:bg-slate-800 text-white font-bold text-xs px-4 py-2 rounded-lg transition">
+            ⬅️ Tutup / Kembali
+          </button>
+        </div>
+      </div>
+    `;
+  },
+
+  getPrintToolbarHtml() {
+    return `
+      <div class="no-print" style="background:#0f172a;color:#fff;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;border-radius:8px;">
+        <span style="font-size:12px;font-weight:bold;">Pratinjau Dokumen Siap Cetak — SMK Negeri 1 Wakatobi</span>
+        <div style="display:flex;gap:8px;">
+          <button onclick="window.print()" style="background:#10b981;color:#fff;border:none;padding:7px 14px;border-radius:6px;font-weight:bold;font-size:12px;cursor:pointer;">🖨️ Cetak / Simpan PDF</button>
+          <button onclick="window.close()" style="background:#e11d48;color:#fff;border:none;padding:7px 14px;border-radius:6px;font-weight:bold;font-size:12px;cursor:pointer;">✕ Tutup Tab Ini</button>
         </div>
       </div>
     `;
@@ -606,16 +674,16 @@ const JadwalModule = {
           <td style="text-align:center;">${r.sesiLabel}<br><span style="font-size:10px;">${r.jamMulai} - ${r.jamSelesai}</span></td>
           <td><strong>${r.ruangLabel}</strong></td>
           <td>${r.mapel}</td>
-          <td>
-            <strong>${r.pengawasNama}</strong>
-            ${!r.isUnassigned && r.pengawasNip !== '-' ? `<br><span style="font-size:10px;color:#475569;">NIP. ${r.pengawasNip}</span>` : ''}
+          <td style="line-height:1.45;">
+            <div><strong>1. ${r.pengawas1Nama}</strong>${!r.isP1Unassigned && r.pengawas1Nip !== '-' ? ` <span style="font-size:9.5px;color:#475569;">(NIP. ${r.pengawas1Nip})</span>` : ''}</div>
+            <div><strong>2. ${r.pengawas2Nama}</strong>${!r.isP2Unassigned && r.pengawas2Nip !== '-' ? ` <span style="font-size:9.5px;color:#475569;">(NIP. ${r.pengawas2Nip})</span>` : ''}</div>
           </td>
-          <td style="height:26px;"></td>
+          <td style="height:32px; font-size:10px; color:#475569;">1. ..........<br>2. ..........</td>
         </tr>
       `;
     }).join('');
 
-    const printWin = window.open('', '_blank', 'width=1000,height=750');
+    const printWin = window.open('', '_blank', 'width=1050,height=780');
     if (!printWin) {
       alert("Pop-up diblokir oleh browser! Izinkan pop-up untuk mencetak jadwal.");
       return;
@@ -629,6 +697,7 @@ const JadwalModule = {
         <title>Jadwal Ujian & Pengawas Ruang - SMK Negeri 1 Wakatobi</title>
         <style>
           @page { size: A4 landscape; margin: 12mm; }
+          @media print { .no-print { display: none !important; } }
           body { font-family: Arial, Helvetica, sans-serif; color: #0f172a; font-size: 11px; margin: 0; }
           .kop { width: 100%; max-height: 115px; object-fit: contain; display: block; margin: 0 auto 8px auto; }
           .title { text-align: center; margin: 6px 0 14px 0; }
@@ -643,6 +712,7 @@ const JadwalModule = {
         </style>
       </head>
       <body>
+        ${this.getPrintToolbarHtml()}
         <img src="${kopUrl}" class="kop" alt="Kop Sekolah" onerror="this.style.display='none'">
         <div class="title">
           <h2>JADWAL PELAKSANAAN UJIAN & PEMBAGIAN PENGAWAS RUANG</h2>
@@ -653,11 +723,11 @@ const JadwalModule = {
           <thead>
             <tr>
               <th style="width:45px;">Ruang</th>
-              <th style="width:110px;">Sesi / Waktu</th>
-              <th style="width:175px;">Nama Ruang & Peserta</th>
+              <th style="width:105px;">Sesi / Waktu</th>
+              <th style="width:170px;">Nama Ruang & Peserta</th>
               <th>Mata Pelajaran</th>
-              <th style="width:220px;">Guru Pengawas Ruang</th>
-              <th style="width:80px;">Paraf</th>
+              <th style="width:275px;">Guru Pengawas Ruang (2 Orang)</th>
+              <th style="width:75px;">Paraf</th>
             </tr>
           </thead>
           <tbody>
@@ -707,7 +777,6 @@ const JadwalModule = {
       year: 'numeric'
     });
 
-    // Kelompokkan per tanggal dan sesi agar tiap sesi/hari tercetak rapi dengan nomor urut baru
     let lastSessionKey = '';
     let rowCounter = 0;
 
@@ -725,29 +794,39 @@ const JadwalModule = {
         `;
       }
 
-      rowCounter++;
-      const isOdd = rowCounter % 2 === 1;
-      const ttdCellHtml = isOdd
-        ? `<td style="height:30px; text-align:left; padding-left:8px; font-size:10px; color:#334155;">${rowCounter}. ........................</td>`
-        : `<td style="height:30px; text-align:right; padding-right:8px; font-size:10px; color:#334155;">${rowCounter}. ........................</td>`;
+      // 1 ruang = 2 baris tanda tangan pengawas (Pengawas 1 & Pengawas 2)
+      const supervisors = [
+        { nama: r.pengawas1Nama, nip: r.pengawas1Nip, unassigned: r.isP1Unassigned, label: 'Pengawas 1' },
+        { nama: r.pengawas2Nama, nip: r.pengawas2Nip, unassigned: r.isP2Unassigned, label: 'Pengawas 2' }
+      ];
 
-      return `
-        ${groupBanner}
-        <tr>
-          <td style="text-align:center; font-weight:bold;">${rowCounter}</td>
-          <td>
-            <strong>${r.pengawasNama}</strong>
-            ${!r.isUnassigned && r.pengawasNip !== '-' ? `<br><span style="font-size:10px;color:#475569;">NIP. ${r.pengawasNip}</span>` : ''}
-          </td>
-          <td><strong>${r.ruangLabel}</strong></td>
-          <td>${r.mapel}</td>
-          <td style="text-align:center;">${r.jamMulai} - ${r.jamSelesai}</td>
-          ${ttdCellHtml}
-        </tr>
-      `;
+      return groupBanner + supervisors.map((sup, sIdx) => {
+        rowCounter++;
+        const isOdd = rowCounter % 2 === 1;
+        const ttdCellHtml = isOdd
+          ? `<td style="height:28px; text-align:left; padding-left:8px; font-size:10px; color:#334155;">${rowCounter}. ......................</td>`
+          : `<td style="height:28px; text-align:right; padding-right:8px; font-size:10px; color:#334155;">${rowCounter}. ......................</td>`;
+
+        const ruangCellHtml = sIdx === 0
+          ? `<td rowspan="2" style="vertical-align:middle;"><strong>${r.ruangLabel}</strong></td>
+             <td rowspan="2" style="vertical-align:middle;">${r.mapel}</td>`
+          : '';
+
+        return `
+          <tr>
+            <td style="text-align:center; font-weight:bold;">${rowCounter}</td>
+            <td>
+              <strong>${sup.nama}</strong> <span style="font-size:9.5px;color:#64748b;">(${sup.label})</span>
+              ${!sup.unassigned && sup.nip !== '-' ? `<br><span style="font-size:10px;color:#475569;">NIP. ${sup.nip}</span>` : ''}
+            </td>
+            ${ruangCellHtml}
+            ${ttdCellHtml}
+          </tr>
+        `;
+      }).join('');
     }).join('');
 
-    const printWin = window.open('', '_blank', 'width=1000,height=750');
+    const printWin = window.open('', '_blank', 'width=1000,height=780');
     if (!printWin) {
       alert("Pop-up diblokir oleh browser! Izinkan pop-up untuk mencetak daftar hadir pengawas.");
       return;
@@ -761,13 +840,14 @@ const JadwalModule = {
         <title>Daftar Hadir Pengawas Ruang Ujian - SMK Negeri 1 Wakatobi</title>
         <style>
           @page { size: A4 portrait; margin: 12mm; }
+          @media print { .no-print { display: none !important; } }
           body { font-family: Arial, Helvetica, sans-serif; color: #0f172a; font-size: 11px; margin: 0; }
           .kop { width: 100%; max-height: 110px; object-fit: contain; display: block; margin: 0 auto 8px auto; }
           .title { text-align: center; margin: 6px 0 14px 0; }
           .title h2 { margin: 0; font-size: 15px; text-transform: uppercase; letter-spacing: 0.5px; }
           .title p { margin: 3px 0 0 0; font-size: 12px; font-weight: bold; }
           table { width: 100%; border-collapse: collapse; margin-top: 6px; }
-          th, td { border: 1px solid #334155; padding: 6px 8px; vertical-align: middle; }
+          th, td { border: 1px solid #334155; padding: 5px 8px; vertical-align: middle; }
           th { background-color: #e2e8f0; font-weight: bold; text-align: center; text-transform: uppercase; font-size: 10px; }
           .ttd-wrap { width: 100%; margin-top: 24px; display: flex; justify-content: space-between; page-break-inside: avoid; }
           .ttd-box { width: 240px; text-align: left; font-size: 11px; line-height: 1.45; }
@@ -775,6 +855,7 @@ const JadwalModule = {
         </style>
       </head>
       <body>
+        ${this.getPrintToolbarHtml()}
         <img src="${kopUrl}" class="kop" alt="Kop Sekolah" onerror="this.style.display='none'">
         <div class="title">
           <h2>DAFTAR HADIR PENGAWAS RUANG UJIAN</h2>
@@ -785,11 +866,10 @@ const JadwalModule = {
           <thead>
             <tr>
               <th style="width:32px;">No</th>
-              <th style="width:205px;">Nama Guru Pengawas & NIP</th>
-              <th style="width:155px;">Ruang & Peserta</th>
+              <th style="width:225px;">Nama Guru Pengawas & NIP</th>
+              <th style="width:165px;">Ruang & Peserta</th>
               <th>Mata Pelajaran</th>
-              <th style="width:85px;">Waktu</th>
-              <th style="width:145px;">Tanda Tangan</th>
+              <th style="width:150px;">Tanda Tangan</th>
             </tr>
           </thead>
           <tbody>
@@ -814,6 +894,160 @@ const JadwalModule = {
           </div>
         </div>
 
+        <script>
+          window.onload = function() {
+            setTimeout(function() { window.print(); }, 400);
+          };
+        </script>
+      </body>
+      </html>
+    `);
+    printWin.document.close();
+  },
+
+  executePrintDaftarHadirSiswa() {
+    const rooms = this.lastMasterRooms || [];
+    if (rooms.length === 0) {
+      alert("Data siswa per ruang tidak ditemukan. Pastikan data siswa sudah terisi.");
+      return;
+    }
+
+    const kopUrl = (typeof CONFIG !== 'undefined' && CONFIG.KOP_SEKOLAH_URL)
+      ? CONFIG.KOP_SEKOLAH_URL
+      : 'https://nbwpnhshhpfqtmbwewgk.supabase.co/storage/v1/object/public/media-sekolah/kop_sekolah.png';
+
+    const todayStr = new Date().toLocaleDateString('id-ID', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
+
+    const pagesHtml = rooms.map((rm, rIdx) => {
+      const studentRows = (rm.students || []).map((s, idx) => {
+        const no = idx + 1;
+        const nisn = s.nisn || s.NISN || s.id_siswa || '-';
+        const nama = s.nama || s.nama_siswa || s.NAMA || '-';
+        const isOdd = no % 2 === 1;
+        const ttdCell = isOdd
+          ? `<td style="height:26px; text-align:left; padding-left:8px; font-size:10px; color:#334155;">${no}. ......................</td>`
+          : `<td style="height:26px; text-align:right; padding-right:8px; font-size:10px; color:#334155;">${no}. ......................</td>`;
+
+        return `
+          <tr>
+            <td style="text-align:center; font-weight:bold;">${no}</td>
+            <td style="text-align:center; font-family:monospace;">${nisn}</td>
+            <td>${nama}</td>
+            <td style="text-align:center;">${rm.kelasLabel}</td>
+            ${ttdCell}
+          </tr>
+        `;
+      }).join('');
+
+      return `
+        <div class="${rIdx > 0 ? 'page-break' : ''}">
+          <img src="${kopUrl}" class="kop" alt="Kop Sekolah" onerror="this.style.display='none'">
+          <div class="title">
+            <h2>DAFTAR HADIR PESERTA UJIAN</h2>
+            <p>SMK NEGERI 1 WAKATOBI &bull; TAHUN AJARAN 2026/2027</p>
+          </div>
+
+          <table class="meta-table">
+            <tr>
+              <td style="width:140px;"><strong>Ruang Ujian</strong></td>
+              <td style="width:240px;">: <strong>${rm.ruangLabel}</strong></td>
+              <td style="width:130px;"><strong>Hari / Tanggal</strong></td>
+              <td>: ....................................................</td>
+            </tr>
+            <tr>
+              <td><strong>Kelas / Rombel</strong></td>
+              <td>: ${rm.kelasLabel} (${rm.jumlahSiswa} Peserta)</td>
+              <td><strong>Mata Pelajaran</strong></td>
+              <td>: ....................................................</td>
+            </tr>
+            <tr>
+              <td><strong>Sesi / Pukul</strong></td>
+              <td>: Jam ke-1 / Jam ke-2 (....... - .......)</td>
+              <td><strong>Jumlah Hadir</strong></td>
+              <td>: Hadir: ...... | Tidak Hadir: ......</td>
+            </tr>
+          </table>
+
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th style="width:34px;">No</th>
+                <th style="width:115px;">NISN / ID</th>
+                <th>Nama Lengkap Peserta Ujian</th>
+                <th style="width:105px;">Kelas</th>
+                <th style="width:165px;">Tanda Tangan</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${studentRows}
+            </tbody>
+          </table>
+
+          <div class="ttd-wrap">
+            <div class="ttd-box">
+              Pengawas Ruang 1,
+              <div class="ttd-space"></div>
+              <strong>..................................................</strong><br>
+              NIP. ............................................
+            </div>
+            <div class="ttd-box">
+              Pengawas Ruang 2,
+              <div class="ttd-space"></div>
+              <strong>..................................................</strong><br>
+              NIP. ............................................
+            </div>
+            <div class="ttd-box">
+              Wangi-Wangi Selatan, ${todayStr}<br>
+              Wakasek Bidang Kurikulum,
+              <div class="ttd-space"></div>
+              <strong><u>Ajiardin, S.T., Gr.</u></strong><br>
+              NIP. ............................................
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    const printWin = window.open('', '_blank', 'width=1000,height=780');
+    if (!printWin) {
+      alert("Pop-up diblokir oleh browser! Izinkan pop-up untuk mencetak daftar hadir siswa.");
+      return;
+    }
+
+    printWin.document.write(`
+      <!DOCTYPE html>
+      <html lang="id">
+      <head>
+        <meta charset="UTF-8">
+        <title>Daftar Hadir Peserta Ujian per Ruang - SMK Negeri 1 Wakatobi</title>
+        <style>
+          @page { size: A4 portrait; margin: 11mm; }
+          @media print {
+            .no-print { display: none !important; }
+            .page-break { page-break-before: always; }
+          }
+          body { font-family: Arial, Helvetica, sans-serif; color: #0f172a; font-size: 11px; margin: 0; }
+          .kop { width: 100%; max-height: 105px; object-fit: contain; display: block; margin: 0 auto 6px auto; }
+          .title { text-align: center; margin: 4px 0 10px 0; }
+          .title h2 { margin: 0; font-size: 15px; text-transform: uppercase; letter-spacing: 0.5px; }
+          .title p { margin: 2px 0 0 0; font-size: 11.5px; font-weight: bold; }
+          .meta-table { width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 11px; }
+          .meta-table td { border: none; padding: 2px 4px; }
+          .data-table { width: 100%; border-collapse: collapse; }
+          .data-table th, .data-table td { border: 1px solid #334155; padding: 4.5px 7px; vertical-align: middle; }
+          .data-table th { background-color: #e2e8f0; font-weight: bold; text-align: center; text-transform: uppercase; font-size: 10px; }
+          .ttd-wrap { width: 100%; margin-top: 18px; display: flex; justify-content: space-between; page-break-inside: avoid; }
+          .ttd-box { width: 31%; text-align: left; font-size: 10.5px; line-height: 1.4; }
+          .ttd-space { height: 48px; }
+        </style>
+      </head>
+      <body>
+        ${this.getPrintToolbarHtml()}
+        ${pagesHtml}
         <script>
           window.onload = function() {
             setTimeout(function() { window.print(); }, 400);
