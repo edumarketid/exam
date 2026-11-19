@@ -725,7 +725,7 @@ const JadwalModule = {
 
     const kopUrl = (typeof CONFIG !== 'undefined' && CONFIG.KOP_SEKOLAH_URL)
       ? CONFIG.KOP_SEKOLAH_URL
-      : 'https://nbwpnhshhpfqtmbwewgk.supabase.co/storage/v1/object/public/media-sekolah/kop_sekolah.png';
+      : 'https://nbwpnhshhpfqtmbwewgk.supabase.co/storage/v1/object/public/media-sekolah/kop_sekolah2.jpg';
 
     const todayStr = new Date().toLocaleDateString('id-ID', {
       day: 'numeric',
@@ -912,7 +912,7 @@ const JadwalModule = {
 
     const kopUrl = (typeof CONFIG !== 'undefined' && CONFIG.KOP_SEKOLAH_URL)
       ? CONFIG.KOP_SEKOLAH_URL
-      : 'https://nbwpnhshhpfqtmbwewgk.supabase.co/storage/v1/object/public/media-sekolah/kop_sekolah.png';
+      : 'https://nbwpnhshhpfqtmbwewgk.supabase.co/storage/v1/object/public/media-sekolah/kop_sekolah2.jpg';
 
     // Kelompokkan allocations berdasarkan tanggal (1 hari = 1 halaman terpisah)
     const dayGroupsMap = {};
@@ -1080,7 +1080,7 @@ const JadwalModule = {
 
     const kopUrl = (typeof CONFIG !== 'undefined' && CONFIG.KOP_SEKOLAH_URL)
       ? CONFIG.KOP_SEKOLAH_URL
-      : 'https://nbwpnhshhpfqtmbwewgk.supabase.co/storage/v1/object/public/media-sekolah/kop_sekolah.png';
+      : 'https://nbwpnhshhpfqtmbwewgk.supabase.co/storage/v1/object/public/media-sekolah/kop_sekolah2.jpg';
 
     // Jika ada alokasi jadwal aktif, cetak daftar hadir per sesi & ruangan agar nama Pengawas 1, Pengawas 2, Mapel, & Tanggal terisi otomatis dari jadwal
     // Jika belum ada jadwal yang dibuat, tetap bisa cetak template per ruangan
