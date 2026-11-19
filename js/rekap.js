@@ -344,7 +344,7 @@ const RekapModule = {
   },
 
   // =========================================================================
-  // REKAP & CETAK NILAI (DILIPAT PER KELAS & PER MAPEL + HAPUS MASSAL)
+  // REKAP & CETAK NILAI (TERMASUK STATUS MENGERJAKAN AGAR BISA DIRESET/HAPUS)
   // =========================================================================
   async renderRekapNilai() {
     const container = document.getElementById('rekap-table-container');
@@ -362,7 +362,6 @@ const RekapModule = {
       }
 
       let hasilList = await this.fetchAndNormalizeHasil();
-      hasilList = hasilList.filter(h => h.status_selesai !== 'MENGERJAKAN');
 
       if (State.currentUser && State.currentUser.role === 'guru') {
         hasilList = hasilList.filter(h => this.isAllowedForCurrentUser(h.mapel, h.kelas));
@@ -489,7 +488,6 @@ const RekapModule = {
     sortedKeys.forEach(key => {
       groupIdx++;
       const group = groupedMap[key];
-      // Urutkan nama siswa sesuai abjad di dalam setiap grup
       const listSiswa = group.items.slice().sort((a, b) =>
         String(a.nama_siswa || '').localeCompare(String(b.nama_siswa || ''), 'id')
       );
@@ -498,7 +496,9 @@ const RekapModule = {
       const encKelas = encodeURIComponent(group.kelas);
       const encMapel = encodeURIComponent(group.mapel);
 
-      const scores = listSiswa.map(x => Number(x.nilai) || 0);
+      const finishedItems = listSiswa.filter(x => x.status_selesai !== 'MENGERJAKAN');
+      const mengerjakanCount = listSiswa.length - finishedItems.length;
+      const scores = finishedItems.map(x => Number(x.nilai) || 0);
       const avgScore = scores.length > 0 ? (scores.reduce((s, v) => s + v, 0) / scores.length).toFixed(1) : '0.0';
       const tuntasCount = scores.filter(s => s >= 75).length;
 
@@ -506,16 +506,24 @@ const RekapModule = {
       listSiswa.forEach((h, idx) => {
         const safeNama = String(h.nama_siswa).replace(/'/g, "\\'");
         const safeMapel = String(h.mapel).replace(/'/g, "\\'");
+        const isMengerjakan = h.status_selesai === 'MENGERJAKAN';
+        const isDiskualifikasi = h.status_selesai === 'DIDISKUALIFIKASI';
+
+        let statusBadgeClass = 'bg-emerald-100 text-emerald-700';
+        if (isMengerjakan) statusBadgeClass = 'bg-blue-100 text-blue-700 animate-pulse';
+        if (isDiskualifikasi) statusBadgeClass = 'bg-rose-100 text-rose-700';
 
         rowsHtml += `
-          <tr class="hover:bg-slate-50 transition">
+          <tr class="hover:bg-slate-50 transition ${isMengerjakan ? 'bg-blue-50/40' : ''}">
             <td class="p-2.5 text-center font-bold text-slate-500">${idx + 1}</td>
             <td class="p-2.5 font-bold text-slate-800">${h.nama_siswa}</td>
             <td class="p-2.5 text-center font-mono text-slate-600">${h.nisn || '-'}</td>
-            <td class="p-2.5 text-center font-extrabold text-sm ${Number(h.nilai) >= 75 ? 'text-emerald-700' : 'text-rose-600'}">${h.nilai}</td>
+            <td class="p-2.5 text-center font-extrabold text-sm ${isMengerjakan ? 'text-blue-600' : (Number(h.nilai) >= 75 ? 'text-emerald-700' : 'text-rose-600')}">
+              ${isMengerjakan ? '-' : h.nilai}
+            </td>
             <td class="p-2.5 text-center"><span class="font-bold text-amber-700">${h.jumlah_pelanggaran}x</span></td>
             <td class="p-2.5 text-center">
-              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${h.status_selesai === 'DIDISKUALIFIKASI' ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}">
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${statusBadgeClass}">
                 ${h.status_selesai}
               </span>
             </td>
@@ -529,6 +537,10 @@ const RekapModule = {
           </tr>
         `;
       });
+
+      const infoMengerjakan = mengerjakanCount > 0
+        ? ` • <span class="text-sky-300 font-bold">Mengerjakan: ${mengerjakanCount}</span>`
+        : '';
 
       const groupBox = document.createElement('div');
       groupBox.className = "bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-3 transition hover:border-ocean-300";
@@ -547,7 +559,7 @@ const RekapModule = {
                 <h4 class="font-bold text-sm tracking-wide text-white">${group.mapel}</h4>
               </div>
               <p class="text-[11px] text-ocean-200 mt-0.5">
-                Peserta: <strong>${listSiswa.length} Siswa</strong> • Rata-Rata: <strong>${avgScore}</strong> • Tuntas (≥75): <strong>${tuntasCount}/${listSiswa.length}</strong>
+                Tercatat: <strong>${listSiswa.length} Siswa</strong>${infoMengerjakan} • Rata-Rata: <strong>${avgScore}</strong> • Tuntas (≥75): <strong>${tuntasCount}/${finishedItems.length}</strong>
               </p>
             </div>
           </div>
@@ -576,7 +588,7 @@ const RekapModule = {
 
             <button type="button"
                     onclick="RekapModule.deleteGroupHasil('${encKelas}', '${encMapel}', ${listSiswa.length})"
-                    title="Hapus Seluruh Data Nilai Kelas & Mapel Ini (Cocok untuk Bersihkan Data Simulasi / Gladi)"
+                    title="Hapus Seluruh Data Nilai & Sesi Mengerjakan Kelas & Mapel Ini"
                     class="bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] px-2.5 py-1.5 rounded-lg shadow transition flex items-center gap-1">
               <span>🗑️ Hapus Data</span>
             </button>
@@ -624,7 +636,7 @@ const RekapModule = {
       `Kelas          : ${kelas}\n` +
       `Mata Pelajaran : ${mapel}\n` +
       `Jumlah Data    : ${jumlahRecord} Siswa\n\n` +
-      `Seluruh riwayat & nilai ujian pada kelas dan mata pelajaran ini akan DIHAPUS PERMANEN dari database.\n` +
+      `Seluruh riwayat, status mengerjakan, & nilai ujian pada kelas dan mata pelajaran ini akan DIHAPUS PERMANEN dari database.\n` +
       `(Gunakan fitur ini untuk membersihkan data hasil Simulasi / Gladi Bersih sebelum ujian utama).\n\n` +
       `Apakah Anda yakin ingin menghapus semua data tersebut?`
     );
@@ -651,7 +663,7 @@ const RekapModule = {
         }
       }
 
-      alert(`Berhasil menghapus seluruh ${idsToDelete.length} data nilai untuk Kelas "${kelas}" - Mapel "${mapel}"!`);
+      alert(`Berhasil menghapus seluruh ${idsToDelete.length} data ujian untuk Kelas "${kelas}" - Mapel "${mapel}"!`);
       await this.renderRekapNilai();
       await this.refreshMonitoringData();
     } catch (err) {
@@ -669,7 +681,7 @@ const RekapModule = {
       `KONFIRMASI RESET UJIAN SISWA\n\n` +
       `Nama Siswa : ${namaSiswa}\n` +
       `Mata Ujian : ${mapel}\n\n` +
-      `Nilai dan status selesai siswa ini akan DIHAPUS sehingga siswa dapat mengikuti ujian ulang dari awal.\n\n` +
+      `Nilai dan status ujian siswa ini akan DIHAPUS sehingga siswa dapat mengikuti ujian ulang dari awal.\n\n` +
       `Apakah Anda yakin ingin melanjutkan?`
     );
 
@@ -987,7 +999,7 @@ const RekapModule = {
     }
 
     if (listToPrint.length === 0) {
-      alert("Tidak ada data hasil ujian yang dapat dicetak!");
+      alert("Tidak ada data hasil ujian yang sudah selesai untuk dicetak!");
       return;
     }
 
