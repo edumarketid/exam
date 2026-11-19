@@ -725,7 +725,7 @@ const JadwalModule = {
 
     const kopUrl = (typeof CONFIG !== 'undefined' && CONFIG.KOP_SEKOLAH_URL)
       ? CONFIG.KOP_SEKOLAH_URL
-      : 'https://nbwpnhshhpfqtmbwewgk.supabase.co/storage/v1/object/public/media-sekolah/kop_sekolah2.jpg';
+      : 'https://nbwpnhshhpfqtmbwewgk.supabase.co/storage/v1/object/public/media-sekolah/kop_sekolah.png';
 
     const todayStr = new Date().toLocaleDateString('id-ID', {
       day: 'numeric',
