@@ -6,6 +6,22 @@ const RekapModule = {
     return String(str || '').replace(/\s+/g, ' ').trim().toUpperCase();
   },
 
+  extractKepalaSekolah(rawGuruList) {
+    const list = Array.isArray(rawGuruList) ? rawGuruList : [];
+    if (list.length === 0) {
+      return {
+        nama: '..................................................',
+        nip: '............................................'
+      };
+    }
+    // Aturan: nama pertama di tabel guru adalah Kepala Sekolah
+    const firstRow = list[0];
+    const nama = String(firstRow.nama_guru || firstRow.nama || '').trim() || '..................................................';
+    const rawNip = String(firstRow.nip || '').trim();
+    const nip = (rawNip && rawNip !== '-') ? rawNip : '............................................';
+    return { nama, nip };
+  },
+
   getGuruPairs() {
     if (!State.currentUser || State.currentUser.role !== 'guru') return [];
     if (typeof GuruModule !== 'undefined' && typeof GuruModule.getGuruPairs === 'function') {
@@ -395,9 +411,6 @@ const RekapModule = {
             <button type="button" onclick="RekapModule.printBeritaAcara()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg shadow transition">
               📋 Berita Acara
             </button>
-            <button type="button" onclick="RekapModule.printDaftarHadir()" class="bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg shadow transition">
-              ✍️ Daftar Hadir
-            </button>
           </div>
           <div class="text-xs text-slate-500 font-bold">
             Total Record: <span id="rekap-total-count" class="text-ocean-700 font-extrabold">${hasilList.length}</span> Siswa
@@ -580,13 +593,6 @@ const RekapModule = {
             </button>
 
             <button type="button"
-                    onclick="RekapModule.printDaftarHadir('${encKelas}', '${encMapel}')"
-                    title="Cetak Daftar Hadir Kelas Ini"
-                    class="bg-teal-600 hover:bg-teal-700 text-white font-bold text-[11px] px-2.5 py-1.5 rounded-lg shadow transition hidden md:flex items-center gap-1">
-              <span>✍️ Daftar Hadir</span>
-            </button>
-
-            <button type="button"
                     onclick="RekapModule.deleteGroupHasil('${encKelas}', '${encMapel}', ${listSiswa.length})"
                     title="Hapus Seluruh Data Nilai & Sesi Mengerjakan Kelas & Mapel Ini"
                     class="bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] px-2.5 py-1.5 rounded-lg shadow transition flex items-center gap-1">
@@ -710,7 +716,9 @@ const RekapModule = {
     }
 
     try {
-      const listGuru = await DB.fetchGuru();
+      const listGuru = (typeof GuruModule !== 'undefined' && Array.isArray(GuruModule.guruList) && GuruModule.guruList.length > 0)
+        ? GuruModule.guruList
+        : await DB.fetchGuru();
       if (filterMapel !== 'ALL') {
         const targetM = this.normalizeText(filterMapel);
         const foundG = listGuru.find(g => {
@@ -743,46 +751,202 @@ const RekapModule = {
       return;
     }
 
+    // Ambil Kepala Sekolah dari baris pertama daftar guru (tanpa query ulang jika sudah dimuat)
+    const rawGuru = (typeof GuruModule !== 'undefined' && Array.isArray(GuruModule.guruList) && GuruModule.guruList.length > 0)
+      ? GuruModule.guruList
+      : await DB.fetchGuru();
+    const kepsek = (typeof JadwalModule !== 'undefined' && JadwalModule.lastKepalaSekolah && JadwalModule.lastKepalaSekolah.nama && !JadwalModule.lastKepalaSekolah.nama.startsWith('.'))
+      ? JadwalModule.lastKepalaSekolah
+      : this.extractKepalaSekolah(rawGuru);
+
+    // Pastikan alokasi ruang & pengawas tersedia agar Pengawas 1 & 2 sesuai jadwal ruang
+    let matchedAllocations = [];
+    if (typeof JadwalModule !== 'undefined') {
+      if (!Array.isArray(JadwalModule.lastGeneratedAllocation) || JadwalModule.lastGeneratedAllocation.length === 0) {
+        if (!State.schedules || State.schedules.length === 0) {
+          State.schedules = await DB.fetchSchedules();
+        }
+        if (typeof JadwalModule.buildRoomAndSupervisorAllocation === 'function') {
+          await JadwalModule.buildRoomAndSupervisorAllocation('ALL');
+        }
+      }
+
+      const normKelas = this.normalizeText(filterKelas);
+      const normMapel = this.normalizeText(filterMapel);
+      matchedAllocations = (JadwalModule.lastGeneratedAllocation || []).filter(a =>
+        this.normalizeText(a.kelas) === normKelas &&
+        String(a.mapel || '').split('/').some(mPart => this.normalizeText(mPart) === normMapel)
+      );
+    }
+
     const siswaList = State.siswaList && State.siswaList.length > 0 ? State.siswaList : await DB.fetchSiswa();
-    const pesertaKelas = siswaList.filter(s =>
-      String(s.status).toLowerCase() === 'aktif' &&
-      this.normalizeText(s.kelas) === this.normalizeText(filterKelas)
-    );
+    const pesertaKelasAll = siswaList
+      .filter(s => String(s.status).toLowerCase() === 'aktif' && this.normalizeText(s.kelas) === this.normalizeText(filterKelas))
+      .sort((a, b) => String(a.nama || '').localeCompare(String(b.nama || ''), 'id'));
 
     const hasilList = await this.fetchAndNormalizeHasil();
-    const hasilPaket = hasilList.filter(h =>
+    const hasilPaketAll = hasilList.filter(h =>
       this.normalizeText(h.kelas) === this.normalizeText(filterKelas) &&
       this.normalizeText(h.mapel) === this.normalizeText(filterMapel)
     );
 
-    const hadirIds = new Set(hasilPaket.map(h => String(h.id_siswa || h.nisn || h.nama_siswa).trim().toUpperCase()));
-    const tidakHadirList = pesertaKelas.filter(s => {
-      const k1 = String(s.id_siswa || '').trim().toUpperCase();
-      const k2 = String(s.nisn || s.NISN || '').trim().toUpperCase();
-      const k3 = String(s.nama || '').trim().toUpperCase();
-      return !hadirIds.has(k1) && !hadirIds.has(k2) && !hadirIds.has(k3);
-    });
-
-    const jmlTerdaftar = pesertaKelas.length;
-    const jmlTidakHadir = tidakHadirList.length;
-    const jmlHadir = Math.max(0, jmlTerdaftar - jmlTidakHadir);
-    const pelanggarList = hasilPaket.filter(h => h.status_selesai === 'DIDISKUALIFIKASI' || Number(h.jumlah_pelanggaran) > 0);
-
-    const ttd = await this.resolvePenandatangan(filterMapel, filterKelas);
-    const kopUrl = "https://nbwpnhshhpfqtmbwewgk.supabase.co/storage/v1/object/public/media-sekolah/kop_sekolah.png";
+    const fallbackTtd = await this.resolvePenandatangan(filterMapel, filterKelas);
+    const kopUrl = (typeof CONFIG !== 'undefined' && CONFIG.KOP_SEKOLAH_URL)
+      ? CONFIG.KOP_SEKOLAH_URL
+      : "https://nbwpnhshhpfqtmbwewgk.supabase.co/storage/v1/object/public/media-sekolah/kop_sekolah.png";
     const now = new Date();
-    const hariStr = now.toLocaleDateString('id-ID', { weekday: 'long' });
-    const tglStr = now.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+    const defaultHariStr = now.toLocaleDateString('id-ID', { weekday: 'long' });
+    const defaultTglStr = now.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
 
-    const tidakHadirText = tidakHadirList.length > 0
-      ? tidakHadirList.map((s, i) => `${i + 1}. ${s.nama} (NISN: ${s.nisn || s.NISN || '-'})`).join('<br>')
-      : 'Nihil (Seluruh peserta hadir mengikuti ujian)';
+    const roomSheets = matchedAllocations.length > 0
+      ? matchedAllocations.map(alloc => ({
+          ruangLabel: alloc.ruangLabel,
+          tanggalFormatted: alloc.tanggalFormatted || `${defaultHariStr}, ${defaultTglStr}`,
+          sesiWaktu: `${alloc.sesiLabel} (${alloc.jamMulai} - ${alloc.jamSelesai} WITA)`,
+          students: (Array.isArray(alloc.students) && alloc.students.length > 0) ? alloc.students : pesertaKelasAll,
+          pengawas1Nama: alloc.pengawas1Nama || fallbackTtd.nama,
+          pengawas1Nip: (alloc.pengawas1Nip && alloc.pengawas1Nip !== '-') ? alloc.pengawas1Nip : '............................................',
+          pengawas2Nama: alloc.pengawas2Nama || '..................................................',
+          pengawas2Nip: (alloc.pengawas2Nip && alloc.pengawas2Nip !== '-') ? alloc.pengawas2Nip : '............................................'
+        }))
+      : [{
+          ruangLabel: filterKelas,
+          tanggalFormatted: `${defaultHariStr}, ${defaultTglStr}`,
+          sesiWaktu: '-',
+          students: pesertaKelasAll,
+          pengawas1Nama: fallbackTtd.nama,
+          pengawas1Nip: (fallbackTtd.nip && fallbackTtd.nip !== '-') ? fallbackTtd.nip : '............................................',
+          pengawas2Nama: '..................................................',
+          pengawas2Nip: '............................................'
+        }];
 
-    const catatanPelanggaran = pelanggarList.length > 0
-      ? `Terdapat ${pelanggarList.length} peserta tercatat melanggar tata tertib keamanan CBT (${pelanggarList.map(p => `${p.nama_siswa}: ${p.status_selesai}`).join('; ')}).`
-      : 'Pelaksanaan ujian berjalan dengan tertib, aman, dan lancar tanpa kendala teknis yang berarti.';
+    const pagesHtml = roomSheets.map((sheet, sheetIdx) => {
+      const pesertaRuang = sheet.students || [];
+      const roomKeys = new Set();
+      pesertaRuang.forEach(s => {
+        const k1 = String(s.id_siswa || '').trim().toUpperCase();
+        const k2 = String(s.nisn || s.NISN || '').trim().toUpperCase();
+        const k3 = String(s.nama || '').trim().toUpperCase();
+        if (k1) roomKeys.add(k1);
+        if (k2) roomKeys.add(k2);
+        if (k3) roomKeys.add(k3);
+      });
+
+      const hasilRuang = matchedAllocations.length > 1
+        ? hasilPaketAll.filter(h => {
+            const hk1 = String(h.id_siswa || '').trim().toUpperCase();
+            const hk2 = String(h.nisn || '').trim().toUpperCase();
+            const hk3 = String(h.nama_siswa || '').trim().toUpperCase();
+            return roomKeys.has(hk1) || roomKeys.has(hk2) || roomKeys.has(hk3);
+          })
+        : hasilPaketAll;
+
+      const hadirIds = new Set();
+      hasilRuang.forEach(h => {
+        const hk1 = String(h.id_siswa || '').trim().toUpperCase();
+        const hk2 = String(h.nisn || '').trim().toUpperCase();
+        const hk3 = String(h.nama_siswa || '').trim().toUpperCase();
+        if (hk1) hadirIds.add(hk1);
+        if (hk2) hadirIds.add(hk2);
+        if (hk3) hadirIds.add(hk3);
+      });
+
+      const tidakHadirList = pesertaRuang.filter(s => {
+        const k1 = String(s.id_siswa || '').trim().toUpperCase();
+        const k2 = String(s.nisn || s.NISN || '').trim().toUpperCase();
+        const k3 = String(s.nama || '').trim().toUpperCase();
+        return !hadirIds.has(k1) && !hadirIds.has(k2) && !hadirIds.has(k3);
+      });
+
+      const jmlTerdaftar = pesertaRuang.length;
+      const jmlTidakHadir = tidakHadirList.length;
+      const jmlHadir = Math.max(0, jmlTerdaftar - jmlTidakHadir);
+      const pelanggarList = hasilRuang.filter(h => h.status_selesai === 'DIDISKUALIFIKASI' || Number(h.jumlah_pelanggaran) > 0);
+
+      const tidakHadirText = tidakHadirList.length > 0
+        ? tidakHadirList.map((s, i) => `${i + 1}. ${s.nama} (NISN: ${s.nisn || s.NISN || '-'})`).join('<br>')
+        : 'Nihil (Seluruh peserta hadir mengikuti ujian)';
+
+      const catatanPelanggaran = pelanggarList.length > 0
+        ? `Terdapat ${pelanggarList.length} peserta tercatat melanggar tata tertib keamanan CBT (${pelanggarList.map(p => `${p.nama_siswa}: ${p.status_selesai}`).join('; ')}).`
+        : 'Pelaksanaan ujian berjalan dengan tertib, aman, dan lancar tanpa kendala teknis yang berarti.';
+
+      return `
+        <div class="${sheetIdx > 0 ? 'page-break' : ''}">
+          <div class="mb-3 border-b-4 border-double border-slate-900 pb-2 text-center">
+            <img src="${kopUrl}" alt="Kop Surat SMKN 1 Wakatobi" class="w-full max-h-28 object-contain mx-auto"
+                 onerror="this.style.display='none';">
+          </div>
+
+          <div class="text-center mb-4">
+            <h4 class="font-bold text-sm uppercase underline tracking-wide">BERITA ACARA PELAKSANAAN UJIAN SUMATIF BERBASIS KOMPUTER (CBT)</h4>
+            <p class="text-xs mt-0.5 font-semibold">SMK NEGERI 1 WAKATOBI &bull; TAHUN AJARAN 2026/2027</p>
+          </div>
+
+          <p class="text-justify text-xs mb-3">
+            Pada hari/tanggal <strong>${sheet.tanggalFormatted}</strong>${sheet.sesiWaktu !== '-' ? ` sesi <strong>${sheet.sesiWaktu}</strong>` : ''}, telah diselenggarakan Ujian Sumatif Berbasis Komputer (<em>Computer Based Test</em>) di <strong>SMK Negeri 1 Wakatobi</strong> dengan rincian sebagai berikut:
+          </p>
+
+          <table class="w-full text-xs mb-3">
+            <tr><td class="py-0.5 w-48">1. Satuan Pendidikan</td><td class="w-4">:</td><td class="font-bold">SMK Negeri 1 Wakatobi</td></tr>
+            <tr><td class="py-0.5">2. Ruang Ujian</td><td>:</td><td class="font-bold">${sheet.ruangLabel}</td></tr>
+            <tr><td class="py-0.5">3. Mata Pelajaran</td><td>:</td><td class="font-bold">${filterMapel}</td></tr>
+            <tr><td class="py-0.5">4. Kelas / Rombel</td><td>:</td><td class="font-bold">${filterKelas}</td></tr>
+            <tr><td class="py-0.5">5. Jumlah Peserta Terdaftar</td><td>:</td><td><strong>${jmlTerdaftar}</strong> orang</td></tr>
+            <tr><td class="py-0.5">6. Jumlah Peserta Hadir</td><td>:</td><td><strong>${jmlHadir}</strong> orang</td></tr>
+            <tr><td class="py-0.5">7. Jumlah Peserta Tidak Hadir</td><td>:</td><td><strong>${jmlTidakHadir}</strong> orang</td></tr>
+          </table>
+
+          <div class="mb-2.5">
+            <p class="font-bold text-xs mb-1">Daftar Peserta Tidak Hadir:</p>
+            <div class="border border-slate-400 rounded p-2 text-xs bg-slate-50">${tidakHadirText}</div>
+          </div>
+
+          <div class="mb-4">
+            <p class="font-bold text-xs mb-1">Catatan Selama Pelaksanaan Ujian:</p>
+            <div class="border border-slate-400 rounded p-2 text-xs min-h-[44px]">${catatanPelanggaran}</div>
+          </div>
+
+          <p class="text-justify text-xs mb-4">
+            Demikian Berita Acara ini dibuat dengan sesungguhnya untuk dipergunakan sebagaimana mestinya.
+          </p>
+
+          <div class="ttd-section">
+            <div class="ttd-pengawas-row">
+              <div class="ttd-box">
+                Pengawas Ruang 1,
+                <div class="ttd-space"></div>
+                <strong><u>${sheet.pengawas1Nama}</u></strong><br>
+                NIP. ${sheet.pengawas1Nip}
+              </div>
+              <div class="ttd-box">
+                Pengawas Ruang 2,
+                <div class="ttd-space"></div>
+                <strong><u>${sheet.pengawas2Nama}</u></strong><br>
+                NIP. ${sheet.pengawas2Nip}
+              </div>
+            </div>
+
+            <div class="ttd-kepsek-center">
+              <div class="ttd-box-center">
+                Mengetahui,<br>
+                Kepala SMK Negeri 1 Wakatobi,
+                <div class="ttd-space"></div>
+                <strong><u>${kepsek.nama}</u></strong><br>
+                NIP. ${kepsek.nip}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
 
     const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert("Pop-up diblokir oleh browser! Izinkan pop-up untuk mencetak Berita Acara.");
+      return;
+    }
+
     const html = `
       <!DOCTYPE html>
       <html lang="id">
@@ -791,182 +955,19 @@ const RekapModule = {
         <title>BERITA ACARA UJIAN - ${filterMapel} (${filterKelas})</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <style>
-          @page { size: A4 portrait; margin: 15mm; }
-          body { font-family: 'Times New Roman', serif; color: #0f172a; font-size: 11.5pt; line-height: 1.5; }
-        </style>
-      </head>
-      <body class="p-4 bg-white" onload="window.print()">
-        <div class="mb-4 border-b-4 border-double border-slate-900 pb-2 text-center">
-          <img src="${kopUrl}" alt="Kop Surat SMKN 1 Wakatobi" class="w-full max-h-32 object-contain mx-auto"
-               onerror="this.style.display='none'; document.getElementById('fallback-ba').style.display='block';">
-          <div id="fallback-ba" class="hidden text-center">
-            <h1 class="font-bold text-sm uppercase">PEMERINTAH PROVINSI SULAWESI TENGGARA</h1>
-            <h2 class="font-bold text-base uppercase">DINAS PENDIDIKAN DAN KEBUDAYAAN</h2>
-            <h3 class="font-extrabold text-lg uppercase">SMK NEGERI 1 WAKATOBI</h3>
-          </div>
-        </div>
-
-        <div class="text-center mb-5">
-          <h4 class="font-bold text-sm uppercase underline tracking-wide">BERITA ACARA PELAKSANAAN UJIAN SUMATIF BERBASIS KOMPUTER (CBT)</h4>
-          <p class="text-xs mt-0.5">Tahun Ajaran 2026/2027</p>
-        </div>
-
-        <p class="text-justify mb-3">
-          Pada hari ini <strong>${hariStr}</strong> tanggal <strong>${tglStr}</strong>, telah diselenggarakan Ujian Sumatif Berbasis Komputer (<em>Computer Based Test</em>) di <strong>SMK Negeri 1 Wakatobi</strong> dengan rincian sebagai berikut:
-        </p>
-
-        <table class="w-full text-xs mb-4">
-          <tr><td class="py-1 w-48">1. Satuan Pendidikan</td><td class="w-4">:</td><td class="font-bold">SMK Negeri 1 Wakatobi</td></tr>
-          <tr><td class="py-1">2. Mata Pelajaran</td><td>:</td><td class="font-bold">${filterMapel}</td></tr>
-          <tr><td class="py-1">3. Kelas / Rombel</td><td>:</td><td class="font-bold">${filterKelas}</td></tr>
-          <tr><td class="py-1">4. Jumlah Peserta Terdaftar</td><td>:</td><td><strong>${jmlTerdaftar}</strong> orang</td></tr>
-          <tr><td class="py-1">5. Jumlah Peserta Hadir</td><td>:</td><td><strong>${jmlHadir}</strong> orang</td></tr>
-          <tr><td class="py-1">6. Jumlah Peserta Tidak Hadir</td><td>:</td><td><strong>${jmlTidakHadir}</strong> orang</td></tr>
-        </table>
-
-        <div class="mb-3">
-          <p class="font-bold text-xs mb-1">Daftar Peserta Tidak Hadir:</p>
-          <div class="border border-slate-400 rounded p-2.5 text-xs bg-slate-50">${tidakHadirText}</div>
-        </div>
-
-        <div class="mb-6">
-          <p class="font-bold text-xs mb-1">Catatan Selama Pelaksanaan Ujian:</p>
-          <div class="border border-slate-400 rounded p-2.5 text-xs min-h-[54px]">${catatanPelanggaran}</div>
-        </div>
-
-        <p class="text-justify text-xs mb-6">
-          Demikian Berita Acara ini dibuat dengan sesungguhnya untuk dipergunakan sebagaimana mestinya.
-        </p>
-
-        <div class="flex justify-between items-end text-xs pt-2">
-          <div class="text-left w-60">
-            <p>Mengetahui,</p>
-            <p class="font-bold">Plt. Kepala Sekolah</p>
-            <div class="h-16"></div>
-            <p class="font-bold underline">Abdul Kaharuddin, S.Pd.I.</p>
-            <p>NIP. 197511222010011007</p>
-          </div>
-          <div class="text-left w-64">
-            <p>Wangi-Wangi, ${tglStr}</p>
-            <p class="font-bold">Pengawas Ruang / Guru Mapel</p>
-            <div class="h-16"></div>
-            <p class="font-bold underline">${ttd.nama}</p>
-            <p>NIP. ${ttd.nip}</p>
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
-    printWindow.document.write(html);
-    printWindow.document.close();
-  },
-
-  async printDaftarHadir(encodedKelas = null, encodedMapel = null) {
-    const filterKelas = encodedKelas
-      ? decodeURIComponent(encodedKelas).trim()
-      : (document.getElementById('rekap-filter-kelas')?.value || 'ALL').trim();
-    const filterMapel = encodedMapel
-      ? decodeURIComponent(encodedMapel).trim()
-      : (document.getElementById('rekap-filter-mapel')?.value || 'ALL').trim();
-
-    if (filterKelas === 'ALL') {
-      alert("Silakan pilih Kelas pada dropdown filter (atau klik tombol Daftar Hadir pada grup kelas) terlebih dahulu sebelum mencetak!");
-      return;
-    }
-
-    const siswaList = State.siswaList && State.siswaList.length > 0 ? State.siswaList : await DB.fetchSiswa();
-    const pesertaKelas = siswaList
-      .filter(s => String(s.status).toLowerCase() === 'aktif' && this.normalizeText(s.kelas) === this.normalizeText(filterKelas))
-      .sort((a, b) => String(a.nama).localeCompare(String(b.nama), 'id'));
-
-    if (pesertaKelas.length === 0) {
-      alert(`Tidak ditemukan data siswa aktif pada kelas ${filterKelas}.`);
-      return;
-    }
-
-    const ttd = await this.resolvePenandatangan(filterMapel, filterKelas);
-    const kopUrl = "https://nbwpnhshhpfqtmbwewgk.supabase.co/storage/v1/object/public/media-sekolah/kop_sekolah.png";
-    const tglStr = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
-
-    let rowsHtml = '';
-    pesertaKelas.forEach((s, idx) => {
-      const ttdCell = idx % 2 === 0
-        ? `<td class="p-2 border border-slate-400 text-left w-28">${idx + 1}. ..........</td><td class="p-2 border border-slate-400 w-28"></td>`
-        : `<td class="p-2 border border-slate-400 w-28"></td><td class="p-2 border border-slate-400 text-left w-28">${idx + 1}. ..........</td>`;
-
-      rowsHtml += `
-        <tr>
-          <td class="p-2 border border-slate-400 text-center font-bold">${idx + 1}</td>
-          <td class="p-2 border border-slate-400 text-center font-mono">${s.nisn || s.NISN || '-'}</td>
-          <td class="p-2 border border-slate-400 font-bold">${s.nama}</td>
-          ${ttdCell}
-        </tr>
-      `;
-    });
-
-    const printWindow = window.open('', '_blank');
-    const html = `
-      <!DOCTYPE html>
-      <html lang="id">
-      <head>
-        <meta charset="UTF-8">
-        <title>DAFTAR HADIR PESERTA UJIAN - ${filterKelas}</title>
-        <script src="https://cdn.tailwindcss.com"></script>
-        <style>
           @page { size: A4 portrait; margin: 12mm; }
-          body { font-family: 'Inter', sans-serif; color: #0f172a; font-size: 10pt; }
+          @media print { .page-break { page-break-before: always; } }
+          body { font-family: Arial, Helvetica, sans-serif; color: #0f172a; font-size: 11px; line-height: 1.45; }
+          .ttd-section { width: 100%; margin-top: 14px; page-break-inside: avoid; }
+          .ttd-pengawas-row { width: 100%; display: flex; justify-content: space-between; padding: 0 24px; box-sizing: border-box; }
+          .ttd-box { width: 235px; text-align: left; font-size: 10.5px; line-height: 1.35; }
+          .ttd-kepsek-center { width: 100%; margin-top: 10px; display: flex; justify-content: center; }
+          .ttd-box-center { width: 260px; text-align: center; font-size: 10.5px; line-height: 1.35; }
+          .ttd-space { height: 42px; }
         </style>
       </head>
-      <body class="p-4 bg-white" onload="window.print()">
-        <div class="mb-4 border-b-4 border-double border-slate-900 pb-2 text-center">
-          <img src="${kopUrl}" alt="Kop Surat SMKN 1 Wakatobi" class="w-full max-h-32 object-contain mx-auto"
-               onerror="this.style.display='none'; document.getElementById('fallback-dh').style.display='block';">
-          <div id="fallback-dh" class="hidden text-center">
-            <h1 class="font-extrabold text-sm uppercase">PEMERINTAH PROVINSI SULAWESI TENGGARA</h1>
-            <h2 class="font-bold text-base uppercase">DINAS PENDIDIKAN DAN KEBUDAYAAN</h2>
-            <h3 class="font-black text-lg uppercase">SMK NEGERI 1 WAKATOBI</h3>
-          </div>
-        </div>
-
-        <div class="text-center mb-4">
-          <h4 class="font-bold text-sm uppercase underline">DAFTAR HADIR PESERTA UJIAN SUMATIF BERBASIS KOMPUTER (CBT)</h4>
-          <p class="text-xs text-slate-600 mt-1">
-            Kelas: <strong>${filterKelas}</strong> | 
-            Mata Pelajaran: <strong>${filterMapel === 'ALL' ? 'Semua Mata Pelajaran' : filterMapel}</strong> | 
-            Tanggal: <strong>${tglStr}</strong>
-          </p>
-        </div>
-
-        <table class="w-full text-left border-collapse border border-slate-400 text-xs mb-6">
-          <thead>
-            <tr class="bg-slate-100 text-[10px] font-bold uppercase text-center">
-              <th class="p-2 border border-slate-400 w-10">NO</th>
-              <th class="p-2 border border-slate-400 w-28">NISN</th>
-              <th class="p-2 border border-slate-400">NAMA LENGKAP PESERTA</th>
-              <th class="p-2 border border-slate-400" colspan="2">TANDA TANGAN</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rowsHtml}
-          </tbody>
-        </table>
-
-        <div class="flex justify-between items-end text-xs pt-2">
-          <div class="text-left w-60">
-            <p>Mengetahui,</p>
-            <p class="font-bold">Plt. Kepala Sekolah</p>
-            <div class="h-16"></div>
-            <p class="font-bold underline">Abdul Kaharuddin, S.Pd.I.</p>
-            <p class="text-[10px] text-slate-500">NIP. 197511222010011007</p>
-          </div>
-          <div class="text-left w-64">
-            <p>Wangi-Wangi, ${tglStr}</p>
-            <p class="font-bold">Pengawas Ruang / Guru Mapel</p>
-            <div class="h-16"></div>
-            <p class="font-bold underline">${ttd.nama}</p>
-            <p class="text-[10px] text-slate-500">NIP. ${ttd.nip}</p>
-          </div>
-        </div>
+      <body class="p-3 bg-white" onload="setTimeout(function(){ window.print(); }, 400)">
+        ${pagesHtml}
       </body>
       </html>
     `;
