@@ -6,20 +6,26 @@ const RekapModule = {
     return String(str || '').replace(/\s+/g, ' ').trim().toUpperCase();
   },
 
-  extractKepalaSekolah(rawGuruList) {
-    const list = Array.isArray(rawGuruList) ? rawGuruList : [];
-    if (list.length === 0) {
-      return {
-        nama: '..................................................',
-        nip: '............................................'
-      };
+  getKopUrl() {
+    if (typeof DB !== 'undefined' && typeof DB.getKopSekolahUrl === 'function') {
+      return DB.getKopSekolahUrl();
     }
-    // Aturan: nama pertama di tabel guru adalah Kepala Sekolah
-    const firstRow = list[0];
-    const nama = String(firstRow.nama_guru || firstRow.nama || '').trim() || '..................................................';
-    const rawNip = String(firstRow.nip || '').trim();
-    const nip = (rawNip && rawNip !== '-') ? rawNip : '............................................';
-    return { nama, nip };
+    return (typeof CONFIG !== 'undefined' && CONFIG.KOP_SEKOLAH_URL)
+      ? CONFIG.KOP_SEKOLAH_URL
+      : 'https://nbwpnhshhpfqtmbwewgk.supabase.co/storage/v1/object/public/media-sekolah/kop_sekolah.png';
+  },
+
+  async getKepalaSekolah() {
+    if (typeof JadwalModule !== 'undefined' && JadwalModule.lastKepalaSekolah && !JadwalModule.lastKepalaSekolah.nama.startsWith('.')) {
+      return JadwalModule.lastKepalaSekolah;
+    }
+    if (typeof DB !== 'undefined' && typeof DB.getKepalaSekolah === 'function') {
+      return await DB.getKepalaSekolah();
+    }
+    return {
+      nama: '..................................................',
+      nip: '............................................'
+    };
   },
 
   getGuruPairs() {
@@ -72,7 +78,6 @@ const RekapModule = {
     return pairs.some(p => p.kelas === '*' || this.normalizeText(p.kelas) === kUpper);
   },
 
-  // --- HELPER: KUNCI PENCOCOKAN UNIK SISWA (NAMA + KELAS) ---
   makeStudentMatchKey(nama, kelas) {
     return `${this.normalizeText(nama)}___${this.normalizeText(kelas)}`;
   },
@@ -359,9 +364,6 @@ const RekapModule = {
     container.innerHTML = html;
   },
 
-  // =========================================================================
-  // REKAP & CETAK NILAI (TERMASUK STATUS MENGERJAKAN AGAR BISA DIRESET/HAPUS)
-  // =========================================================================
   async renderRekapNilai() {
     const container = document.getElementById('rekap-table-container');
     if (!container) return;
@@ -469,7 +471,6 @@ const RekapModule = {
       return;
     }
 
-    // Kelompokkan per KELAS dan per MATA PELAJARAN
     const groupedMap = {};
     filtered.forEach(h => {
       const kelasName = String(h.kelas || 'Tanpa Kelas').trim();
@@ -486,7 +487,6 @@ const RekapModule = {
       groupedMap[key].items.push(h);
     });
 
-    // Urutkan grup berdasarkan Kelas terlebih dahulu, lalu Mata Pelajaran
     const sortedKeys = Object.keys(groupedMap).sort((a, b) => {
       const gA = groupedMap[a];
       const gB = groupedMap[b];
@@ -632,7 +632,6 @@ const RekapModule = {
     });
   },
 
-  // --- HAPUS MASSAL DATA HASIL UJIAN PER KELAS & PER MAPEL (UNTUK SIMULASI / GLADI) ---
   async deleteGroupHasil(encodedKelas, encodedMapel, jumlahRecord) {
     const kelas = decodeURIComponent(encodedKelas);
     const mapel = decodeURIComponent(encodedMapel);
@@ -718,7 +717,7 @@ const RekapModule = {
     try {
       const listGuru = (typeof GuruModule !== 'undefined' && Array.isArray(GuruModule.guruList) && GuruModule.guruList.length > 0)
         ? GuruModule.guruList
-        : await DB.fetchGuru();
+        : (Array.isArray(DB._cachedGuruList) && DB._cachedGuruList.length > 0 ? DB._cachedGuruList : await DB.fetchGuru());
       if (filterMapel !== 'ALL') {
         const targetM = this.normalizeText(filterMapel);
         const foundG = listGuru.find(g => {
@@ -751,15 +750,9 @@ const RekapModule = {
       return;
     }
 
-    // Ambil Kepala Sekolah dari baris pertama daftar guru (tanpa query ulang jika sudah dimuat)
-    const rawGuru = (typeof GuruModule !== 'undefined' && Array.isArray(GuruModule.guruList) && GuruModule.guruList.length > 0)
-      ? GuruModule.guruList
-      : await DB.fetchGuru();
-    const kepsek = (typeof JadwalModule !== 'undefined' && JadwalModule.lastKepalaSekolah && JadwalModule.lastKepalaSekolah.nama && !JadwalModule.lastKepalaSekolah.nama.startsWith('.'))
-      ? JadwalModule.lastKepalaSekolah
-      : this.extractKepalaSekolah(rawGuru);
+    const kepsek = await this.getKepalaSekolah();
+    const kopUrl = this.getKopUrl();
 
-    // Pastikan alokasi ruang & pengawas tersedia agar Pengawas 1 & 2 sesuai jadwal ruang
     let matchedAllocations = [];
     if (typeof JadwalModule !== 'undefined') {
       if (!Array.isArray(JadwalModule.lastGeneratedAllocation) || JadwalModule.lastGeneratedAllocation.length === 0) {
@@ -791,9 +784,6 @@ const RekapModule = {
     );
 
     const fallbackTtd = await this.resolvePenandatangan(filterMapel, filterKelas);
-    const kopUrl = (typeof CONFIG !== 'undefined' && CONFIG.KOP_SEKOLAH_URL)
-      ? CONFIG.KOP_SEKOLAH_URL
-      : "https://nbwpnhshhpfqtmbwewgk.supabase.co/storage/v1/object/public/media-sekolah/kop_sekolah.png";
     const now = new Date();
     const defaultHariStr = now.toLocaleDateString('id-ID', { weekday: 'long' });
     const defaultTglStr = now.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -1009,7 +999,8 @@ const RekapModule = {
     );
 
     const ttd = await this.resolvePenandatangan(filterMapel, filterKelas);
-    const kopUrl = "https://nbwpnhshhpfqtmbwewgk.supabase.co/storage/v1/object/public/media-sekolah/kop_sekolah.png";
+    const kepsek = await this.getKepalaSekolah();
+    const kopUrl = this.getKopUrl();
     const tglSekarang = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
 
     const printWindow = window.open('', '_blank');
@@ -1081,10 +1072,10 @@ const RekapModule = {
         <div class="flex justify-between items-end text-xs pt-4">
           <div class="text-left w-56">
             <p>Mengetahui,</p>
-            <p class="font-bold">Plt. Kepala Sekolah</p>
+            <p class="font-bold">Kepala SMK Negeri 1 Wakatobi</p>
             <div class="h-16"></div>
-            <p class="font-bold underline">Abdul Kaharuddin, S.Pd.I.</p>
-            <p class="text-[10px] text-slate-500">NIP. 197511222010011007</p>
+            <p class="font-bold underline">${kepsek.nama}</p>
+            <p class="text-[10px] text-slate-500">NIP. ${kepsek.nip}</p>
           </div>
 
           <div class="text-left w-64">
