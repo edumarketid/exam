@@ -3,6 +3,7 @@ const JadwalModule = {
   lastMasterRooms: [],
   lastGuruCodeList: [],
   lastMapelCodeList: [],
+  lastKepalaSekolah: { nama: '..................................................', nip: '............................................' },
 
   normalizeText(str) {
     return String(str || '').replace(/\s+/g, ' ').trim().toUpperCase();
@@ -15,6 +16,24 @@ const JadwalModule = {
       [arr[i], arr[j]] = [arr[j], arr[i]];
     }
     return arr;
+  },
+
+  extractKepalaSekolah(rawGuruList) {
+    const list = Array.isArray(rawGuruList) ? rawGuruList : [];
+    if (list.length === 0) {
+      return {
+        nama: '..................................................',
+        nip: '............................................'
+      };
+    }
+
+    // Sesuai aturan: nama pertama di tabel guru adalah Kepala Sekolah
+    const firstRow = list[0];
+    const nama = String(firstRow.nama_guru || firstRow.nama || '').trim() || '..................................................';
+    const rawNip = String(firstRow.nip || '').trim();
+    const nip = (rawNip && rawNip !== '-') ? rawNip : '............................................';
+
+    return { nama, nip };
   },
 
   getGuruPairs() {
@@ -194,8 +213,8 @@ const JadwalModule = {
     let html = `
       <div class="p-3.5 mb-3 rounded-xl bg-ocean-50 border border-ocean-200 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p class="text-xs font-extrabold text-ocean-950">🖨️ Cetak Jadwal (Kode Guru & Mapel), Daftar Hadir Pengawas & Siswa</p>
-          <p class="text-[11px] text-slate-600">Maks. 20 siswa/ruang &bull; 2 pengawas per ruang &bull; Format kode ringkas hemat kertas lengkap dengan tabel keterangan kode.</p>
+          <p class="text-xs font-extrabold text-ocean-950">🖨️ Cetak Jadwal (Kode Guru & Mapel), Daftar Hadir Pengawas & Daftar Hadir Siswa</p>
+          <p class="text-[11px] text-slate-600">Maks. 20 siswa/ruang &bull; 2 pengawas per ruang &bull; Daftar hadir pengawas dipisah per hari &amp; daftar hadir siswa otomatis terisi pengawas.</p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <select id="filter-cetak-jadwal-tanggal" class="text-xs font-semibold border border-ocean-300 rounded-lg px-2.5 py-2 bg-white text-slate-800">
@@ -273,7 +292,10 @@ const JadwalModule = {
       ? GuruModule.guruList
       : await DB.fetchGuru();
 
-    // Filter status Aktif & jabatan GURU (non-guru tidak ikut mengawas), lalu urutkan & beri kode 01, 02, ...
+    // Ambil nama & NIP Kepala Sekolah langsung dari baris pertama daftar guru (tanpa query DB tambahan)
+    this.lastKepalaSekolah = this.extractKepalaSekolah(rawGuru);
+
+    // Filter status Aktif & jabatan GURU (non-guru termasuk Kepala Sekolah tidak ikut mengawas), lalu beri kode 01, 02, ...
     const eligibleGuru = (rawGuru || [])
       .filter(g => {
         const isAktif = this.normalizeText(g.status || 'AKTIF') === 'AKTIF';
@@ -340,7 +362,7 @@ const JadwalModule = {
       schedules = schedules.filter(j => String(j.tanggal || '').trim() === filterTanggal);
     }
 
-    // Buat daftar Kode Mata Pelajaran unik (MP-01, MP-02, dst.) dari jadwal yang tampil
+    // Buat daftar Kode Mata Pelajaran unik (MP-01, MP-02, dst.)
     const uniqueMapels = [...new Set(
       schedules.map(j => String(j.mapel || '').trim()).filter(Boolean)
     )].sort((a, b) => a.localeCompare(b, 'id'));
@@ -463,10 +485,7 @@ const JadwalModule = {
       }
     });
 
-    // Pasangkan 2 GURU PENGAWAS per ruangan:
-    // Prioritas 1: Guru belum terpakai di jam sama & belum mengawas ruang ini hari ini
-    // Prioritas 2: Guru belum terpakai di jam sama (meski ruang sama)
-    // Prioritas 3 (jika stok guru < 2x jumlah ruang): Guru aktif lain yang bukan pasangan di ruang yang sama (boleh merangkap ruang berdekatan agar tidak ada slot kosong)
+    // Pasangkan 2 GURU PENGAWAS per ruangan
     const assignedIntervalsByGuru = {};
     const assignedRoomsTodayByGuru = {};
     const sessionAssignCountByGuru = {};
@@ -488,19 +507,16 @@ const JadwalModule = {
         );
       });
 
-      // Prioritas 1: Bebas jam & belum mengawas ruang ini hari ini
       let chosen = freeAtTime.find(c => {
         const gKey = getKey(c);
         const roomsToday = assignedRoomsTodayByGuru[`${gKey}|${room.tanggal}`];
         return !roomsToday || !roomsToday.has(room.nomorRuang);
       });
 
-      // Prioritas 2: Bebas jam pada sesi ini
       if (!chosen && freeAtTime.length > 0) {
         chosen = freeAtTime[0];
       }
 
-      // Prioritas 3 (Fallback jika stok guru terbatas): Pilih yang paling sedikit beban rangkapnya di sesi ini
       if (!chosen && candidateList.length > 0) {
         const sortedByLoad = [...candidateList].sort((a, b) => {
           const loadA = sessionAssignCountByGuru[`${room.sessionKey}|${getKey(a)}`] || 0;
@@ -631,12 +647,14 @@ const JadwalModule = {
       `;
     }).join('');
 
+    const kepsek = this.lastKepalaSekolah;
+
     modal.innerHTML = `
       <div class="bg-white w-full max-w-6xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden my-4 flex flex-col max-h-[92vh]">
         <div class="px-5 py-3.5 bg-ocean-950 text-white flex flex-wrap items-center justify-between gap-3 shrink-0">
           <div>
-            <h3 class="font-extrabold text-sm">Pratinjau Jadwal Ujian (Format Kode Hemat Kertas) &amp; Daftar Hadir</h3>
-            <p class="text-[11px] text-teal-300">Total Ruang: ${totalMasterRooms} Ruang &bull; Guru Aktif: ${totalEligibleGuru} Guru &bull; Semua ruang terisi penuh 2 pengawas</p>
+            <h3 class="font-extrabold text-sm">Pratinjau Jadwal Ujian, Daftar Hadir Pengawas &amp; Daftar Hadir Siswa</h3>
+            <p class="text-[11px] text-teal-300">Total Ruang: ${totalMasterRooms} &bull; Guru Aktif: ${totalEligibleGuru} &bull; Kepala Sekolah: <strong>${kepsek.nama}</strong></p>
           </div>
           <div class="flex flex-wrap items-center gap-2">
             <button type="button" onclick="JadwalModule.openPrintJadwalModal()" class="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs px-3 py-2 rounded-lg transition">
@@ -646,7 +664,7 @@ const JadwalModule = {
               🖨️ Cetak Jadwal (Kode Ringkas)
             </button>
             <button type="button" onclick="JadwalModule.executePrintDaftarHadirPengawas()" class="bg-sky-500 hover:bg-sky-600 text-white font-bold text-xs px-3 py-2 rounded-lg shadow transition">
-              📋 Cetak Daftar Hadir Pengawas
+              📋 Cetak Daftar Hadir Pengawas (Per Hari)
             </button>
             <button type="button" onclick="JadwalModule.executePrintDaftarHadirSiswa()" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold text-xs px-3 py-2 rounded-lg shadow transition">
               🧑‍🎓 Cetak Daftar Hadir Siswa
@@ -695,13 +713,14 @@ const JadwalModule = {
   },
 
   // =========================================================================
-  // CETAK JADWAL FORMAT MATRIKS RINGKAS (KODE MAPEL & KODE GURU HEMAT KERTAS)
+  // 1. CETAK JADWAL FORMAT MATRIKS RINGKAS (KODE MAPEL & KODE GURU)
   // =========================================================================
   executePrintJadwal() {
     const allocations = this.lastGeneratedAllocation || [];
     const rooms = this.lastMasterRooms || [];
     const guruCodes = this.lastGuruCodeList || [];
     const mapelCodes = this.lastMapelCodeList || [];
+    const kepsek = this.lastKepalaSekolah;
     if (allocations.length === 0) return;
 
     const kopUrl = (typeof CONFIG !== 'undefined' && CONFIG.KOP_SEKOLAH_URL)
@@ -714,7 +733,6 @@ const JadwalModule = {
       year: 'numeric'
     });
 
-    // Susun daftar sesi unik sebagai kolom matriks agar super ringkas & hemat kertas
     const sessionList = [];
     const sessionLookup = {};
     allocations.forEach(a => {
@@ -732,13 +750,11 @@ const JadwalModule = {
       }
     });
 
-    // Map sel berdasarkan `${sessionKey}|${nomorRuang}`
     const cellMap = {};
     allocations.forEach(a => {
       cellMap[`${a.sessionKey}|${a.nomorRuang}`] = a;
     });
 
-    // Gunakan daftar ruang yang muncul di allocations
     const activeRoomNums = [...new Set(allocations.map(a => a.nomorRuang))].sort((a, b) => a - b);
     const displayRooms = activeRoomNums.map(num => {
       const found = rooms.find(r => r.nomorRuang === num) || allocations.find(a => a.nomorRuang === num);
@@ -748,7 +764,6 @@ const JadwalModule = {
       };
     });
 
-    // Kelompokkan sesi per tanggal untuk header tabel 2 tingkat
     const daysGroup = [];
     sessionList.forEach(s => {
       let lastDay = daysGroup[daysGroup.length - 1];
@@ -791,7 +806,6 @@ const JadwalModule = {
       `;
     }).join('');
 
-    // Legenda Kode Mapel & Kode Guru dalam kolom ringkas di bagian bawah
     const mapelLegendItems = mapelCodes
       .map(m => `<div><strong>${m.kodeMapel}</strong> : ${m.namaMapel}</div>`)
       .join('');
@@ -828,8 +842,8 @@ const JadwalModule = {
           .legend-box h4 { margin: 0 0 4px 0; font-size: 9.5px; text-transform: uppercase; border-bottom: 1px solid #cbd5e1; padding-bottom: 2px; }
           .cols-mapel { column-count: 1; font-size: 8.5px; line-height: 1.35; }
           .cols-guru { column-count: 3; column-gap: 14px; font-size: 8.5px; line-height: 1.35; }
-          .ttd-wrap { width: 100%; margin-top: 12px; display: flex; justify-content: space-between; page-break-inside: avoid; }
-          .ttd-box { width: 240px; text-align: left; font-size: 9.5px; line-height: 1.35; }
+          .ttd-wrap { width: 100%; margin-top: 12px; display: flex; justify-content: flex-end; page-break-inside: avoid; }
+          .ttd-box { width: 260px; text-align: left; font-size: 9.5px; line-height: 1.35; }
           .ttd-space { height: 42px; }
         </style>
       </head>
@@ -869,18 +883,11 @@ const JadwalModule = {
 
         <div class="ttd-wrap">
           <div class="ttd-box">
-            Mengetahui,<br>
-            Kepala SMK Negeri 1 Wakatobi
-            <div class="ttd-space"></div>
-            <strong>..................................................</strong><br>
-            NIP. ............................................
-          </div>
-          <div class="ttd-box">
             Wangi-Wangi Selatan, ${todayStr}<br>
-            Wakasek Bidang Kurikulum,
+            Kepala SMK Negeri 1 Wakatobi,
             <div class="ttd-space"></div>
-            <strong><u>Ajiardin, S.T., Gr.</u></strong><br>
-            NIP. ............................................
+            <strong><u>${kepsek.nama}</u></strong><br>
+            NIP. ${kepsek.nip}
           </div>
         </div>
 
@@ -895,66 +902,122 @@ const JadwalModule = {
     printWin.document.close();
   },
 
+  // =========================================================================
+  // 2. CETAK DAFTAR HADIR PENGAWAS RUANG (DIPISAH PER HARI & TTD KEPSEK)
+  // =========================================================================
   executePrintDaftarHadirPengawas() {
     const allocations = this.lastGeneratedAllocation || [];
+    const kepsek = this.lastKepalaSekolah;
     if (allocations.length === 0) return;
 
     const kopUrl = (typeof CONFIG !== 'undefined' && CONFIG.KOP_SEKOLAH_URL)
       ? CONFIG.KOP_SEKOLAH_URL
       : 'https://nbwpnhshhpfqtmbwewgk.supabase.co/storage/v1/object/public/media-sekolah/kop_sekolah.png';
 
-    const todayStr = new Date().toLocaleDateString('id-ID', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric'
+    // Kelompokkan allocations berdasarkan tanggal (1 hari = 1 halaman terpisah)
+    const dayGroupsMap = {};
+    allocations.forEach(r => {
+      if (!dayGroupsMap[r.tanggal]) {
+        dayGroupsMap[r.tanggal] = {
+          tanggal: r.tanggal,
+          tanggalFormatted: r.tanggalFormatted,
+          items: []
+        };
+      }
+      dayGroupsMap[r.tanggal].items.push(r);
     });
 
-    let lastSessionKey = '';
-    let rowCounter = 0;
+    const sortedDayGroups = Object.values(dayGroupsMap).sort((a, b) =>
+      a.tanggal.localeCompare(b.tanggal)
+    );
 
-    const tableRows = allocations.map((r) => {
-      let groupBanner = '';
-      if (r.sessionKey !== lastSessionKey) {
-        lastSessionKey = r.sessionKey;
-        rowCounter = 0;
-        groupBanner = `
-          <tr style="background-color:#f1f5f9;">
-            <td colspan="5" style="font-weight:bold; font-size:11px; padding:7px 8px; color:#0f172a;">
-              Hari / Tanggal: ${r.tanggalFormatted} &nbsp;|&nbsp; ${r.sesiLabel} (Pukul ${r.jamMulai} - ${r.jamSelesai} WITA)
-            </td>
-          </tr>
-        `;
-      }
+    const pagesHtml = sortedDayGroups.map((dayGrp, dIdx) => {
+      let lastSessionKey = '';
+      let rowCounter = 0;
 
-      const supervisors = [
-        { kode: r.pengawas1Kode, nama: r.pengawas1Nama, nip: r.pengawas1Nip, label: 'Pengawas 1' },
-        { kode: r.pengawas2Kode, nama: r.pengawas2Nama, nip: r.pengawas2Nip, label: 'Pengawas 2' }
-      ];
+      const tableRows = dayGrp.items.map((r) => {
+        let sessionBanner = '';
+        if (r.sessionKey !== lastSessionKey) {
+          lastSessionKey = r.sessionKey;
+          rowCounter = 0;
+          sessionBanner = `
+            <tr style="background-color:#f1f5f9;">
+              <td colspan="5" style="font-weight:bold; font-size:11px; padding:6px 8px; color:#0f172a;">
+                ${r.sesiLabel} &nbsp;|&nbsp; Pukul ${r.jamMulai} - ${r.jamSelesai} WITA
+              </td>
+            </tr>
+          `;
+        }
 
-      return groupBanner + supervisors.map((sup, sIdx) => {
-        rowCounter++;
-        const isOdd = rowCounter % 2 === 1;
-        const ttdCellHtml = isOdd
-          ? `<td style="height:28px; text-align:left; padding-left:8px; font-size:10px; color:#334155;">${rowCounter}. ......................</td>`
-          : `<td style="height:28px; text-align:right; padding-right:8px; font-size:10px; color:#334155;">${rowCounter}. ......................</td>`;
+        const supervisors = [
+          { kode: r.pengawas1Kode, nama: r.pengawas1Nama, nip: r.pengawas1Nip, label: 'Pengawas 1' },
+          { kode: r.pengawas2Kode, nama: r.pengawas2Nama, nip: r.pengawas2Nip, label: 'Pengawas 2' }
+        ];
 
-        const ruangCellHtml = sIdx === 0
-          ? `<td rowspan="2" style="vertical-align:middle;"><strong>${r.ruangLabel}</strong></td>
-             <td rowspan="2" style="vertical-align:middle;"><strong>[${r.kodeMapel}]</strong> ${r.mapel}</td>`
-          : '';
+        return sessionBanner + supervisors.map((sup, sIdx) => {
+          rowCounter++;
+          const isOdd = rowCounter % 2 === 1;
+          const ttdCellHtml = isOdd
+            ? `<td style="height:26px; text-align:left; padding-left:8px; font-size:10px; color:#334155;">${rowCounter}. ......................</td>`
+            : `<td style="height:26px; text-align:right; padding-right:8px; font-size:10px; color:#334155;">${rowCounter}. ......................</td>`;
 
-        return `
-          <tr>
-            <td style="text-align:center; font-weight:bold;">${rowCounter}</td>
-            <td>
-              <strong>[${sup.kode}] ${sup.nama}</strong> <span style="font-size:9.5px;color:#64748b;">(${sup.label})</span>
-              ${sup.nip !== '-' ? `<br><span style="font-size:10px;color:#475569;">NIP. ${sup.nip}</span>` : ''}
-            </td>
-            ${ruangCellHtml}
-            ${ttdCellHtml}
-          </tr>
-        `;
+          const ruangCellHtml = sIdx === 0
+            ? `<td rowspan="2" style="vertical-align:middle;"><strong>${r.ruangLabel}</strong></td>
+               <td rowspan="2" style="vertical-align:middle;"><strong>[${r.kodeMapel}]</strong> ${r.mapel}</td>`
+            : '';
+
+          return `
+            <tr>
+              <td style="text-align:center; font-weight:bold;">${rowCounter}</td>
+              <td>
+                <strong>[${sup.kode}] ${sup.nama}</strong> <span style="font-size:9.5px;color:#64748b;">(${sup.label})</span>
+                ${sup.nip !== '-' ? `<br><span style="font-size:10px;color:#475569;">NIP. ${sup.nip}</span>` : ''}
+              </td>
+              ${ruangCellHtml}
+              ${ttdCellHtml}
+            </tr>
+          `;
+        }).join('');
       }).join('');
+
+      return `
+        <div class="${dIdx > 0 ? 'page-break' : ''}">
+          <img src="${kopUrl}" class="kop" alt="Kop Sekolah" onerror="this.style.display='none'">
+          <div class="title">
+            <h2>DAFTAR HADIR PENGAWAS RUANG UJIAN</h2>
+            <p>SMK NEGERI 1 WAKATOBI &bull; TAHUN AJARAN 2026/2027</p>
+          </div>
+
+          <div style="margin:6px 0 8px 0; font-size:11.5px; font-weight:bold;">
+            Hari / Tanggal : ${dayGrp.tanggalFormatted}
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th style="width:32px;">No</th>
+                <th style="width:235px;">Kode, Nama Pengawas &amp; NIP</th>
+                <th style="width:160px;">Ruang &amp; Peserta</th>
+                <th>Mata Pelajaran</th>
+                <th style="width:145px;">Tanda Tangan</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${tableRows}
+            </tbody>
+          </table>
+
+          <div class="ttd-wrap">
+            <div class="ttd-box">
+              Mengetahui,<br>
+              Kepala SMK Negeri 1 Wakatobi,
+              <div class="ttd-space"></div>
+              <strong><u>${kepsek.nama}</u></strong><br>
+              NIP. ${kepsek.nip}
+            </div>
+          </div>
+        </div>
+      `;
     }).join('');
 
     const printWin = window.open('', '_blank', 'width=1000,height=780');
@@ -968,63 +1031,29 @@ const JadwalModule = {
       <html lang="id">
       <head>
         <meta charset="UTF-8">
-        <title>Daftar Hadir Pengawas Ruang Ujian - SMK Negeri 1 Wakatobi</title>
+        <title>Daftar Hadir Pengawas Ruang Ujian (Per Hari) - SMK Negeri 1 Wakatobi</title>
         <style>
-          @page { size: A4 portrait; margin: 12mm; }
-          @media print { .no-print { display: none !important; } }
+          @page { size: A4 portrait; margin: 11mm; }
+          @media print {
+            .no-print { display: none !important; }
+            .page-break { page-break-before: always; }
+          }
           body { font-family: Arial, Helvetica, sans-serif; color: #0f172a; font-size: 11px; margin: 0; }
-          .kop { width: 100%; max-height: 110px; object-fit: contain; display: block; margin: 0 auto 8px auto; }
-          .title { text-align: center; margin: 6px 0 14px 0; }
+          .kop { width: 100%; max-height: 105px; object-fit: contain; display: block; margin: 0 auto 6px auto; }
+          .title { text-align: center; margin: 4px 0 10px 0; }
           .title h2 { margin: 0; font-size: 15px; text-transform: uppercase; letter-spacing: 0.5px; }
-          .title p { margin: 3px 0 0 0; font-size: 12px; font-weight: bold; }
-          table { width: 100%; border-collapse: collapse; margin-top: 6px; }
-          th, td { border: 1px solid #334155; padding: 5px 8px; vertical-align: middle; }
+          .title p { margin: 2px 0 0 0; font-size: 11.5px; font-weight: bold; }
+          table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+          th, td { border: 1px solid #334155; padding: 4.5px 8px; vertical-align: middle; }
           th { background-color: #e2e8f0; font-weight: bold; text-align: center; text-transform: uppercase; font-size: 10px; }
-          .ttd-wrap { width: 100%; margin-top: 24px; display: flex; justify-content: space-between; page-break-inside: avoid; }
-          .ttd-box { width: 240px; text-align: left; font-size: 11px; line-height: 1.45; }
-          .ttd-space { height: 55px; }
+          .ttd-wrap { width: 100%; margin-top: 20px; display: flex; justify-content: flex-end; page-break-inside: avoid; }
+          .ttd-box { width: 255px; text-align: left; font-size: 11px; line-height: 1.45; }
+          .ttd-space { height: 52px; }
         </style>
       </head>
       <body>
         ${this.getPrintToolbarHtml()}
-        <img src="${kopUrl}" class="kop" alt="Kop Sekolah" onerror="this.style.display='none'">
-        <div class="title">
-          <h2>DAFTAR HADIR PENGAWAS RUANG UJIAN</h2>
-          <p>SMK NEGERI 1 WAKATOBI &bull; TAHUN AJARAN 2026/2027</p>
-        </div>
-
-        <table>
-          <thead>
-            <tr>
-              <th style="width:32px;">No</th>
-              <th style="width:235px;">Kode, Nama Pengawas &amp; NIP</th>
-              <th style="width:160px;">Ruang &amp; Peserta</th>
-              <th>Mata Pelajaran</th>
-              <th style="width:145px;">Tanda Tangan</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${tableRows}
-          </tbody>
-        </table>
-
-        <div class="ttd-wrap">
-          <div class="ttd-box">
-            Mengetahui,<br>
-            Kepala SMK Negeri 1 Wakatobi
-            <div class="ttd-space"></div>
-            <strong>..................................................</strong><br>
-            NIP. ............................................
-          </div>
-          <div class="ttd-box">
-            Wangi-Wangi Selatan, ${todayStr}<br>
-            Wakasek Bidang Kurikulum,
-            <div class="ttd-space"></div>
-            <strong><u>Ajiardin, S.T., Gr.</u></strong><br>
-            NIP. ............................................
-          </div>
-        </div>
-
+        ${pagesHtml}
         <script>
           window.onload = function() {
             setTimeout(function() { window.print(); }, 400);
@@ -1036,8 +1065,14 @@ const JadwalModule = {
     printWin.document.close();
   },
 
+  // =========================================================================
+  // 3. CETAK DAFTAR HADIR SISWA (OTOMATIS PENGAWAS DARI JADWAL & KEPSEK RATA TENGAH)
+  // =========================================================================
   executePrintDaftarHadirSiswa() {
+    const allocations = this.lastGeneratedAllocation || [];
     const rooms = this.lastMasterRooms || [];
+    const kepsek = this.lastKepalaSekolah;
+
     if (rooms.length === 0) {
       alert("Data siswa per ruang tidak ditemukan. Pastikan data siswa sudah terisi.");
       return;
@@ -1047,35 +1082,65 @@ const JadwalModule = {
       ? CONFIG.KOP_SEKOLAH_URL
       : 'https://nbwpnhshhpfqtmbwewgk.supabase.co/storage/v1/object/public/media-sekolah/kop_sekolah.png';
 
-    const todayStr = new Date().toLocaleDateString('id-ID', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric'
-    });
+    // Jika ada alokasi jadwal aktif, cetak daftar hadir per sesi & ruangan agar nama Pengawas 1, Pengawas 2, Mapel, & Tanggal terisi otomatis dari jadwal
+    // Jika belum ada jadwal yang dibuat, tetap bisa cetak template per ruangan
+    const sheetEntries = allocations.length > 0
+      ? allocations.map(a => {
+          const masterMatch = rooms.find(r => r.nomorRuang === a.nomorRuang);
+          return {
+            ruangLabel: a.ruangLabel,
+            kelasLabel: a.kelas,
+            jumlahSiswa: a.jumlahSiswa,
+            students: (a.students && a.students.length > 0) ? a.students : (masterMatch ? masterMatch.students : []),
+            tanggalFormatted: a.tanggalFormatted,
+            sesiLabel: `${a.sesiLabel} (${a.jamMulai} - ${a.jamSelesai} WITA)`,
+            mapel: a.mapel,
+            pengawas1Nama: a.pengawas1Nama,
+            pengawas1Nip: a.pengawas1Nip,
+            pengawas2Nama: a.pengawas2Nama,
+            pengawas2Nip: a.pengawas2Nip
+          };
+        })
+      : rooms.map(rm => ({
+          ruangLabel: rm.ruangLabel,
+          kelasLabel: rm.kelasLabel,
+          jumlahSiswa: rm.jumlahSiswa,
+          students: rm.students || [],
+          tanggalFormatted: '....................................................',
+          sesiLabel: 'Jam ke-1 / Jam ke-2 (....... - .......)',
+          mapel: '....................................................',
+          pengawas1Nama: '..................................................',
+          pengawas1Nip: '............................................',
+          pengawas2Nama: '..................................................',
+          pengawas2Nip: '............................................'
+        }));
 
-    const pagesHtml = rooms.map((rm, rIdx) => {
-      const studentRows = (rm.students || []).map((s, idx) => {
-        const no = idx + 1;
+    const pagesHtml = sheetEntries.map((entry, idx) => {
+      const studentRows = (entry.students || []).map((s, sIdx) => {
+        const no = sIdx + 1;
         const nisn = s.nisn || s.NISN || s.id_siswa || '-';
         const nama = s.nama || s.nama_siswa || s.NAMA || '-';
         const isOdd = no % 2 === 1;
         const ttdCell = isOdd
-          ? `<td style="height:26px; text-align:left; padding-left:8px; font-size:10px; color:#334155;">${no}. ......................</td>`
-          : `<td style="height:26px; text-align:right; padding-right:8px; font-size:10px; color:#334155;">${no}. ......................</td>`;
+          ? `<td style="height:24px; text-align:left; padding-left:8px; font-size:10px; color:#334155;">${no}. ......................</td>`
+          : `<td style="height:24px; text-align:right; padding-right:8px; font-size:10px; color:#334155;">${no}. ......................</td>`;
 
         return `
           <tr>
             <td style="text-align:center; font-weight:bold;">${no}</td>
             <td style="text-align:center; font-family:monospace;">${nisn}</td>
             <td>${nama}</td>
-            <td style="text-align:center;">${rm.kelasLabel}</td>
+            <td style="text-align:center;">${entry.kelasLabel}</td>
             ${ttdCell}
           </tr>
         `;
       }).join('');
 
+      const nip1Display = (entry.pengawas1Nip && entry.pengawas1Nip !== '-') ? entry.pengawas1Nip : '............................................';
+      const nip2Display = (entry.pengawas2Nip && entry.pengawas2Nip !== '-') ? entry.pengawas2Nip : '............................................';
+
       return `
-        <div class="${rIdx > 0 ? 'page-break' : ''}">
+        <div class="${idx > 0 ? 'page-break' : ''}">
           <img src="${kopUrl}" class="kop" alt="Kop Sekolah" onerror="this.style.display='none'">
           <div class="title">
             <h2>DAFTAR HADIR PESERTA UJIAN</h2>
@@ -1084,21 +1149,21 @@ const JadwalModule = {
 
           <table class="meta-table">
             <tr>
-              <td style="width:140px;"><strong>Ruang Ujian</strong></td>
-              <td style="width:240px;">: <strong>${rm.ruangLabel}</strong></td>
-              <td style="width:130px;"><strong>Hari / Tanggal</strong></td>
-              <td>: ....................................................</td>
+              <td style="width:125px;"><strong>Ruang Ujian</strong></td>
+              <td style="width:230px;">: <strong>${entry.ruangLabel}</strong></td>
+              <td style="width:120px;"><strong>Hari / Tanggal</strong></td>
+              <td>: ${entry.tanggalFormatted}</td>
             </tr>
             <tr>
-              <td><strong>Kelas / Rombel</strong></td>
-              <td>: ${rm.kelasLabel} (${rm.jumlahSiswa} Peserta)</td>
+              <td><strong>Kelas / Peserta</strong></td>
+              <td>: ${entry.kelasLabel} (${entry.jumlahSiswa} Siswa)</td>
               <td><strong>Mata Pelajaran</strong></td>
-              <td>: ....................................................</td>
+              <td>: <strong>${entry.mapel}</strong></td>
             </tr>
             <tr>
-              <td><strong>Sesi / Pukul</strong></td>
-              <td>: Jam ke-1 / Jam ke-2 (....... - .......)</td>
-              <td><strong>Jumlah Hadir</strong></td>
+              <td><strong>Sesi / Waktu</strong></td>
+              <td>: ${entry.sesiLabel}</td>
+              <td><strong>Rekap Kehadiran</strong></td>
               <td>: Hadir: ...... | Tidak Hadir: ......</td>
             </tr>
           </table>
@@ -1118,25 +1183,30 @@ const JadwalModule = {
             </tbody>
           </table>
 
-          <div class="ttd-wrap">
-            <div class="ttd-box">
-              Pengawas Ruang 1,
-              <div class="ttd-space"></div>
-              <strong>..................................................</strong><br>
-              NIP. ............................................
+          <div class="ttd-section">
+            <div class="ttd-pengawas-row">
+              <div class="ttd-box">
+                Pengawas Ruang 1,
+                <div class="ttd-space"></div>
+                <strong><u>${entry.pengawas1Nama}</u></strong><br>
+                NIP. ${nip1Display}
+              </div>
+              <div class="ttd-box">
+                Pengawas Ruang 2,
+                <div class="ttd-space"></div>
+                <strong><u>${entry.pengawas2Nama}</u></strong><br>
+                NIP. ${nip2Display}
+              </div>
             </div>
-            <div class="ttd-box">
-              Pengawas Ruang 2,
-              <div class="ttd-space"></div>
-              <strong>..................................................</strong><br>
-              NIP. ............................................
-            </div>
-            <div class="ttd-box">
-              Wangi-Wangi Selatan, ${todayStr}<br>
-              Wakasek Bidang Kurikulum,
-              <div class="ttd-space"></div>
-              <strong><u>Ajiardin, S.T., Gr.</u></strong><br>
-              NIP. ............................................
+
+            <div class="ttd-kepsek-center">
+              <div class="ttd-box-center">
+                Mengetahui,<br>
+                Kepala SMK Negeri 1 Wakatobi,
+                <div class="ttd-space"></div>
+                <strong><u>${kepsek.nama}</u></strong><br>
+                NIP. ${kepsek.nip}
+              </div>
             </div>
           </div>
         </div>
@@ -1156,24 +1226,27 @@ const JadwalModule = {
         <meta charset="UTF-8">
         <title>Daftar Hadir Peserta Ujian per Ruang - SMK Negeri 1 Wakatobi</title>
         <style>
-          @page { size: A4 portrait; margin: 11mm; }
+          @page { size: A4 portrait; margin: 10mm; }
           @media print {
             .no-print { display: none !important; }
             .page-break { page-break-before: always; }
           }
-          body { font-family: Arial, Helvetica, sans-serif; color: #0f172a; font-size: 11px; margin: 0; }
-          .kop { width: 100%; max-height: 105px; object-fit: contain; display: block; margin: 0 auto 6px auto; }
-          .title { text-align: center; margin: 4px 0 10px 0; }
-          .title h2 { margin: 0; font-size: 15px; text-transform: uppercase; letter-spacing: 0.5px; }
-          .title p { margin: 2px 0 0 0; font-size: 11.5px; font-weight: bold; }
-          .meta-table { width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 11px; }
-          .meta-table td { border: none; padding: 2px 4px; }
+          body { font-family: Arial, Helvetica, sans-serif; color: #0f172a; font-size: 10.5px; margin: 0; }
+          .kop { width: 100%; max-height: 98px; object-fit: contain; display: block; margin: 0 auto 5px auto; }
+          .title { text-align: center; margin: 3px 0 8px 0; }
+          .title h2 { margin: 0; font-size: 14.5px; text-transform: uppercase; letter-spacing: 0.5px; }
+          .title p { margin: 2px 0 0 0; font-size: 11px; font-weight: bold; }
+          .meta-table { width: 100%; border-collapse: collapse; margin-bottom: 7px; font-size: 10.5px; }
+          .meta-table td { border: none; padding: 1.5px 4px; }
           .data-table { width: 100%; border-collapse: collapse; }
-          .data-table th, .data-table td { border: 1px solid #334155; padding: 4.5px 7px; vertical-align: middle; }
-          .data-table th { background-color: #e2e8f0; font-weight: bold; text-align: center; text-transform: uppercase; font-size: 10px; }
-          .ttd-wrap { width: 100%; margin-top: 18px; display: flex; justify-content: space-between; page-break-inside: avoid; }
-          .ttd-box { width: 31%; text-align: left; font-size: 10.5px; line-height: 1.4; }
-          .ttd-space { height: 48px; }
+          .data-table th, .data-table td { border: 1px solid #334155; padding: 3.8px 6px; vertical-align: middle; }
+          .data-table th { background-color: #e2e8f0; font-weight: bold; text-align: center; text-transform: uppercase; font-size: 9.5px; }
+          .ttd-section { width: 100%; margin-top: 14px; page-break-inside: avoid; }
+          .ttd-pengawas-row { width: 100%; display: flex; justify-content: space-between; padding: 0 24px; box-sizing: border-box; }
+          .ttd-box { width: 235px; text-align: left; font-size: 10.5px; line-height: 1.35; }
+          .ttd-kepsek-center { width: 100%; margin-top: 10px; display: flex; justify-content: center; }
+          .ttd-box-center { width: 260px; text-align: center; font-size: 10.5px; line-height: 1.35; }
+          .ttd-space { height: 42px; }
         </style>
       </head>
       <body>
