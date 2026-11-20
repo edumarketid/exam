@@ -15,7 +15,7 @@ const JadwalModule = {
     }
     return (typeof CONFIG !== 'undefined' && CONFIG.KOP_SEKOLAH_URL)
       ? CONFIG.KOP_SEKOLAH_URL
-      : 'https://nbwpnhshhpfqtmbwewgk.supabase.co/storage/v1/object/public/media-sekolah/kop_sekolah.png';
+      : 'https://nbwpnhshhpfqtmbwewgk.supabase.co/storage/v1/object/public/media-sekolah/kop_sekolah2.jpg';
   },
 
   shuffleArray(array) {
