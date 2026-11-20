@@ -15,7 +15,7 @@ const JadwalModule = {
     }
     return (typeof CONFIG !== 'undefined' && CONFIG.KOP_SEKOLAH_URL)
       ? CONFIG.KOP_SEKOLAH_URL
-      : 'https://nbwpnhshhpfqtmbwewgk.supabase.co/storage/v1/object/public/media-sekolah/kop_sekolah2.jpg';
+      : 'https://nbwpnhshhpfqtmbwewgk.supabase.co/storage/v1/object/public/media-sekolah/kop_sekolah.png';
   },
 
   shuffleArray(array) {
@@ -219,8 +219,8 @@ const JadwalModule = {
     let html = `
       <div class="p-3.5 mb-3 rounded-xl bg-ocean-50 border border-ocean-200 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p class="text-xs font-extrabold text-ocean-950">🖨️ Cetak Jadwal (Kode Guru & Mapel), Daftar Hadir Pengawas & Daftar Hadir Siswa</p>
-          <p class="text-[11px] text-slate-600">Maks. 20 siswa/ruang &bull; 2 pengawas per ruang &bull; Daftar hadir pengawas dipisah per hari &amp; daftar hadir siswa otomatis terisi pengawas.</p>
+          <p class="text-xs font-extrabold text-ocean-950">🖨️ Cetak Jadwal, Daftar Peserta Pintu Ruang, Daftar Hadir Pengawas &amp; Daftar Hadir Siswa</p>
+          <p class="text-[11px] text-slate-600">Maks. 20 siswa/ruang &bull; 2 pengawas per ruang &bull; Dilengkapi daftar peserta tempel pintu ruangan.</p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <select id="filter-cetak-jadwal-tanggal" class="text-xs font-semibold border border-ocean-300 rounded-lg px-2.5 py-2 bg-white text-slate-800">
@@ -228,7 +228,7 @@ const JadwalModule = {
             ${dateOptionsHtml}
           </select>
           <button type="button" onclick="JadwalModule.openPrintJadwalModal()" class="bg-ocean-800 hover:bg-ocean-900 text-white font-bold text-xs px-3.5 py-2 rounded-lg shadow-sm transition flex items-center gap-1.5">
-            <span>🖨️ Kelola & Cetak Dokumen Ujian</span>
+            <span>🖨️ Kelola &amp; Cetak Dokumen Ujian</span>
           </button>
         </div>
       </div>
@@ -291,7 +291,6 @@ const JadwalModule = {
       State.siswaList = await DB.fetchSiswa();
     }
 
-    // Gunakan cache daftar guru jika sudah ada di memori (tanpa query ulang)
     let rawGuru = (typeof GuruModule !== 'undefined' && Array.isArray(GuruModule.guruList) && GuruModule.guruList.length > 0)
       ? GuruModule.guruList
       : (Array.isArray(DB._cachedGuruList) && DB._cachedGuruList.length > 0 ? DB._cachedGuruList : await DB.fetchGuru());
@@ -651,8 +650,8 @@ const JadwalModule = {
       <div class="bg-white w-full max-w-6xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden my-4 flex flex-col max-h-[92vh]">
         <div class="px-5 py-3.5 bg-ocean-950 text-white flex flex-wrap items-center justify-between gap-3 shrink-0">
           <div>
-            <h3 class="font-extrabold text-sm">Pratinjau Jadwal Ujian, Daftar Hadir Pengawas &amp; Daftar Hadir Siswa</h3>
-            <p class="text-[11px] text-teal-300">Total Ruang: ${totalMasterRooms} &bull; Guru Aktif: ${totalEligibleGuru} &bull; Plt. Kepala Sekolah: <strong>${kepsek.nama}</strong></p>
+            <h3 class="font-extrabold text-sm">Pratinjau Jadwal Ujian, Daftar Peserta Pintu Ruang, Daftar Hadir Pengawas &amp; Siswa</h3>
+            <p class="text-[11px] text-teal-300">Total Ruang: ${totalMasterRooms} &bull; Guru Aktif: ${totalEligibleGuru} &bull; Kepala Sekolah: <strong>${kepsek.nama}</strong></p>
           </div>
           <div class="flex flex-wrap items-center gap-2">
             <button type="button" onclick="JadwalModule.openPrintJadwalModal()" class="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs px-3 py-2 rounded-lg transition">
@@ -661,14 +660,17 @@ const JadwalModule = {
             <button type="button" onclick="JadwalModule.executePrintJadwal()" class="bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs px-3 py-2 rounded-lg shadow transition">
               🖨️ Cetak Jadwal (Kode Ringkas)
             </button>
+            <button type="button" onclick="JadwalModule.executePrintDaftarPesertaPintu()" class="bg-teal-500 hover:bg-teal-600 text-white font-bold text-xs px-3 py-2 rounded-lg shadow transition">
+              🚪 Daftar Peserta (Pintu Ruang)
+            </button>
             <button type="button" onclick="JadwalModule.executePrintDaftarHadirPengawas()" class="bg-sky-500 hover:bg-sky-600 text-white font-bold text-xs px-3 py-2 rounded-lg shadow transition">
-              📋 Cetak Daftar Hadir Pengawas (Per Hari)
+              📋 Daftar Hadir Pengawas
             </button>
             <button type="button" onclick="JadwalModule.executePrintDaftarHadirSiswa()" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold text-xs px-3 py-2 rounded-lg shadow transition">
-              🧑‍🎓 Cetak Daftar Hadir Siswa
+              🧑‍🎓 Daftar Hadir Siswa
             </button>
             <button type="button" onclick="JadwalModule.closePrintJadwalModal()" class="bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs px-3.5 py-2 rounded-lg shadow transition">
-              ⬅️ Tutup / Kembali
+              ⬅️ Tutup
             </button>
           </div>
         </div>
@@ -679,7 +681,7 @@ const JadwalModule = {
               <tr class="bg-slate-100 border-b border-slate-300 text-[11px] font-extrabold text-slate-700 uppercase">
                 <th class="p-2.5 text-center w-14">Ruang</th>
                 <th class="p-2.5 w-36">Sesi / Waktu</th>
-                <th class="p-2.5">Nama Ruang & Peserta</th>
+                <th class="p-2.5">Nama Ruang &amp; Peserta</th>
                 <th class="p-2.5">Kode &amp; Mata Pelajaran</th>
                 <th class="p-2.5">Kode &amp; Nama Pengawas Ruang</th>
               </tr>
@@ -701,13 +703,152 @@ const JadwalModule = {
   getPrintToolbarHtml() {
     return `
       <div class="no-print" style="background:#0f172a;color:#fff;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;border-radius:8px;">
-        <span style="font-size:12px;font-weight:bold;">Pratinjau Dokumen Siap Cetak — SMKN 1 Wakatobi</span>
+        <span style="font-size:12px;font-weight:bold;">Pratinjau Dokumen Siap Cetak — SMK Negeri 1 Wakatobi</span>
         <div style="display:flex;gap:8px;">
           <button onclick="window.print()" style="background:#10b981;color:#fff;border:none;padding:7px 14px;border-radius:6px;font-weight:bold;font-size:12px;cursor:pointer;">🖨️ Cetak / Simpan PDF</button>
           <button onclick="window.close()" style="background:#e11d48;color:#fff;border:none;padding:7px 14px;border-radius:6px;font-weight:bold;font-size:12px;cursor:pointer;">✕ Tutup Tab Ini</button>
         </div>
       </div>
     `;
+  },
+
+  // --- CETAK DAFTAR PESERTA PER RUANGAN (TEMPEL PINTU RUANGAN) ---
+  executePrintDaftarPesertaPintu() {
+    const rooms = this.lastMasterRooms || [];
+    const allocations = this.lastGeneratedAllocation || [];
+    const kepsek = this.lastKepalaSekolah;
+
+    if (rooms.length === 0) {
+      alert("Data ruangan peserta tidak ditemukan. Pastikan data siswa aktif sudah tersedia.");
+      return;
+    }
+
+    // Jika filter tanggal tertentu dipilih, tampilkan ruangan yang aktif pada jadwal tersebut; jika tidak, semua ruangan
+    const activeRoomNums = allocations.length > 0
+      ? [...new Set(allocations.map(a => a.nomorRuang))].sort((a, b) => a - b)
+      : rooms.map(r => r.nomorRuang);
+
+    const targetRooms = activeRoomNums
+      .map(num => rooms.find(r => r.nomorRuang === num))
+      .filter(Boolean);
+
+    const kopUrl = this.getKopUrl();
+    const todayStr = new Date().toLocaleDateString('id-ID', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
+
+    const pagesHtml = targetRooms.map((rm, idx) => {
+      const studentRows = (rm.students || []).map((s, sIdx) => {
+        const no = sIdx + 1;
+        const nisn = s.nisn || s.NISN || s.id_siswa || '-';
+        const nama = s.nama || s.nama_siswa || s.NAMA || '-';
+
+        return `
+          <tr>
+            <td style="text-align:center; font-weight:bold;">${no}</td>
+            <td style="text-align:center; font-family:monospace; font-size:11px;">${nisn}</td>
+            <td style="font-weight:600; font-size:11.5px;">${nama}</td>
+            <td style="text-align:center; font-weight:bold;">${rm.kelasLabel}</td>
+          </tr>
+        `;
+      }).join('');
+
+      return `
+        <div class="${idx > 0 ? 'page-break' : ''}">
+          <img src="${kopUrl}" class="kop" alt="Kop Sekolah" onerror="this.style.display='none'">
+
+          <div class="room-banner">
+            <div class="room-title">DAFTAR PESERTA UJIAN &mdash; RUANG ${String(rm.nomorRuang).padStart(2, '0')}</div>
+            <div class="room-subtitle">KELAS / ROMBEL: ${rm.kelasLabel} &bull; JUMLAH PESERTA: ${rm.jumlahSiswa} SISWA</div>
+            <div class="room-school">UJIAN SUMATIF BERBASIS KOMPUTER (CBT) &bull; SMK NEGERI 1 WAKATOBI T.A. 2026/2027</div>
+          </div>
+
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th style="width:42px;">No</th>
+                <th style="width:135px;">NISN / Username</th>
+                <th>Nama Lengkap Peserta Ujian</th>
+                <th style="width:125px;">Kelas</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${studentRows}
+            </tbody>
+          </table>
+
+          <div class="footer-note">
+            * Peserta wajib hadir di depan ruangan 15 menit sebelum ujian dimulai dan menempati perangkat sesuai nomor urut.
+          </div>
+
+          <div class="ttd-wrap">
+            <div class="ttd-box">
+              Wangi-Wangi Selatan, ${todayStr}<br>
+              Kepala SMK Negeri 1 Wakatobi,
+              <div class="ttd-space"></div>
+              <strong><u>${kepsek.nama}</u></strong><br>
+              NIP. ${kepsek.nip}
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    const printWin = window.open('', '_blank', 'width=1000,height=780');
+    if (!printWin) {
+      alert("Pop-up diblokir oleh browser! Izinkan pop-up untuk mencetak daftar peserta per ruangan.");
+      return;
+    }
+
+    printWin.document.write(`
+      <!DOCTYPE html>
+      <html lang="id">
+      <head>
+        <meta charset="UTF-8">
+        <title>Daftar Peserta Per Ruangan (Tempel Pintu) - SMK Negeri 1 Wakatobi</title>
+        <style>
+          @page { size: A4 portrait; margin: 11mm; }
+          @media print {
+            .no-print { display: none !important; }
+            .page-break { page-break-before: always; }
+          }
+          body { font-family: Arial, Helvetica, sans-serif; color: #0f172a; font-size: 11px; margin: 0; }
+          .kop { width: 100%; max-height: 100px; object-fit: contain; display: block; margin: 0 auto 6px auto; }
+          .room-banner {
+            border: 2px solid #0f172a;
+            background-color: #f1f5f9;
+            border-radius: 6px;
+            text-align: center;
+            padding: 8px 10px;
+            margin: 4px 0 10px 0;
+          }
+          .room-title { font-size: 19px; font-weight: 900; letter-spacing: 0.8px; color: #0f172a; }
+          .room-subtitle { font-size: 12.5px; font-weight: 800; color: #0f766e; margin-top: 2px; }
+          .room-school { font-size: 10px; font-weight: bold; color: #334155; margin-top: 2px; }
+          .data-table { width: 100%; border-collapse: collapse; }
+          .data-table th, .data-table td { border: 1px solid #334155; padding: 5.5px 8px; vertical-align: middle; }
+          .data-table th { background-color: #e2e8f0; font-weight: bold; text-align: center; text-transform: uppercase; font-size: 10.5px; }
+          .data-table tbody tr:nth-child(even) { background-color: #f8fafc; }
+          .footer-note { margin-top: 7px; font-size: 10px; font-style: italic; color: #475569; }
+          .ttd-wrap { width: 100%; margin-top: 14px; display: flex; justify-content: flex-end; page-break-inside: avoid; }
+          .ttd-box { width: 255px; text-align: left; font-size: 11px; line-height: 1.4; }
+          .ttd-space { height: 48px; }
+        </style>
+      </head>
+      <body>
+        ${this.getPrintToolbarHtml()}
+        ${pagesHtml}
+        <script>
+          window.onload = function() {
+            setTimeout(function() { window.print(); }, 400);
+          };
+        </script>
+      </body>
+      </html>
+    `);
+    printWin.document.close();
   },
 
   executePrintJadwal() {
@@ -817,7 +958,7 @@ const JadwalModule = {
       <html lang="id">
       <head>
         <meta charset="UTF-8">
-        <title>Jadwal Ujian & Kode Pengawas Ruang - SMKN 1 Wakatobi</title>
+        <title>Jadwal Ujian & Kode Pengawas Ruang - SMK Negeri 1 Wakatobi</title>
         <style>
           @page { size: A4 landscape; margin: 9mm; }
           @media print { .no-print { display: none !important; } }
@@ -844,7 +985,7 @@ const JadwalModule = {
         <img src="${kopUrl}" class="kop" alt="Kop Sekolah" onerror="this.style.display='none'">
         <div class="title">
           <h2>JADWAL PELAKSANAAN UJIAN &amp; PEMBAGIAN PENGAWAS RUANG</h2>
-          <p>SMKN 1 WAKATOBI &bull; TAHUN AJARAN 2026/2027</p>
+          <p>SMK NEGERI 1 WAKATOBI &bull; TAHUN AJARAN 2026/2027</p>
         </div>
 
         <table class="matrix">
@@ -875,8 +1016,8 @@ const JadwalModule = {
 
         <div class="ttd-wrap">
           <div class="ttd-box">
-            Wangi-Wangi, ${todayStr}<br>
-            Plt. Kepala SMKN 1 Wakatobi,
+            Wangi-Wangi Selatan, ${todayStr}<br>
+            Kepala SMK Negeri 1 Wakatobi,
             <div class="ttd-space"></div>
             <strong><u>${kepsek.nama}</u></strong><br>
             NIP. ${kepsek.nip}
@@ -971,7 +1112,7 @@ const JadwalModule = {
           <img src="${kopUrl}" class="kop" alt="Kop Sekolah" onerror="this.style.display='none'">
           <div class="title">
             <h2>DAFTAR HADIR PENGAWAS RUANG UJIAN</h2>
-            <p>SMKN 1 WAKATOBI &bull; TAHUN AJARAN 2026/2027</p>
+            <p>SMK NEGERI 1 WAKATOBI &bull; TAHUN AJARAN 2026/2027</p>
           </div>
 
           <div style="margin:6px 0 8px 0; font-size:11.5px; font-weight:bold;">
@@ -996,7 +1137,7 @@ const JadwalModule = {
           <div class="ttd-wrap">
             <div class="ttd-box">
               Mengetahui,<br>
-              Plt. Kepala SMKN 1 Wakatobi,
+              Kepala SMK Negeri 1 Wakatobi,
               <div class="ttd-space"></div>
               <strong><u>${kepsek.nama}</u></strong><br>
               NIP. ${kepsek.nip}
@@ -1017,7 +1158,7 @@ const JadwalModule = {
       <html lang="id">
       <head>
         <meta charset="UTF-8">
-        <title>Daftar Hadir Pengawas Ruang Ujian (Per Hari) - SMKN 1 Wakatobi</title>
+        <title>Daftar Hadir Pengawas Ruang Ujian (Per Hari) - SMK Negeri 1 Wakatobi</title>
         <style>
           @page { size: A4 portrait; margin: 11mm; }
           @media print {
@@ -1123,7 +1264,7 @@ const JadwalModule = {
           <img src="${kopUrl}" class="kop" alt="Kop Sekolah" onerror="this.style.display='none'">
           <div class="title">
             <h2>DAFTAR HADIR PESERTA UJIAN</h2>
-            <p>SMKN 1 WAKATOBI &bull; TAHUN AJARAN 2026/2027</p>
+            <p>SMK NEGERI 1 WAKATOBI &bull; TAHUN AJARAN 2026/2027</p>
           </div>
 
           <table class="meta-table">
@@ -1181,7 +1322,7 @@ const JadwalModule = {
             <div class="ttd-kepsek-center">
               <div class="ttd-box-center">
                 Mengetahui,<br>
-                Plt. Kepala SMKN 1 Wakatobi,
+                Kepala SMK Negeri 1 Wakatobi,
                 <div class="ttd-space"></div>
                 <strong><u>${kepsek.nama}</u></strong><br>
                 NIP. ${kepsek.nip}
@@ -1203,7 +1344,7 @@ const JadwalModule = {
       <html lang="id">
       <head>
         <meta charset="UTF-8">
-        <title>Daftar Hadir Peserta Ujian per Ruang - SMKN 1 Wakatobi</title>
+        <title>Daftar Hadir Peserta Ujian per Ruang - SMK Negeri 1 Wakatobi</title>
         <style>
           @page { size: A4 portrait; margin: 10mm; }
           @media print {
