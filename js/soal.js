@@ -954,7 +954,7 @@ const SoalModule = {
           </div>
         </div>
 
-        <h4 class="font-bold text-center text-sm uppercase mb-4 tracking-wide border-b pb-1">NASKAH BUTIR SOAL UJIAN SUMATIF</h4>
+        <h4 class="font-bold text-center text-sm uppercase mb-4 tracking-wide border-b pb-1">NASKAH BUTIR SOAL PENILAIAN SUMATIF AKHIR SEMESTER GANJIL</h4>
 
         <div class="space-y-5">
     `;
