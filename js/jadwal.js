@@ -4,6 +4,7 @@ const JadwalModule = {
   lastGuruCodeList: [],
   lastMapelCodeList: [],
   lastKepalaSekolah: { nama: '..................................................', nip: '............................................' },
+  SUPERVISOR_LOCK_STORAGE_KEY: 'exam_locked_supervisor_map_v1',
 
   normalizeText(str) {
     return String(str || '').replace(/\s+/g, ' ').trim().toUpperCase();
@@ -15,7 +16,28 @@ const JadwalModule = {
     }
     return (typeof CONFIG !== 'undefined' && CONFIG.KOP_SEKOLAH_URL)
       ? CONFIG.KOP_SEKOLAH_URL
-      : 'https://nbwpnhshhpfqtmbwewgk.supabase.co/storage/v1/object/public/media-sekolah/kop_sekolah2.jpg';
+      : 'https://nbwpnhshhpfqtmbwewgk.supabase.co/storage/v1/object/public/media-sekolah/kop_sekolah.png';
+  },
+
+  // Pengacakan deterministik berbasis seed agar hasil awal konsisten (tidak berubah tiap dibuka)
+  seededShuffle(array, seedStr = 'SMKN1WAKATOBI') {
+    const arr = [...array];
+    let h = 2166136261 >>> 0;
+    for (let i = 0; i < seedStr.length; i++) {
+      h ^= seedStr.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    const nextRand = () => {
+      h += 0x6D2B79F5;
+      let t = Math.imul(h ^ (h >>> 15), 1 | h);
+      t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(nextRand() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
   },
 
   shuffleArray(array) {
@@ -25,6 +47,23 @@ const JadwalModule = {
       [arr[i], arr[j]] = [arr[j], arr[i]];
     }
     return arr;
+  },
+
+  getLockedSupervisorMap() {
+    try {
+      const raw = localStorage.getItem(this.SUPERVISOR_LOCK_STORAGE_KEY);
+      if (!raw) return {};
+      const parsed = JSON.parse(raw);
+      return (parsed && typeof parsed === 'object') ? parsed : {};
+    } catch (e) {
+      return {};
+    }
+  },
+
+  saveLockedSupervisorMap(mapObj) {
+    try {
+      localStorage.setItem(this.SUPERVISOR_LOCK_STORAGE_KEY, JSON.stringify(mapObj || {}));
+    } catch (e) {}
   },
 
   extractKepalaSekolah(rawGuruList) {
@@ -220,14 +259,14 @@ const JadwalModule = {
       <div class="p-3.5 mb-3 rounded-xl bg-ocean-50 border border-ocean-200 flex flex-wrap items-center justify-between gap-3">
         <div>
           <p class="text-xs font-extrabold text-ocean-950">🖨️ Cetak Jadwal, Daftar Peserta Pintu Ruang, Daftar Hadir Pengawas &amp; Daftar Hadir Siswa</p>
-          <p class="text-[11px] text-slate-600">Maks. 20 siswa/ruang &bull; 2 pengawas per ruang &bull; Dilengkapi daftar peserta tempel pintu ruangan.</p>
+          <p class="text-[11px] text-slate-600">Susunan pengawas terkunci otomatis (tidak berubah setiap dibuka) &bull; Gunakan tombol Acak Ulang hanya jika ingin mengganti susunan.</p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <select id="filter-cetak-jadwal-tanggal" class="text-xs font-semibold border border-ocean-300 rounded-lg px-2.5 py-2 bg-white text-slate-800">
             <option value="ALL">Semua Tanggal (${uniqueDates.length} Hari)</option>
             ${dateOptionsHtml}
           </select>
-          <button type="button" onclick="JadwalModule.openPrintJadwalModal()" class="bg-ocean-800 hover:bg-ocean-900 text-white font-bold text-xs px-3.5 py-2 rounded-lg shadow-sm transition flex items-center gap-1.5">
+          <button type="button" onclick="JadwalModule.openPrintJadwalModal(false)" class="bg-ocean-800 hover:bg-ocean-900 text-white font-bold text-xs px-3.5 py-2 rounded-lg shadow-sm transition flex items-center gap-1.5">
             <span>🖨️ Kelola &amp; Cetak Dokumen Ujian</span>
           </button>
         </div>
@@ -286,7 +325,7 @@ const JadwalModule = {
     });
   },
 
-  async buildRoomAndSupervisorAllocation(filterTanggal = 'ALL') {
+  async buildRoomAndSupervisorAllocation(filterTanggal = 'ALL', forceReshuffle = false) {
     if (!State.siswaList || State.siswaList.length === 0) {
       State.siswaList = await DB.fetchSiswa();
     }
@@ -312,6 +351,12 @@ const JadwalModule = {
       }));
 
     this.lastGuruCodeList = eligibleGuru;
+
+    const guruByKey = {};
+    eligibleGuru.forEach(g => {
+      const k = String(g.id_guru || g.no_hp || g.nama_guru);
+      guruByKey[k] = g;
+    });
 
     const siswaGroupByKelas = {};
     (State.siswaList || []).forEach(s => {
@@ -439,6 +484,7 @@ const JadwalModule = {
         activeMasterRooms.forEach(r => {
           const mFull = mapelByKelasNorm[r.kelasNorm];
           rawSlotRooms.push({
+            slotLockKey: `${sess.sessionKey}|R${r.nomorRuang}`,
             sessionKey: sess.sessionKey,
             tanggal: sess.tanggal,
             tanggalFormatted: this.formatTanggalIndonesia(sess.tanggal),
@@ -461,6 +507,7 @@ const JadwalModule = {
         sess.items.forEach(j => {
           String(j.kelas || '').split(',').map(k => k.trim()).filter(Boolean).forEach(k => {
             rawSlotRooms.push({
+              slotLockKey: `${sess.sessionKey}|R${fallbackNo}`,
               sessionKey: sess.sessionKey,
               tanggal: sess.tanggal,
               tanggalFormatted: this.formatTanggalIndonesia(sess.tanggal),
@@ -483,10 +530,29 @@ const JadwalModule = {
       }
     });
 
+    const lockedMap = this.getLockedSupervisorMap();
     const assignedIntervalsByGuru = {};
     const assignedRoomsTodayByGuru = {};
     const sessionAssignCountByGuru = {};
     const sessionShuffledPool = {};
+
+    const registerGuruAssignment = (guruObj, room) => {
+      if (!guruObj) return;
+      const gKey = String(guruObj.id_guru || guruObj.no_hp || guruObj.nama_guru);
+      if (!assignedIntervalsByGuru[gKey]) assignedIntervalsByGuru[gKey] = [];
+      assignedIntervalsByGuru[gKey].push({
+        tanggal: room.tanggal,
+        jamMulai: room.jamMulai,
+        jamSelesai: room.jamSelesai
+      });
+
+      const dayKey = `${gKey}|${room.tanggal}`;
+      if (!assignedRoomsTodayByGuru[dayKey]) assignedRoomsTodayByGuru[dayKey] = new Set();
+      assignedRoomsTodayByGuru[dayKey].add(room.nomorRuang);
+
+      const sessLoadKey = `${room.sessionKey}|${gKey}`;
+      sessionAssignCountByGuru[sessLoadKey] = (sessionAssignCountByGuru[sessLoadKey] || 0) + 1;
+    };
 
     const pickOneSupervisor = (room, pool, excludeGuruKey = null) => {
       if (!pool || pool.length === 0) return null;
@@ -524,34 +590,42 @@ const JadwalModule = {
       }
 
       if (chosen) {
-        const gKey = getKey(chosen);
-        if (!assignedIntervalsByGuru[gKey]) assignedIntervalsByGuru[gKey] = [];
-        assignedIntervalsByGuru[gKey].push({
-          tanggal: room.tanggal,
-          jamMulai: room.jamMulai,
-          jamSelesai: room.jamSelesai
-        });
-
-        const dayKey = `${gKey}|${room.tanggal}`;
-        if (!assignedRoomsTodayByGuru[dayKey]) assignedRoomsTodayByGuru[dayKey] = new Set();
-        assignedRoomsTodayByGuru[dayKey].add(room.nomorRuang);
-
-        const sessLoadKey = `${room.sessionKey}|${gKey}`;
-        sessionAssignCountByGuru[sessLoadKey] = (sessionAssignCountByGuru[sessLoadKey] || 0) + 1;
+        registerGuruAssignment(chosen, room);
       }
 
       return chosen || null;
     };
 
-    const allocations = rawSlotRooms.map(room => {
-      if (!sessionShuffledPool[room.sessionKey]) {
-        sessionShuffledPool[room.sessionKey] = this.shuffleArray(eligibleGuru);
-      }
-      const pool = sessionShuffledPool[room.sessionKey];
+    let hasNewLockUpdates = false;
 
-      const p1 = pickOneSupervisor(room, pool, null);
-      const p1Key = p1 ? String(p1.id_guru || p1.no_hp || p1.nama_guru) : null;
-      const p2 = pickOneSupervisor(room, pool, p1Key);
+    const allocations = rawSlotRooms.map(room => {
+      const savedSlot = !forceReshuffle ? lockedMap[room.slotLockKey] : null;
+      let p1 = null;
+      let p2 = null;
+
+      if (savedSlot && savedSlot.p1Key && guruByKey[savedSlot.p1Key]) {
+        p1 = guruByKey[savedSlot.p1Key];
+        p2 = (savedSlot.p2Key && guruByKey[savedSlot.p2Key]) ? guruByKey[savedSlot.p2Key] : null;
+        registerGuruAssignment(p1, room);
+        registerGuruAssignment(p2, room);
+      } else {
+        if (!sessionShuffledPool[room.sessionKey]) {
+          sessionShuffledPool[room.sessionKey] = forceReshuffle
+            ? this.shuffleArray(eligibleGuru)
+            : this.seededShuffle(eligibleGuru, `LOCKED_${room.sessionKey}`);
+        }
+        const pool = sessionShuffledPool[room.sessionKey];
+
+        p1 = pickOneSupervisor(room, pool, null);
+        const p1Key = p1 ? String(p1.id_guru || p1.no_hp || p1.nama_guru) : null;
+        p2 = pickOneSupervisor(room, pool, p1Key);
+        const p2Key = p2 ? String(p2.id_guru || p2.no_hp || p2.nama_guru) : null;
+
+        if (p1 || p2) {
+          lockedMap[room.slotLockKey] = { p1Key, p2Key };
+          hasNewLockUpdates = true;
+        }
+      }
 
       return {
         ...room,
@@ -566,12 +640,23 @@ const JadwalModule = {
       };
     });
 
+    if (hasNewLockUpdates) {
+      this.saveLockedSupervisorMap(lockedMap);
+    }
+
     this.lastGeneratedAllocation = allocations;
     return {
       allocations,
       totalEligibleGuru: eligibleGuru.length,
       totalMasterRooms: masterRooms.length
     };
+  },
+
+  reshuffleSupervisors() {
+    if (!confirm("Acak ulang susunan pengawas ruang sekarang?\nSusunan baru akan langsung dikunci menggantikan susunan sebelumnya.")) {
+      return;
+    }
+    this.openPrintJadwalModal(true);
   },
 
   closePrintJadwalModal() {
@@ -583,9 +668,9 @@ const JadwalModule = {
     }
   },
 
-  async openPrintJadwalModal() {
+  async openPrintJadwalModal(forceReshuffle = false) {
     const filterTanggal = document.getElementById('filter-cetak-jadwal-tanggal')?.value || 'ALL';
-    const { allocations, totalEligibleGuru, totalMasterRooms } = await this.buildRoomAndSupervisorAllocation(filterTanggal);
+    const { allocations, totalEligibleGuru, totalMasterRooms } = await this.buildRoomAndSupervisorAllocation(filterTanggal, forceReshuffle);
 
     if (allocations.length === 0) {
       alert("Tidak ada jadwal ujian yang dapat dicetak pada filter tanggal yang dipilih.");
@@ -651,10 +736,10 @@ const JadwalModule = {
         <div class="px-5 py-3.5 bg-ocean-950 text-white flex flex-wrap items-center justify-between gap-3 shrink-0">
           <div>
             <h3 class="font-extrabold text-sm">Pratinjau Jadwal Ujian, Daftar Peserta Pintu Ruang, Daftar Hadir Pengawas &amp; Siswa</h3>
-            <p class="text-[11px] text-teal-300">Total Ruang: ${totalMasterRooms} &bull; Guru Aktif: ${totalEligibleGuru} &bull; Plt. Kepala Sekolah: <strong>${kepsek.nama}</strong></p>
+            <p class="text-[11px] text-teal-300">🔒 Susunan Pengawas Terkunci &bull; Total Ruang: ${totalMasterRooms} &bull; Guru Aktif: ${totalEligibleGuru} &bull; Kepala Sekolah: <strong>${kepsek.nama}</strong></p>
           </div>
           <div class="flex flex-wrap items-center gap-2">
-            <button type="button" onclick="JadwalModule.openPrintJadwalModal()" class="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs px-3 py-2 rounded-lg transition">
+            <button type="button" onclick="JadwalModule.reshuffleSupervisors()" class="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs px-3 py-2 rounded-lg transition">
               🔀 Acak Ulang Pengawas
             </button>
             <button type="button" onclick="JadwalModule.executePrintJadwal()" class="bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs px-3 py-2 rounded-lg shadow transition">
@@ -691,7 +776,7 @@ const JadwalModule = {
         </div>
 
         <div class="px-5 py-3 bg-slate-100 border-t border-slate-200 flex items-center justify-between shrink-0">
-          <span class="text-[11px] text-slate-500">Tekan tombol <strong>ESC</strong> atau klik Tutup untuk kembali.</span>
+          <span class="text-[11px] text-slate-500">Susunan pengawas tersimpan otomatis. Tekan <strong>ESC</strong> atau klik Tutup untuk kembali.</span>
           <button type="button" onclick="JadwalModule.closePrintJadwalModal()" class="bg-slate-700 hover:bg-slate-800 text-white font-bold text-xs px-4 py-2 rounded-lg transition">
             ⬅️ Tutup / Kembali
           </button>
@@ -703,7 +788,7 @@ const JadwalModule = {
   getPrintToolbarHtml() {
     return `
       <div class="no-print" style="background:#0f172a;color:#fff;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;border-radius:8px;">
-        <span style="font-size:12px;font-weight:bold;">Pratinjau Dokumen Siap Cetak — SMKN 1 Wakatobi</span>
+        <span style="font-size:12px;font-weight:bold;">Pratinjau Dokumen Siap Cetak — SMK Negeri 1 Wakatobi</span>
         <div style="display:flex;gap:8px;">
           <button onclick="window.print()" style="background:#10b981;color:#fff;border:none;padding:7px 14px;border-radius:6px;font-weight:bold;font-size:12px;cursor:pointer;">🖨️ Cetak / Simpan PDF</button>
           <button onclick="window.close()" style="background:#e11d48;color:#fff;border:none;padding:7px 14px;border-radius:6px;font-weight:bold;font-size:12px;cursor:pointer;">✕ Tutup Tab Ini</button>
@@ -712,7 +797,6 @@ const JadwalModule = {
     `;
   },
 
-  // --- CETAK DAFTAR PESERTA PER RUANGAN (TEMPEL PINTU RUANGAN) ---
   executePrintDaftarPesertaPintu() {
     const rooms = this.lastMasterRooms || [];
     const allocations = this.lastGeneratedAllocation || [];
@@ -723,7 +807,6 @@ const JadwalModule = {
       return;
     }
 
-    // Jika filter tanggal tertentu dipilih, tampilkan ruangan yang aktif pada jadwal tersebut; jika tidak, semua ruangan
     const activeRoomNums = allocations.length > 0
       ? [...new Set(allocations.map(a => a.nomorRuang))].sort((a, b) => a - b)
       : rooms.map(r => r.nomorRuang);
@@ -762,7 +845,7 @@ const JadwalModule = {
           <div class="room-banner">
             <div class="room-title">DAFTAR PESERTA UJIAN &mdash; RUANG ${String(rm.nomorRuang).padStart(2, '0')}</div>
             <div class="room-subtitle">KELAS / ROMBEL: ${rm.kelasLabel} &bull; JUMLAH PESERTA: ${rm.jumlahSiswa} SISWA</div>
-            <div class="room-school">UJIAN SUMATIF BERBASIS KOMPUTER (CBT) &bull; SMKN 1 WAKATOBI T.A. 2026/2027</div>
+            <div class="room-school">UJIAN SUMATIF BERBASIS KOMPUTER (CBT) &bull; SMK NEGERI 1 WAKATOBI T.A. 2026/2027</div>
           </div>
 
           <table class="data-table">
@@ -785,8 +868,8 @@ const JadwalModule = {
 
           <div class="ttd-wrap">
             <div class="ttd-box">
-              Wangi-Wangi, ${todayStr}<br>
-              Plt. Kepala SMKN 1 Wakatobi,
+              Wangi-Wangi Selatan, ${todayStr}<br>
+              Kepala SMK Negeri 1 Wakatobi,
               <div class="ttd-space"></div>
               <strong><u>${kepsek.nama}</u></strong><br>
               NIP. ${kepsek.nip}
@@ -807,7 +890,7 @@ const JadwalModule = {
       <html lang="id">
       <head>
         <meta charset="UTF-8">
-        <title>Daftar Peserta Per Ruangan (Tempel Pintu) - SMKN 1 Wakatobi</title>
+        <title>Daftar Peserta Per Ruangan (Tempel Pintu) - SMK Negeri 1 Wakatobi</title>
         <style>
           @page { size: A4 portrait; margin: 11mm; }
           @media print {
@@ -958,7 +1041,7 @@ const JadwalModule = {
       <html lang="id">
       <head>
         <meta charset="UTF-8">
-        <title>Jadwal Ujian & Kode Pengawas Ruang - SMKN 1 Wakatobi</title>
+        <title>Jadwal Ujian & Kode Pengawas Ruang - SMK Negeri 1 Wakatobi</title>
         <style>
           @page { size: A4 landscape; margin: 9mm; }
           @media print { .no-print { display: none !important; } }
@@ -985,7 +1068,7 @@ const JadwalModule = {
         <img src="${kopUrl}" class="kop" alt="Kop Sekolah" onerror="this.style.display='none'">
         <div class="title">
           <h2>JADWAL PELAKSANAAN UJIAN &amp; PEMBAGIAN PENGAWAS RUANG</h2>
-          <p>SMKN 1 WAKATOBI &bull; TAHUN AJARAN 2026/2027</p>
+          <p>SMK NEGERI 1 WAKATOBI &bull; TAHUN AJARAN 2026/2027</p>
         </div>
 
         <table class="matrix">
@@ -1016,8 +1099,8 @@ const JadwalModule = {
 
         <div class="ttd-wrap">
           <div class="ttd-box">
-            Wangi-Wangi, ${todayStr}<br>
-            Plt. Kepala SMKN 1 Wakatobi,
+            Wangi-Wangi Selatan, ${todayStr}<br>
+            Kepala SMK Negeri 1 Wakatobi,
             <div class="ttd-space"></div>
             <strong><u>${kepsek.nama}</u></strong><br>
             NIP. ${kepsek.nip}
@@ -1112,7 +1195,7 @@ const JadwalModule = {
           <img src="${kopUrl}" class="kop" alt="Kop Sekolah" onerror="this.style.display='none'">
           <div class="title">
             <h2>DAFTAR HADIR PENGAWAS RUANG UJIAN</h2>
-            <p>SMKN 1 WAKATOBI &bull; TAHUN AJARAN 2026/2027</p>
+            <p>SMK NEGERI 1 WAKATOBI &bull; TAHUN AJARAN 2026/2027</p>
           </div>
 
           <div style="margin:6px 0 8px 0; font-size:11.5px; font-weight:bold;">
@@ -1137,7 +1220,7 @@ const JadwalModule = {
           <div class="ttd-wrap">
             <div class="ttd-box">
               Mengetahui,<br>
-              Plt. Kepala SMKN 1 Wakatobi,
+              Kepala SMK Negeri 1 Wakatobi,
               <div class="ttd-space"></div>
               <strong><u>${kepsek.nama}</u></strong><br>
               NIP. ${kepsek.nip}
@@ -1158,7 +1241,7 @@ const JadwalModule = {
       <html lang="id">
       <head>
         <meta charset="UTF-8">
-        <title>Daftar Hadir Pengawas Ruang Ujian (Per Hari) - SMKN 1 Wakatobi</title>
+        <title>Daftar Hadir Pengawas Ruang Ujian (Per Hari) - SMK Negeri 1 Wakatobi</title>
         <style>
           @page { size: A4 portrait; margin: 11mm; }
           @media print {
@@ -1264,7 +1347,7 @@ const JadwalModule = {
           <img src="${kopUrl}" class="kop" alt="Kop Sekolah" onerror="this.style.display='none'">
           <div class="title">
             <h2>DAFTAR HADIR PESERTA UJIAN</h2>
-            <p>SMKN 1 WAKATOBI &bull; TAHUN AJARAN 2026/2027</p>
+            <p>SMK NEGERI 1 WAKATOBI &bull; TAHUN AJARAN 2026/2027</p>
           </div>
 
           <table class="meta-table">
@@ -1322,7 +1405,7 @@ const JadwalModule = {
             <div class="ttd-kepsek-center">
               <div class="ttd-box-center">
                 Mengetahui,<br>
-                Plt. Kepala SMKN 1 Wakatobi,
+                Kepala SMK Negeri 1 Wakatobi,
                 <div class="ttd-space"></div>
                 <strong><u>${kepsek.nama}</u></strong><br>
                 NIP. ${kepsek.nip}
@@ -1344,7 +1427,7 @@ const JadwalModule = {
       <html lang="id">
       <head>
         <meta charset="UTF-8">
-        <title>Daftar Hadir Peserta Ujian per Ruang - SMKN 1 Wakatobi</title>
+        <title>Daftar Hadir Peserta Ujian per Ruang - SMK Negeri 1 Wakatobi</title>
         <style>
           @page { size: A4 portrait; margin: 10mm; }
           @media print {
