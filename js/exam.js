@@ -5,13 +5,116 @@ const ExamModule = {
   remainingSeconds: 0,
   heartbeatInterval: null,
   lastViolationTime: 0,
+  _isSubmitting: false,
 
   OFFLINE_PKG_PREFIX: 'cbt_offline_pkg_kelas_',
   PENDING_SYNC_KEY: 'cbt_pending_hasil_ujian_v1',
   LOCAL_COMPLETED_KEY: 'cbt_local_completed_exams_v1',
+  VERIFIED_PIN_PREFIX: 'cbt_verified_room_pin_',
 
   normalizeText(str) {
     return String(str || '').replace(/\s+/g, ' ').trim().toUpperCase();
+  },
+
+  // Token/PIN Pengawas Ruang 4-digit deterministik per tanggal & jam sesi (sinkron online & offline)
+  computeSessionRoomToken(scheduleObj = null) {
+    const now = new Date();
+    const fallbackDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const tgl = String(scheduleObj?.tanggal || fallbackDate).trim();
+    const jm = String(scheduleObj?.jamMulai || (now.getHours() < 10 ? '07:30' : '10:00')).substring(0, 5);
+    const seed = `SMKN1WKT_TOKEN_${tgl}_${jm}`;
+
+    let h = 2166136261 >>> 0;
+    for (let i = 0; i < seed.length; i++) {
+      h ^= seed.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    const fourDigits = 1000 + (h % 9000);
+    return String(fourDigits);
+  },
+
+  promptRoomSupervisorPin(scheduleObj) {
+    return new Promise((resolve) => {
+      const expectedPin = this.computeSessionRoomToken(scheduleObj);
+      const tgl = String(scheduleObj?.tanggal || '').trim();
+      const jm = String(scheduleObj?.jamMulai || '').substring(0, 5);
+      const verifiedKey = `${this.VERIFIED_PIN_PREFIX}${tgl}_${jm}`;
+
+      // Jika sudah pernah verifikasi PIN pada sesi ini di perangkat yang sama, langsung lolos
+      if (sessionStorage.getItem(verifiedKey) === expectedPin) {
+        resolve(true);
+        return;
+      }
+
+      const existing = document.getElementById('modal-room-pin-overlay');
+      if (existing) existing.remove();
+
+      const overlay = document.createElement('div');
+      overlay.id = 'modal-room-pin-overlay';
+      overlay.className = 'fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4';
+      overlay.innerHTML = `
+        <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border-2 border-ocean-700 space-y-4">
+          <div class="text-center space-y-1.5">
+            <div class="w-12 h-12 rounded-2xl bg-ocean-100 text-ocean-800 flex items-center justify-center mx-auto text-xl">
+              <i class="fa-solid fa-key"></i>
+            </div>
+            <h3 class="font-extrabold text-base text-slate-900">Verifikasi PIN Pengawas Ruang</h3>
+            <p class="text-xs text-slate-600 leading-relaxed">
+              Masukkan <strong>4 digit PIN Ruang Ujian</strong> yang ditulis oleh Pengawas di papan tulis kelas untuk memulai <strong>${scheduleObj.mapel}</strong>.
+            </p>
+          </div>
+
+          <div class="space-y-2">
+            <input type="text" id="input-room-pin-code" inputmode="numeric" maxlength="6" autocomplete="off"
+                   placeholder="••••"
+                   class="w-full text-center font-mono font-extrabold text-2xl tracking-[0.45em] py-3 border-2 border-slate-300 rounded-xl focus:outline-none focus:border-ocean-600 focus:ring-2 focus:ring-ocean-500/30">
+            <p id="error-room-pin-msg" class="hidden text-center text-[11px] font-bold text-rose-600">
+              PIN salah! Silakan cek papan tulis ruang ujian atau tanya Pengawas.
+            </p>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2.5 pt-1">
+            <button type="button" id="btn-cancel-room-pin" class="py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-100">
+              Batal
+            </button>
+            <button type="button" id="btn-confirm-room-pin" class="py-2.5 rounded-xl bg-ocean-700 hover:bg-ocean-800 text-white font-bold text-xs shadow">
+              Masuk Ujian
+            </button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(overlay);
+      const inputEl = document.getElementById('input-room-pin-code');
+      const errEl = document.getElementById('error-room-pin-msg');
+
+      const verify = () => {
+        const val = String(inputEl.value || '').trim();
+        if (val === expectedPin) {
+          sessionStorage.setItem(verifiedKey, expectedPin);
+          overlay.remove();
+          resolve(true);
+        } else {
+          errEl.classList.remove('hidden');
+          inputEl.classList.add('border-rose-500');
+          inputEl.focus();
+          inputEl.select();
+        }
+      };
+
+      document.getElementById('btn-confirm-room-pin').onclick = verify;
+      document.getElementById('btn-cancel-room-pin').onclick = () => {
+        overlay.remove();
+        resolve(false);
+      };
+      inputEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          verify();
+        }
+      });
+      setTimeout(() => inputEl.focus(), 80);
+    });
   },
 
   isMapelMatch(mapelA, mapelB) {
@@ -45,9 +148,6 @@ const ExamModule = {
     return `cbt_autosave_${sId}_${mId}`;
   },
 
-  // =========================================================================
-  // MODUL SEMI-ONLINE: PAKET OFFLINE, LOBBY PESERTA & SINKRONISASI ANTREAN
-  // =========================================================================
   getOfflinePackageKey(kelas) {
     return this.OFFLINE_PKG_PREFIX + this.normalizeText(kelas).replace(/[^A-Z0-9]/g, '_');
   },
@@ -208,14 +308,23 @@ const ExamModule = {
           .select('*')
           .eq('mapel', item.mapel);
 
-        const matchedRow = (existingRows || []).find(r => {
+        const matchedRows = (existingRows || []).filter(r => {
           const rId = String(r.ID_SISWA || r.id_siswa || '').trim();
           const rNama = this.normalizeText(r.nama_siswa || r.NAMA_SISWA || '');
           return (sId && rId === sId) || (rNama && rNama === this.normalizeText(item.nama_siswa));
         });
 
-        if (matchedRow) {
-          const rowId = matchedRow.id || matchedRow.ID;
+        if (matchedRows.length > 0) {
+          matchedRows.sort((a, b) => Number(a.id || a.ID || 0) - Number(b.id || b.ID || 0));
+          const rowId = matchedRows[0].id || matchedRows[0].ID;
+
+          if (matchedRows.length > 1) {
+            const dupIds = matchedRows.slice(1).map(x => x.id || x.ID).filter(Boolean);
+            if (dupIds.length > 0) {
+              await client.from('hasil_ujian').delete().in('id', dupIds);
+            }
+          }
+
           const { error: updErr } = await client
             .from('hasil_ujian')
             .update({
@@ -483,7 +592,6 @@ const ExamModule = {
         (String(item.id_siswa || '').trim() === sId || this.normalizeText(item.nama_siswa) === sNama)
       );
 
-      // Sinkronisasi Reset: jika online, data server berhasil diambil, dan record siswa tidak ada di server (di-reset Admin), hapus kunci lokal
       if (isOnline && hasilFetchedSuccess && !serverDone && !hasPendingForThisMapel) {
         this.clearLocalCompletedExam(student, j.mapel);
       }
@@ -545,9 +653,6 @@ const ExamModule = {
     });
   },
 
-  // =========================================================================
-  // AUTO-SAVE PROGRES JAWABAN LOKAL
-  // =========================================================================
   saveProgressToLocal() {
     if (!this.storageKey || !State.examActive) return;
     try {
@@ -632,6 +737,9 @@ const ExamModule = {
           AuthModule.logout();
           return;
         }
+
+        const st = this.normalizeText(rows[0].status_selesai);
+        if (st === 'SELESAI' || st === 'DIDISKUALIFIKASI') return;
 
         await client
           .from('hasil_ujian')
@@ -719,13 +827,11 @@ const ExamModule = {
     return arr;
   },
 
-  // =========================================================================
-  // MULAI UJIAN (MENDUKUNG MODE ONLINE MAUPUN 100% OFFLINE)
-  // =========================================================================
   async startExam(selectedSchedule = null) {
     State.examActive = false;
     this.activeRecordId = null;
     this.lastViolationTime = 0;
+    this._isSubmitting = false;
     clearInterval(this.heartbeatInterval);
     const student = State.currentUser;
 
@@ -739,7 +845,6 @@ const ExamModule = {
       const isOnline = navigator.onLine;
       const offlinePkg = this.getOfflinePackage(student.kelas);
 
-      // 1. Tentukan Jadwal Ujian Aktif (Online -> fallback ke Offline Package)
       let activeSchedule = selectedSchedule;
       if (!activeSchedule && isOnline) {
         activeSchedule = await DB.fetchActiveScheduleForStudent(student.kelas);
@@ -772,7 +877,7 @@ const ExamModule = {
       const targetMapel = this.normalizeText(activeSchedule.mapel || '');
       const deviceLockKey = `cbt_lock_${sId || sNama}_${targetMapel}`;
 
-      // 2. Cek apakah sudah selesai secara lokal (berlaku saat OFFLINE atau ada antrean nilai belum terkirim)
+      // 1. Cek selesai lokal / antrean offline
       const hasPendingForMapel = this.getPendingSyncQueue().some(item =>
         this.isMapelMatch(item.mapel, activeSchedule.mapel) &&
         (String(item.id_siswa || '').trim() === sId || this.normalizeText(item.nama_siswa) === sNama)
@@ -786,6 +891,12 @@ const ExamModule = {
           await this.renderStudentLobby();
           return;
         }
+      }
+
+      // 2. Wajib verifikasi PIN Pengawas Ruang (menutup celah siswa terlambat mengerjakan soal dari perjalanan)
+      const pinVerified = await this.promptRoomSupervisorPin(activeSchedule);
+      if (!pinVerified) {
+        return;
       }
 
       // 3. Jika ONLINE, cek riwayat di Supabase & cegah login ganda perangkat lain
@@ -836,7 +947,6 @@ const ExamModule = {
               await this.renderStudentLobby();
               return;
             } else if (!hasPendingForMapel) {
-              // Jika tidak ada record selesai di Supabase, pastikan kunci lokal bersih
               this.clearLocalCompletedExam(student, activeSchedule.mapel);
             }
 
@@ -960,7 +1070,6 @@ const ExamModule = {
 
       State.questions = this.shuffleArray(filtered);
 
-      // 7. Cek & Pulihkan Progres Auto-Save jika sebelumnya terputus di perangkat ini
       this.storageKey = this.getStorageKey(student, activeSchedule.mapel);
       const restored = this.restoreProgressFromLocal(State.questions);
       const durasiUjian = parseInt(activeSchedule.durasi) || 45;
@@ -1175,6 +1284,9 @@ const ExamModule = {
   },
 
   async submitExamResults(isDisqualified = false) {
+    if (this._isSubmitting) return;
+    this._isSubmitting = true;
+
     State.examActive = false;
     this.setScreenShield(false);
     clearInterval(State.timerInterval);
@@ -1246,6 +1358,7 @@ const ExamModule = {
       alert(isDisqualified ? "Status Ujian: DIDISKUALIFIKASI" : `Ujian Selesai!\nNilai Akhir Anda: ${nilaiAkhir}\n\nHasil ujian berhasil dikirim ke server.`);
     }
 
+    this._isSubmitting = false;
     App.showScreen('student-lobby');
     await this.renderStudentLobby();
   }
