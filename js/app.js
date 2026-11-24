@@ -1,4 +1,3 @@
-// Pastikan State global tersedia
 window.State = window.State || {
   currentUser: null,
   examActive: false,
@@ -30,7 +29,6 @@ const App = {
     window.addEventListener('online', async () => {
       await this.updateConnectionBadge();
 
-      // Jika perangkat kembali online, otomatis kirim antrean nilai ujian offline
       if (typeof ExamModule !== 'undefined' && ExamModule.syncOfflineResults) {
         await ExamModule.syncOfflineResults(false);
       }
@@ -39,7 +37,6 @@ const App = {
     window.addEventListener('offline', async () => {
       await this.updateConnectionBadge();
 
-      // Perbarui badge status jaringan jika siswa sedang berada di Lobby Peserta
       if (
         State.currentUser &&
         State.currentUser.role === 'siswa' &&
@@ -81,6 +78,45 @@ const App = {
         badge.className = "px-3 py-1 text-[10px] rounded-full bg-rose-600 text-white font-bold shadow";
       }
     }
+  },
+
+  renderAdminRoomTokenBanner() {
+    const host = document.getElementById('tab-monitoring');
+    if (!host || typeof ExamModule === 'undefined' || !ExamModule.computeSessionRoomToken) return;
+
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const nowTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    const todaySchedules = (State.schedules || []).filter(j => String(j.tanggal || '').trim() === todayStr);
+    const activeSched = todaySchedules.find(j => {
+      const jm = String(j.jamMulai || '').substring(0, 5);
+      const js = String(j.jamSelesai || '').substring(0, 5);
+      return nowTime >= jm && nowTime <= js;
+    }) || todaySchedules[0] || { tanggal: todayStr, jamMulai: now.getHours() < 10 ? '07:30' : '10:00' };
+
+    const tokenPin = ExamModule.computeSessionRoomToken(activeSched);
+
+    let box = document.getElementById('admin-room-token-banner');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'admin-room-token-banner';
+      host.prepend(box);
+    }
+
+    box.className = 'bg-gradient-to-r from-ocean-900 to-ocean-800 text-white p-4 rounded-2xl border border-ocean-700 shadow-sm flex flex-wrap items-center justify-between gap-3';
+    box.innerHTML = `
+      <div class="space-y-0.5">
+        <div class="text-[10px] uppercase tracking-wider font-bold text-teal-300">🔐 PIN / Token Pengawas Ruang (Sesi Aktif Hari Ini)</div>
+        <p class="text-xs text-ocean-100">
+          Bagikan ke Pengawas Ruang untuk ditulis di papan tulis kelas (mencegah siswa terlambat mengerjakan soal dari luar ruangan).
+        </p>
+      </div>
+      <div class="bg-slate-950/80 border border-amber-400/60 px-5 py-2.5 rounded-xl text-center">
+        <div class="text-[9px] uppercase text-slate-400 font-bold">PIN Ruang</div>
+        <div class="font-mono font-black text-2xl tracking-[0.35em] text-amber-300">${tokenPin}</div>
+      </div>
+    `;
   },
 
   showScreen(screenName) {
@@ -164,8 +200,19 @@ const App = {
     }
 
     try {
-      if (tabName === 'monitoring' && typeof RekapModule !== 'undefined') {
-        await RekapModule.refreshMonitoringData();
+      if (tabName === 'monitoring') {
+        if (typeof DB !== 'undefined') {
+          if (!State.schedules || State.schedules.length === 0) {
+            State.schedules = await DB.fetchSchedules();
+          }
+          if (DB.closeExpiredMengerjakanSessions) {
+            await DB.closeExpiredMengerjakanSessions();
+          }
+        }
+        this.renderAdminRoomTokenBanner();
+        if (typeof RekapModule !== 'undefined') {
+          await RekapModule.refreshMonitoringData();
+        }
       } else if (tabName === 'jadwal' && typeof JadwalModule !== 'undefined') {
         await JadwalModule.loadAndRender();
       } else if ((tabName === 'upload-soal' || tabName === 'bank-soal') && typeof SoalModule !== 'undefined') {
@@ -176,8 +223,13 @@ const App = {
         await GuruModule.loadAndRender();
       } else if (tabName === 'mapel' && typeof MapelModule !== 'undefined' && MapelModule.loadAndRender) {
         await MapelModule.loadAndRender();
-      } else if (tabName === 'rekap-nilai' && typeof RekapModule !== 'undefined') {
-        await RekapModule.renderRekapNilai();
+      } else if (tabName === 'rekap-nilai') {
+        if (typeof DB !== 'undefined' && DB.closeExpiredMengerjakanSessions) {
+          await DB.closeExpiredMengerjakanSessions();
+        }
+        if (typeof RekapModule !== 'undefined') {
+          await RekapModule.renderRekapNilai();
+        }
       }
     } catch (err) {
       console.error(`[App] Error memuat tab ${tabName}:`, err.message);
