@@ -1,5 +1,5 @@
-const CACHE_NAME = 'cbt-exam-v6';
-const IMG_CACHE_NAME = 'cbt-smkn1wkt-images-v6';
+const CACHE_NAME = 'cbt-exam-v7';
+const IMG_CACHE_NAME = 'cbt-smkn1wkt-images-v1';
 
 const ASSETS_TO_CACHE = [
   './',
@@ -51,12 +51,10 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(req.url);
 
-  // Jangan cache request API/Auth Supabase agar data real-time tetap segar saat online
   if (url.hostname.includes('supabase.co') && !url.pathname.includes('/storage/v1/object/public/')) {
     return;
   }
 
-  // Cache-First untuk gambar soal & kop surat dari Supabase Storage
   if (url.pathname.includes('/storage/v1/object/public/')) {
     event.respondWith(
       caches.open(IMG_CACHE_NAME).then(async (cache) => {
@@ -74,7 +72,6 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Network-First dengan fallback Cache untuk App Shell & CDN
   event.respondWith(
     fetch(req)
       .then((netRes) => {
