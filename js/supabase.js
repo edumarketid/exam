@@ -50,7 +50,6 @@ const DB = {
     });
   },
 
-  // --- SINGLE-SOURCE CACHE: KOP SEKOLAH (0-1 QUERY PER SESI UNTUK SEMUA MENU CETAK) ---
   getKopSekolahUrl() {
     if (this._cachedKopUrl) return this._cachedKopUrl;
 
@@ -79,7 +78,6 @@ const DB = {
     return resolvedUrl;
   },
 
-  // --- SINGLE-SOURCE CACHE: KEPALA SEKOLAH DARI BARIS PERTAMA GURU ---
   extractKepsekFromList(guruList) {
     const list = Array.isArray(guruList) ? guruList : [];
     if (list.length === 0) return null;
@@ -96,7 +94,6 @@ const DB = {
       return this._cachedKepsek;
     }
 
-    // Cek memori modul lain terlebih dahulu tanpa query database
     const existingList = (typeof GuruModule !== 'undefined' && Array.isArray(GuruModule.guruList) && GuruModule.guruList.length > 0)
       ? GuruModule.guruList
       : (Array.isArray(this._cachedGuruList) && this._cachedGuruList.length > 0 ? this._cachedGuruList : null);
@@ -109,7 +106,6 @@ const DB = {
       }
     }
 
-    // Jika belum ada di memori mana pun, ambil cukup 1 baris pertama saja (limit 1)
     const client = await this.getClient();
     if (client) {
       try {
@@ -135,7 +131,6 @@ const DB = {
     };
   },
 
-  // --- HELPER PAGINATION: AMBIL SELURUH DATA TANPA BATAS 1000 BARIS SUPABASE ---
   async fetchAllRows(tableName, orderCol = 'id', ascending = true) {
     const client = await this.getClient();
     if (!client) return [];
@@ -171,16 +166,12 @@ const DB = {
     return allRows;
   },
 
-  // --- MODUL ADMIN / PROKTOR ---
   async fetchAdmin() {
     const client = await this.getClient();
     if (!client) return [];
     try {
       const { data, error } = await client.from('admin').select('*').order('id_admin', { ascending: true });
-      if (error) {
-        console.warn("[DB Helper] Gagal fetch tabel admin:", error.message);
-        return [];
-      }
+      if (error) return [];
       return (data || []).map(a => ({
         id_admin: a.id_admin || a.ID_ADMIN || a.id,
         username: String(a.username || a.USERNAME || 'admin').trim(),
@@ -190,20 +181,18 @@ const DB = {
         status: a.status || a.STATUS || 'Aktif'
       }));
     } catch (err) {
-      console.error("[DB Helper] Error fetchAdmin:", err.message);
       return [];
     }
   },
 
   async insertAdmin(payload) {
     const client = await this.getClient();
-    if (!client) throw new Error("Database tidak terhubung. Periksa config.js dan koneksi internet.");
+    if (!client) throw new Error("Database tidak terhubung.");
     const { data, error } = await client.from('admin').insert([payload]);
     if (error) throw error;
     return data;
   },
 
-  // --- MODUL MAPEL ---
   async fetchMapel() {
     const client = await this.getClient();
     if (!client) return [];
@@ -218,7 +207,7 @@ const DB = {
 
   async insertMapel(namaMapel) {
     const client = await this.getClient();
-    if (!client) throw new Error("Database tidak terhubung. Periksa config.js dan koneksi internet.");
+    if (!client) throw new Error("Database tidak terhubung.");
 
     let { data, error } = await client.from('mapel').insert([{ nama_mapel: namaMapel }]);
     if (error && error.code === '23505') {
@@ -248,7 +237,7 @@ const DB = {
 
   async deleteMapel(namaMapel) {
     const client = await this.getClient();
-    if (!client) throw new Error("Database tidak terhubung. Periksa config.js dan koneksi internet.");
+    if (!client) throw new Error("Database tidak terhubung.");
 
     const { error: err1 } = await client.from('mapel').delete().eq('nama_mapel', namaMapel);
     if (err1) {
@@ -260,16 +249,12 @@ const DB = {
     return true;
   },
 
-  // --- MODUL GURU & PENGAWAS ---
   async fetchGuru() {
     const client = await this.getClient();
     if (!client) return [];
     try {
       const { data, error } = await client.from('guru').select('*').order('id_guru', { ascending: true });
-      if (error) {
-        console.warn("[DB Helper] Gagal fetch tabel guru:", error.message);
-        return [];
-      }
+      if (error) return [];
       const mapped = (data || []).map(g => ({
         id_guru: g.id_guru || g.ID_GURU || g.id,
         nama_guru: g.nama_guru || g.NAMA_GURU || g.nama || '-',
@@ -289,14 +274,13 @@ const DB = {
 
       return mapped;
     } catch (err) {
-      console.error("[DB Helper] Error fetchGuru:", err.message);
       return [];
     }
   },
 
   async insertGuru(payload) {
     const client = await this.getClient();
-    if (!client) throw new Error("Database tidak terhubung. Periksa config.js dan koneksi internet.");
+    if (!client) throw new Error("Database tidak terhubung.");
     const { data, error } = await client.from('guru').insert([payload]);
     if (error) throw error;
     this._cachedGuruList = null;
@@ -306,7 +290,7 @@ const DB = {
 
   async updateGuru(id_guru, payload) {
     const client = await this.getClient();
-    if (!client) throw new Error("Database tidak terhubung. Periksa config.js dan koneksi internet.");
+    if (!client) throw new Error("Database tidak terhubung.");
     const { data, error } = await client.from('guru').update(payload).eq('id_guru', id_guru);
     this._cachedGuruList = null;
     this._cachedKepsek = null;
@@ -324,7 +308,7 @@ const DB = {
 
   async deleteGuru(id_guru) {
     const client = await this.getClient();
-    if (!client) throw new Error("Database tidak terhubung. Periksa config.js dan koneksi internet.");
+    if (!client) throw new Error("Database tidak terhubung.");
     const { error } = await client.from('guru').delete().eq('id_guru', id_guru);
     this._cachedGuruList = null;
     this._cachedKepsek = null;
@@ -338,7 +322,6 @@ const DB = {
     return true;
   },
 
-  // --- MODUL SISWA (AMBIL SELURUH DATA TANPA BATAS 1000 BARIS) ---
   async fetchSiswa() {
     const client = await this.getClient();
     if (!client) return [];
@@ -350,7 +333,9 @@ const DB = {
       } catch (e) {}
 
       return (dataSiswa || []).map(s => {
-        const akun = dataAkun.find(a => (a.ID_SISWA || a.id_siswa) === (s.ID_SISWA || s.id_siswa));
+        const akun = dataAkun.find(a =>
+          String(a.ID_SISWA || a.id_siswa || '').trim() === String(s.ID_SISWA || s.id_siswa || '').trim()
+        );
         return {
           id_siswa: s.ID_SISWA || s.id_siswa || s.id,
           nisn: String(s.NISN || s.nisn || '-').trim(),
@@ -358,8 +343,8 @@ const DB = {
           kelas: s.KELAS || s.kelas || '-',
           status: s.STATUS || s.status || 'Aktif',
           ttl: s.TTL || s.ttl || '-',
-          user: String(akun ? akun.username : (s.NISN || s.nisn || 'user')).trim(),
-          pass: String(akun ? akun.password : 'smk123').trim()
+          user: String(akun ? (akun.username || akun.USERNAME) : (s.NISN || s.nisn || 'user')).trim(),
+          pass: String(akun ? (akun.password || akun.PASSWORD) : 'smk123').trim()
         };
       });
     } catch (err) {
@@ -367,7 +352,63 @@ const DB = {
     }
   },
 
-  // --- MODUL BANK SOAL (AMBIL SELURUH DATA TANPA BATAS 1000 BARIS) ---
+  async bulkUpdatePasswordSiswa(updates = []) {
+    const client = await this.getClient();
+    if (!client) throw new Error("Database tidak terhubung.");
+    if (!Array.isArray(updates) || updates.length === 0) return 0;
+
+    let existingAkun = [];
+    try {
+      existingAkun = await this.fetchAllRows('akun_siswa', null, true);
+    } catch (e) {}
+
+    const existingMap = {};
+    existingAkun.forEach(a => {
+      const key = String(a.ID_SISWA || a.id_siswa || '').trim();
+      if (key) existingMap[key] = a;
+    });
+
+    const batchSize = 25;
+    let successCount = 0;
+
+    for (let i = 0; i < updates.length; i += batchSize) {
+      const chunk = updates.slice(i, i + batchSize);
+      await Promise.all(chunk.map(async (item) => {
+        const idStr = String(item.id_siswa || '').trim();
+        const usernameVal = String(item.username || item.nisn || '').trim();
+        const newPass = String(item.password || '').trim();
+        if (!idStr || !newPass) return;
+
+        if (existingMap[idStr]) {
+          const { error: errUp1 } = await client
+            .from('akun_siswa')
+            .update({ password: newPass })
+            .eq('id_siswa', idStr);
+
+          if (errUp1) {
+            await client
+              .from('akun_siswa')
+              .update({ PASSWORD: newPass })
+              .eq('ID_SISWA', idStr);
+          }
+        } else {
+          const { error: errIns1 } = await client
+            .from('akun_siswa')
+            .insert([{ id_siswa: idStr, username: usernameVal, password: newPass }]);
+
+          if (errIns1) {
+            await client
+              .from('akun_siswa')
+              .insert([{ ID_SISWA: idStr, USERNAME: usernameVal, PASSWORD: newPass }]);
+          }
+        }
+        successCount++;
+      }));
+    }
+
+    return successCount;
+  },
+
   async fetchBankSoal() {
     const client = await this.getClient();
     if (!client) return [];
@@ -378,7 +419,6 @@ const DB = {
     }
   },
 
-  // --- MODUL JADWAL UJIAN ---
   async fetchSchedules() {
     const client = await this.getClient();
     if (!client) return [];
@@ -429,7 +469,6 @@ const DB = {
     return activeSchedule || null;
   },
 
-  // --- MODUL HASIL UJIAN (AMBIL SELURUH DATA TANPA BATAS 1000 BARIS) ---
   async fetchHasilUjian() {
     const client = await this.getClient();
     if (!client) return [];
@@ -452,12 +491,62 @@ const DB = {
     }
   },
 
+  // --- ANTI-DUPLIKASI: CEK EXISTING RECORD (id_siswa + mapel) SEBELUM INSERT ---
   async insertHasilUjian(payload) {
     const client = await this.getClient();
-    if (!client) throw new Error("Database tidak terhubung. Periksa config.js dan koneksi internet.");
+    if (!client) throw new Error("Database tidak terhubung.");
 
     const rawId = String(payload.id_siswa || '').trim();
     const numericId = /^\d+$/.test(rawId) ? Number(rawId) : null;
+    const normStr = (v) => String(v || '').replace(/\s+/g, ' ').trim().toUpperCase();
+    const targetMapel = normStr(payload.mapel);
+    const targetNama = normStr(payload.nama_siswa);
+
+    try {
+      const { data: existingList } = await client.from('hasil_ujian').select('*');
+      const matches = (existingList || []).filter(r => {
+        if (normStr(r.mapel || r.MAPEL) !== targetMapel) return false;
+        const rId = String(r.ID_SISWA || r.id_siswa || '').trim();
+        const rNama = normStr(r.nama_siswa || r.NAMA_SISWA);
+        return (rawId && rId === rawId) || (targetNama && rNama === targetNama);
+      });
+
+      if (matches.length > 0) {
+        matches.sort((a, b) => Number(a.id || a.ID || 0) - Number(b.id || b.ID || 0));
+        const primary = matches[0];
+        const primaryId = primary.id || primary.ID;
+        const incomingStatus = normStr(payload.status_selesai);
+        const existingStatus = normStr(primary.status_selesai || primary.STATUS_SELESAI);
+
+        // Hapus baris ganda berlebih jika sempat terbentuk
+        if (matches.length > 1) {
+          const extraIds = matches.slice(1).map(x => x.id || x.ID).filter(Boolean);
+          if (extraIds.length > 0) {
+            await client.from('hasil_ujian').delete().in('id', extraIds);
+          }
+        }
+
+        // Jangan timpa record SELESAI/DIDISKUALIFIKASI dengan status MENGERJAKAN
+        if ((existingStatus === 'SELESAI' || existingStatus === 'DIDISKUALIFIKASI') && incomingStatus === 'MENGERJAKAN') {
+          return [primary];
+        }
+
+        const { data: updatedData, error: updErr } = await client
+          .from('hasil_ujian')
+          .update({
+            nilai: payload.nilai,
+            jumlah_pelanggaran: payload.jumlah_pelanggaran,
+            status_selesai: payload.status_selesai,
+            waktu_selesai: payload.waktu_selesai || new Date().toISOString()
+          })
+          .eq('id', primaryId)
+          .select();
+
+        if (!updErr) return updatedData || [primary];
+      }
+    } catch (e) {
+      console.warn("[DB] Cek duplikasi dilewati:", e.message);
+    }
 
     const attempts = [
       ...(numericId !== null ? [{
@@ -509,9 +598,88 @@ const DB = {
     throw lastError || new Error("Gagal insert ke tabel hasil_ujian");
   },
 
+  // --- AUTO-TUTUP SESI MENGERJAKAN YANG JADWALNYA SUDAH LEWAT ---
+  async closeExpiredMengerjakanSessions() {
+    const client = await this.getClient();
+    if (!client) return 0;
+
+    try {
+      const [schedules, hasilList] = await Promise.all([
+        this.fetchSchedules(),
+        this.fetchHasilUjian()
+      ]);
+
+      const ongoingList = (hasilList || []).filter(h =>
+        String(h.status_selesai || '').trim().toUpperCase() === 'MENGERJAKAN'
+      );
+      if (ongoingList.length === 0) return 0;
+
+      const now = new Date();
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const nowMinutes = now.getHours() * 60 + now.getMinutes();
+
+      const normStr = (v) => String(v || '').replace(/\s+/g, ' ').trim().toUpperCase();
+      const expiredIds = [];
+
+      ongoingList.forEach(rec => {
+        const recMapel = normStr(rec.mapel);
+        const recKelas = normStr(rec.kelas);
+
+        const matchedSchedules = (schedules || []).filter(j => {
+          const mMatch = normStr(j.mapel) === recMapel;
+          const kList = String(j.kelas || '').split(',').map(k => normStr(k));
+          return mMatch && kList.includes(recKelas);
+        });
+
+        if (matchedSchedules.length === 0) {
+          const lastBeat = new Date(rec.waktu_selesai || 0).getTime();
+          if (Date.now() - lastBeat > 2 * 60 * 60 * 1000) {
+            expiredIds.push(rec.id);
+          }
+          return;
+        }
+
+        const isAnyActiveNow = matchedSchedules.some(j => {
+          const tgl = String(j.tanggal || '').trim();
+          if (tgl !== todayStr) return false;
+          const parts = String(j.jamSelesai || '23:59').substring(0, 5).split(':');
+          const endMin = (parseInt(parts[0], 10) || 0) * 60 + (parseInt(parts[1], 10) || 0) + 10;
+          return nowMinutes <= endMin;
+        });
+
+        const hasPastSchedule = matchedSchedules.some(j => {
+          const tgl = String(j.tanggal || '').trim();
+          if (tgl < todayStr) return true;
+          if (tgl === todayStr) {
+            const parts = String(j.jamSelesai || '23:59').substring(0, 5).split(':');
+            const endMin = (parseInt(parts[0], 10) || 0) * 60 + (parseInt(parts[1], 10) || 0) + 10;
+            return nowMinutes > endMin;
+          }
+          return false;
+        });
+
+        if (!isAnyActiveNow && hasPastSchedule && rec.id) {
+          expiredIds.push(rec.id);
+        }
+      });
+
+      if (expiredIds.length > 0) {
+        await client
+          .from('hasil_ujian')
+          .update({ status_selesai: 'SELESAI' })
+          .in('id', expiredIds);
+      }
+
+      return expiredIds.length;
+    } catch (e) {
+      console.warn("[DB] Auto-close sesi kedaluwarsa dilewati:", e.message);
+      return 0;
+    }
+  },
+
   async deleteHasilUjian(id) {
     const client = await this.getClient();
-    if (!client) throw new Error("Database tidak terhubung. Periksa config.js dan koneksi internet.");
+    if (!client) throw new Error("Database tidak terhubung.");
     const { error } = await client.from('hasil_ujian').delete().eq('id', id);
     if (error) {
       const { error: errCap } = await client.from('hasil_ujian').delete().eq('ID', id);
@@ -520,10 +688,9 @@ const DB = {
     return true;
   },
 
-  // --- HAPUS MASSAL HASIL UJIAN (1X QUERY UNTUK SELURUH RECORD PER KELAS & MAPEL) ---
   async deleteHasilUjianMassal(ids = []) {
     const client = await this.getClient();
-    if (!client) throw new Error("Database tidak terhubung. Periksa config.js dan koneksi internet.");
+    if (!client) throw new Error("Database tidak terhubung.");
 
     const validIds = (ids || []).filter(id => id !== null && id !== undefined && id !== '');
     if (validIds.length === 0) return 0;
