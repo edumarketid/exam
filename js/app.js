@@ -12,8 +12,15 @@ window.State = window.State || {
 };
 
 const App = {
+  APP_VERSION: 'v14',
+
   async init() {
-    console.log("[App] Menginisialisasi sistem CBT Semi-Online SMKN 1 Wakatobi...");
+    console.log(`[App] Menginisialisasi sistem CBT Semi-Online SMKN 1 Wakatobi (${this.APP_VERSION})...`);
+
+    const verLabel = document.getElementById('app-version-label');
+    if (verLabel) {
+      verLabel.textContent = `Versi Aplikasi: ${this.APP_VERSION}`;
+    }
 
     if (typeof ExamModule !== 'undefined' && ExamModule.setupSecurityListeners) {
       ExamModule.setupSecurityListeners();
@@ -23,6 +30,43 @@ const App = {
     await this.updateConnectionBadge();
 
     this.showScreen('login');
+  },
+
+  // Menghapus cache Service Worker lama & memuat ulang kode terbaru TANPA menghapus paket soal/nilai di localStorage
+  async forceUpdateApp() {
+    if (!navigator.onLine) {
+      alert(
+        "Perangkat sedang OFFLINE.\n\n" +
+        "Nyalakan data seluler atau sambungkan ke WiFi/hotspot pengawas sebentar (3 detik), lalu tekan tombol 'Perbarui Aplikasi' lagi."
+      );
+      return;
+    }
+
+    try {
+      if ('serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        for (const reg of registrations) {
+          await reg.unregister();
+        }
+      }
+
+      if ('caches' in window) {
+        const cacheNames = await caches.keys();
+        for (const name of cacheNames) {
+          // Pertahankan cache gambar soal agar tidak perlu unduh gambar ulang
+          if (!name.includes('images')) {
+            await caches.delete(name);
+          }
+        }
+      }
+
+      alert(`Cache aplikasi berhasil dibersihkan!\n\nHalaman akan dimuat ulang ke versi terbaru (${this.APP_VERSION}). Paket soal offline Anda tetap aman.`);
+      const cleanUrl = window.location.origin + window.location.pathname + '?v=' + Date.now();
+      window.location.replace(cleanUrl);
+    } catch (err) {
+      alert("Gagal memperbarui otomatis: " + err.message + "\n\nSilakan muat ulang (refresh) browser secara manual.");
+      window.location.reload();
+    }
   },
 
   setupNetworkListeners() {
@@ -85,7 +129,7 @@ const App = {
     if (!host || typeof ExamModule === 'undefined' || !ExamModule.computeSessionRoomToken) return;
 
     const rooms = ExamModule.getRoomList ? ExamModule.getRoomList() : ['Ruang 01'];
-    const verLabel = ExamModule.APP_VERSION || 'v13';
+    const verLabel = this.APP_VERSION || 'v14';
 
     const waLines = [
       `*PIN PENGAWAS RUANG UJIAN CBT (15 RUANGAN)*`,
@@ -116,7 +160,7 @@ const App = {
         <div>
           <div class="text-[10px] uppercase tracking-wider font-bold text-teal-300">🔐 PIN / Token Pengawas per Ruangan (Ruang 01 – 15 • ${verLabel})</div>
           <p class="text-[11px] text-ocean-100">
-            Bagikan ke grup WA Pengawas agar ditulis di papan tulis masing-masing ruangan. Pastikan layar PIN siswa bertuliskan versi <strong>${verLabel}</strong>.
+            Bagikan ke grup WA Pengawas agar ditulis di papan tulis masing-masing ruangan. Pastikan halaman login siswa bertuliskan versi <strong>${verLabel}</strong>.
           </p>
         </div>
         <button type="button" id="btn-copy-all-room-pins"
