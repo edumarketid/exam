@@ -1,4 +1,4 @@
-const CACHE_NAME = 'cbt-exam-v10';
+const CACHE_NAME = 'cbt-exam-v13';
 const IMG_CACHE_NAME = 'cbt-smkn1wkt-images-v1';
 
 const ASSETS_TO_CACHE = [
