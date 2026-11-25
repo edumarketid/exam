@@ -19,7 +19,7 @@ const App = {
 
     const verLabel = document.getElementById('app-version-label');
     if (verLabel) {
-      verLabel.textContent = `Versi Aplikasi: ${this.APP_VERSION}`;
+      verLabel.textContent = `Versi: ${this.APP_VERSION}`;
     }
 
     if (typeof ExamModule !== 'undefined' && ExamModule.setupSecurityListeners) {
