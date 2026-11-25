@@ -15,7 +15,8 @@ const ExamModule = {
   PENDING_SYNC_KEY: 'cbt_pending_hasil_ujian_v1',
   LOCAL_COMPLETED_KEY: 'cbt_local_completed_exams_v1',
   VERIFIED_PIN_PREFIX: 'cbt_verified_room_pin_',
-  ROOM_COUNT: 20,
+  ROOM_COUNT: 15,
+  APP_VERSION: 'v13',
 
   normalizeText(str) {
     return String(str || '').replace(/\s+/g, ' ').trim().toUpperCase();
@@ -29,14 +30,10 @@ const ExamModule = {
     return rooms;
   },
 
-  // Token/PIN 4-digit deterministik per Tanggal + Jam Mulai Sesi + Nomor Ruangan (sinkron online & offline)
+  // Token/PIN 4-digit deterministik per Nomor Ruangan (100% seragam online & offline)
   computeSessionRoomToken(scheduleObj = null, roomName = 'Ruang 01') {
-    const now = new Date();
-    const fallbackDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    const tgl = String(scheduleObj?.tanggal || fallbackDate).trim();
-    const jm = String(scheduleObj?.jamMulai || (now.getHours() < 10 ? '07:30' : '10:00')).substring(0, 5);
     const roomClean = this.normalizeText(roomName || 'RUANG 01');
-    const seed = `SMKN1WKT_TOKEN_${tgl}_${jm}_${roomClean}`;
+    const seed = `SMKN1WKT_ROOM_PIN_${roomClean}`;
 
     let h = 2166136261 >>> 0;
     for (let i = 0; i < seed.length; i++) {
@@ -52,8 +49,10 @@ const ExamModule = {
       const tgl = String(scheduleObj?.tanggal || '').trim();
       const jm = String(scheduleObj?.jamMulai || '').substring(0, 5);
       const savedRoom = localStorage.getItem('cbt_last_selected_room') || 'Ruang 01';
-      const verifiedKey = `${this.VERIFIED_PIN_PREFIX}${tgl}_${jm}_${this.normalizeText(savedRoom)}`;
-      const expectedSavedPin = this.computeSessionRoomToken(scheduleObj, savedRoom);
+      const validRooms = this.getRoomList();
+      const defaultRoom = validRooms.includes(savedRoom) ? savedRoom : 'Ruang 01';
+      const verifiedKey = `${this.VERIFIED_PIN_PREFIX}${tgl}_${jm}_${this.normalizeText(defaultRoom)}`;
+      const expectedSavedPin = this.computeSessionRoomToken(scheduleObj, defaultRoom);
 
       if (sessionStorage.getItem(verifiedKey) === expectedSavedPin) {
         this._pinModalOpen = false;
@@ -66,8 +65,8 @@ const ExamModule = {
 
       this._pinModalOpen = true;
 
-      const roomOptionsHtml = this.getRoomList()
-        .map(r => `<option value="${r}" ${r === savedRoom ? 'selected' : ''}>${r}</option>`)
+      const roomOptionsHtml = validRooms
+        .map(r => `<option value="${r}" ${r === defaultRoom ? 'selected' : ''}>${r}</option>`)
         .join('');
 
       const overlay = document.createElement('div');
@@ -81,7 +80,7 @@ const ExamModule = {
             </div>
             <h3 class="font-extrabold text-base text-slate-900">Verifikasi Ruangan & PIN Pengawas</h3>
             <p class="text-xs text-slate-600 leading-relaxed">
-              Pilih <strong>Ruangan Ujian</strong> Anda dan masukkan <strong>4 digit PIN</strong> di papan tulis untuk memulai <strong>${scheduleObj.mapel}</strong>.
+              Pilih <strong>Ruangan Ujian</strong> Anda (Ruang 01 – 15) dan masukkan <strong>4 digit PIN</strong> di papan tulis untuk memulai <strong>${scheduleObj.mapel}</strong>.
             </p>
           </div>
 
@@ -113,6 +112,9 @@ const ExamModule = {
             <button type="button" id="btn-confirm-room-pin" class="py-2.5 rounded-xl bg-ocean-700 hover:bg-ocean-800 text-white font-bold text-xs shadow">
               Masuk Ujian
             </button>
+          </div>
+          <div class="text-center text-[10px] text-slate-400 font-mono">
+            Sistem CBT SMKN 1 Wakatobi • ${this.APP_VERSION}
           </div>
         </div>
       `;
