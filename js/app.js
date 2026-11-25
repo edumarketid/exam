@@ -95,7 +95,25 @@ const App = {
       return nowTime >= jm && nowTime <= js;
     }) || todaySchedules[0] || { tanggal: todayStr, jamMulai: now.getHours() < 10 ? '07:30' : '10:00' };
 
-    const tokenPin = ExamModule.computeSessionRoomToken(activeSched);
+    const rooms = ExamModule.getRoomList ? ExamModule.getRoomList() : ['Ruang 01'];
+    const sessionLabel = `${activeSched.tanggal} • Sesi Mulai ${String(activeSched.jamMulai || '').substring(0, 5)}`;
+
+    const waLines = [
+      `*PIN PENGAWAS RUANG UJIAN CBT*`,
+      `Tanggal/Sesi: ${sessionLabel}`,
+      `-------------------------`
+    ];
+
+    const gridHtml = rooms.map(roomName => {
+      const pin = ExamModule.computeSessionRoomToken(activeSched, roomName);
+      waLines.push(`${roomName}: *${pin}*`);
+      return `
+        <div class="bg-slate-950/75 border border-ocean-600/60 px-3 py-2 rounded-xl flex items-center justify-between">
+          <span class="text-[11px] font-bold text-slate-300">${roomName}</span>
+          <span class="font-mono font-black text-base tracking-widest text-amber-300">${pin}</span>
+        </div>
+      `;
+    }).join('');
 
     let box = document.getElementById('admin-room-token-banner');
     if (!box) {
@@ -104,19 +122,40 @@ const App = {
       host.prepend(box);
     }
 
-    box.className = 'bg-gradient-to-r from-ocean-900 to-ocean-800 text-white p-4 rounded-2xl border border-ocean-700 shadow-sm flex flex-wrap items-center justify-between gap-3';
+    box.className = 'bg-gradient-to-r from-ocean-900 to-ocean-800 text-white p-4 rounded-2xl border border-ocean-700 shadow-sm space-y-3';
     box.innerHTML = `
-      <div class="space-y-0.5">
-        <div class="text-[10px] uppercase tracking-wider font-bold text-teal-300">🔐 PIN / Token Pengawas Ruang (Sesi Aktif Hari Ini)</div>
-        <p class="text-xs text-ocean-100">
-          Bagikan ke Pengawas Ruang untuk ditulis di papan tulis kelas (mencegah siswa terlambat mengerjakan soal dari luar ruangan).
-        </p>
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <div class="text-[10px] uppercase tracking-wider font-bold text-teal-300">🔐 PIN / Token Pengawas per Ruangan (${sessionLabel})</div>
+          <p class="text-[11px] text-ocean-100">
+            Setiap ruangan & sesi memiliki PIN berbeda. Bagikan ke grup WA Pengawas agar ditulis di papan tulis masing-masing ruangan.
+          </p>
+        </div>
+        <button type="button" id="btn-copy-all-room-pins"
+                class="px-3.5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-xs shadow transition flex items-center gap-1.5">
+          <i class="fa-regular fa-copy"></i>
+          <span>Salin Semua PIN (WA)</span>
+        </button>
       </div>
-      <div class="bg-slate-950/80 border border-amber-400/60 px-5 py-2.5 rounded-xl text-center">
-        <div class="text-[9px] uppercase text-slate-400 font-bold">PIN Ruang</div>
-        <div class="font-mono font-black text-2xl tracking-[0.35em] text-amber-300">${tokenPin}</div>
+      <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-2">
+        ${gridHtml}
       </div>
     `;
+
+    const copyBtn = document.getElementById('btn-copy-all-room-pins');
+    if (copyBtn) {
+      copyBtn.onclick = async () => {
+        try {
+          await navigator.clipboard.writeText(waLines.join('\n'));
+          copyBtn.innerHTML = `<i class="fa-solid fa-check"></i><span>Tersalin ke Clipboard!</span>`;
+          setTimeout(() => {
+            copyBtn.innerHTML = `<i class="fa-regular fa-copy"></i><span>Salin Semua PIN (WA)</span>`;
+          }, 2000);
+        } catch (e) {
+          alert(waLines.join('\n'));
+        }
+      };
+    }
   },
 
   showScreen(screenName) {
