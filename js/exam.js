@@ -8,6 +8,8 @@ const ExamModule = {
   _isSubmitting: false,
   _blurTimer: null,
   _baselineArea: 0,
+  _pinModalOpen: false,
+  _securityArmTime: 0,
 
   OFFLINE_PKG_PREFIX: 'cbt_offline_pkg_kelas_',
   PENDING_SYNC_KEY: 'cbt_pending_hasil_ujian_v1',
@@ -18,7 +20,6 @@ const ExamModule = {
     return String(str || '').replace(/\s+/g, ' ').trim().toUpperCase();
   },
 
-  // Token/PIN Pengawas Ruang 4-digit deterministik per tanggal & jam sesi (sinkron online & offline)
   computeSessionRoomToken(scheduleObj = null) {
     const now = new Date();
     const fallbackDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -43,12 +44,15 @@ const ExamModule = {
       const verifiedKey = `${this.VERIFIED_PIN_PREFIX}${tgl}_${jm}`;
 
       if (sessionStorage.getItem(verifiedKey) === expectedPin) {
+        this._pinModalOpen = false;
         resolve(true);
         return;
       }
 
       const existing = document.getElementById('modal-room-pin-overlay');
       if (existing) existing.remove();
+
+      this._pinModalOpen = true;
 
       const overlay = document.createElement('div');
       overlay.id = 'modal-room-pin-overlay';
@@ -93,8 +97,11 @@ const ExamModule = {
         const val = String(inputEl.value || '').trim();
         if (val === expectedPin) {
           sessionStorage.setItem(verifiedKey, expectedPin);
+          if (inputEl) inputEl.blur();
+          this._pinModalOpen = false;
           overlay.remove();
-          resolve(true);
+          // Beri jeda 350ms agar keyboard virtual HP turun dulu sebelum fullscreen & sensor aktif
+          setTimeout(() => resolve(true), 350);
         } else {
           errEl.classList.remove('hidden');
           inputEl.classList.add('border-rose-500');
@@ -105,6 +112,8 @@ const ExamModule = {
 
       document.getElementById('btn-confirm-room-pin').onclick = verify;
       document.getElementById('btn-cancel-room-pin').onclick = () => {
+        if (inputEl) inputEl.blur();
+        this._pinModalOpen = false;
         overlay.remove();
         resolve(false);
       };
@@ -436,7 +445,6 @@ const ExamModule = {
         } catch (e) {}
       }
 
-      // Simpan juga seluruh akun teman sekelas agar jika HP siswa rusak/mati bisa login offline di HP teman
       if (typeof DB !== 'undefined' && DB.fetchSiswa && typeof AuthModule !== 'undefined' && AuthModule.saveStudentProfileLocally) {
         try {
           const allSiswa = await DB.fetchSiswa();
@@ -778,7 +786,14 @@ const ExamModule = {
   },
 
   checkSplitScreenOrOverlay() {
-    if (!State.examActive) return;
+    if (!State.examActive || this._pinModalOpen) return;
+    if (Date.now() < this._securityArmTime) return;
+
+    // Jangan anggap keyboard virtual sebagai overlay jika ada elemen input teks yang aktif
+    const activeTag = String(document.activeElement?.tagName || '').toUpperCase();
+    const activeType = String(document.activeElement?.type || '').toLowerCase();
+    const isTypingText = (activeTag === 'INPUT' && activeType !== 'radio' && activeType !== 'checkbox') || activeTag === 'TEXTAREA';
+    if (isTypingText) return;
 
     const screenArea = (window.screen?.availWidth || window.innerWidth) * (window.screen?.availHeight || window.innerHeight);
     const currentArea = window.innerWidth * window.innerHeight;
@@ -802,7 +817,7 @@ const ExamModule = {
 
   setupSecurityListeners() {
     document.addEventListener('fullscreenchange', () => {
-      if (!document.fullscreenElement && State.examActive) {
+      if (!document.fullscreenElement && State.examActive && Date.now() >= this._securityArmTime) {
         this.handleViolation("Anda keluar dari mode Fullscreen!");
       } else if (State.examActive) {
         setTimeout(() => this.captureBaselineViewport(), 300);
@@ -810,7 +825,7 @@ const ExamModule = {
     });
 
     document.addEventListener('visibilitychange', () => {
-      if (document.hidden && State.examActive) {
+      if (document.hidden && State.examActive && !this._pinModalOpen && Date.now() >= this._securityArmTime) {
         this.setScreenShield(true);
         this.handleViolation("Anda membuka tab lain / meninggalkan layar ujian!");
       } else if (State.examActive) {
@@ -818,13 +833,12 @@ const ExamModule = {
       }
     });
 
-    // Deteksi menahan tombol Home / memunculkan overlay Gemini / Asisten tanpa pindah tab
     window.addEventListener('blur', () => {
-      if (!State.examActive) return;
+      if (!State.examActive || this._pinModalOpen || Date.now() < this._securityArmTime) return;
       this.setScreenShield(true);
       clearTimeout(this._blurTimer);
       this._blurTimer = setTimeout(() => {
-        if (State.examActive && !document.hasFocus()) {
+        if (State.examActive && !this._pinModalOpen && !document.hasFocus()) {
           this.handleViolation("Anda membuka asisten AI / aplikasi overlay di atas layar ujian!");
         }
       }, 1200);
@@ -838,7 +852,6 @@ const ExamModule = {
       }
     });
 
-    // Deteksi perubahan ukuran jendela (Split-Screen / Floating Window)
     window.addEventListener('resize', () => {
       if (State.examActive) {
         this.checkSplitScreenOrOverlay();
@@ -895,6 +908,7 @@ const ExamModule = {
     this.activeRecordId = null;
     this.lastViolationTime = 0;
     this._isSubmitting = false;
+    this._pinModalOpen = false;
     clearInterval(this.heartbeatInterval);
     clearTimeout(this._blurTimer);
     const student = State.currentUser;
@@ -957,7 +971,7 @@ const ExamModule = {
         }
       }
 
-      // 2. Wajib verifikasi PIN Pengawas Ruang (berfungsi 100% online & offline)
+      // 2. Wajib verifikasi PIN Pengawas Ruang (sebelum State.examActive dihidupkan)
       const pinVerified = await this.promptRoomSupervisorPin(activeSchedule);
       if (!pinVerified) {
         return;
@@ -1123,7 +1137,6 @@ const ExamModule = {
         examScreen.classList.add('select-none');
       }
 
-      State.examActive = true;
       State.violations = 0;
       State.currentQuestionIdx = 0;
       State.answers = {};
@@ -1138,6 +1151,7 @@ const ExamModule = {
       const restored = this.restoreProgressFromLocal(State.questions);
       const durasiUjian = parseInt(activeSchedule.durasi) || 45;
       let initialSeconds = durasiUjian * 60;
+      let hasRestoredAlert = false;
 
       if (restored && Object.keys(restored.answers).length > 0) {
         State.answers = restored.answers;
@@ -1146,9 +1160,7 @@ const ExamModule = {
         if (restored.remainingSeconds) {
           initialSeconds = restored.remainingSeconds;
         }
-        setTimeout(() => {
-          alert(`AUTO-SAVE DIPULIHKAN!\n\nSistem memulihkan ${Object.keys(restored.answers).length} jawaban Anda yang tersimpan sebelumnya.`);
-        }, 400);
+        hasRestoredAlert = true;
       }
 
       this.renderQuestionNav();
@@ -1161,11 +1173,21 @@ const ExamModule = {
         }
       } catch (e) {}
 
+      // Beri masa tenggang 1,8 detik agar transisi fullscreen & penutupan keyboard PIN selesai sepenuhnya
+      this._securityArmTime = Date.now() + 1800;
+      State.examActive = true;
+
       this.startTimer(initialSeconds, true);
       setTimeout(() => {
         this.captureBaselineViewport();
         this.checkSplitScreenOrOverlay();
-      }, 600);
+      }, 2000);
+
+      if (hasRestoredAlert) {
+        setTimeout(() => {
+          alert(`AUTO-SAVE DIPULIHKAN!\n\nSistem memulihkan ${Object.keys(restored.answers).length} jawaban Anda yang tersimpan sebelumnya.`);
+        }, 400);
+      }
 
     } catch (err) {
       alert("Gagal memuat ujian: " + err.message);
@@ -1307,7 +1329,8 @@ const ExamModule = {
   },
 
   handleViolation(reason) {
-    if (!State.examActive) return;
+    if (!State.examActive || this._pinModalOpen) return;
+    if (Date.now() < this._securityArmTime) return;
 
     const now = Date.now();
     if (now - this.lastViolationTime < 3000) return;
