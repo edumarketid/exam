@@ -15,17 +15,28 @@ const ExamModule = {
   PENDING_SYNC_KEY: 'cbt_pending_hasil_ujian_v1',
   LOCAL_COMPLETED_KEY: 'cbt_local_completed_exams_v1',
   VERIFIED_PIN_PREFIX: 'cbt_verified_room_pin_',
+  ROOM_COUNT: 20,
 
   normalizeText(str) {
     return String(str || '').replace(/\s+/g, ' ').trim().toUpperCase();
   },
 
-  computeSessionRoomToken(scheduleObj = null) {
+  getRoomList() {
+    const rooms = [];
+    for (let i = 1; i <= this.ROOM_COUNT; i++) {
+      rooms.push(`Ruang ${String(i).padStart(2, '0')}`);
+    }
+    return rooms;
+  },
+
+  // Token/PIN 4-digit deterministik per Tanggal + Jam Mulai Sesi + Nomor Ruangan (sinkron online & offline)
+  computeSessionRoomToken(scheduleObj = null, roomName = 'Ruang 01') {
     const now = new Date();
     const fallbackDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     const tgl = String(scheduleObj?.tanggal || fallbackDate).trim();
     const jm = String(scheduleObj?.jamMulai || (now.getHours() < 10 ? '07:30' : '10:00')).substring(0, 5);
-    const seed = `SMKN1WKT_TOKEN_${tgl}_${jm}`;
+    const roomClean = this.normalizeText(roomName || 'RUANG 01');
+    const seed = `SMKN1WKT_TOKEN_${tgl}_${jm}_${roomClean}`;
 
     let h = 2166136261 >>> 0;
     for (let i = 0; i < seed.length; i++) {
@@ -38,12 +49,13 @@ const ExamModule = {
 
   promptRoomSupervisorPin(scheduleObj) {
     return new Promise((resolve) => {
-      const expectedPin = this.computeSessionRoomToken(scheduleObj);
       const tgl = String(scheduleObj?.tanggal || '').trim();
       const jm = String(scheduleObj?.jamMulai || '').substring(0, 5);
-      const verifiedKey = `${this.VERIFIED_PIN_PREFIX}${tgl}_${jm}`;
+      const savedRoom = localStorage.getItem('cbt_last_selected_room') || 'Ruang 01';
+      const verifiedKey = `${this.VERIFIED_PIN_PREFIX}${tgl}_${jm}_${this.normalizeText(savedRoom)}`;
+      const expectedSavedPin = this.computeSessionRoomToken(scheduleObj, savedRoom);
 
-      if (sessionStorage.getItem(verifiedKey) === expectedPin) {
+      if (sessionStorage.getItem(verifiedKey) === expectedSavedPin) {
         this._pinModalOpen = false;
         resolve(true);
         return;
@@ -54,6 +66,10 @@ const ExamModule = {
 
       this._pinModalOpen = true;
 
+      const roomOptionsHtml = this.getRoomList()
+        .map(r => `<option value="${r}" ${r === savedRoom ? 'selected' : ''}>${r}</option>`)
+        .join('');
+
       const overlay = document.createElement('div');
       overlay.id = 'modal-room-pin-overlay';
       overlay.className = 'fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4';
@@ -63,18 +79,30 @@ const ExamModule = {
             <div class="w-12 h-12 rounded-2xl bg-ocean-100 text-ocean-800 flex items-center justify-center mx-auto text-xl">
               <i class="fa-solid fa-key"></i>
             </div>
-            <h3 class="font-extrabold text-base text-slate-900">Verifikasi PIN Pengawas Ruang</h3>
+            <h3 class="font-extrabold text-base text-slate-900">Verifikasi Ruangan & PIN Pengawas</h3>
             <p class="text-xs text-slate-600 leading-relaxed">
-              Masukkan <strong>4 digit PIN Ruang Ujian</strong> yang ditulis oleh Pengawas di papan tulis kelas untuk memulai <strong>${scheduleObj.mapel}</strong>.
+              Pilih <strong>Ruangan Ujian</strong> Anda dan masukkan <strong>4 digit PIN</strong> di papan tulis untuk memulai <strong>${scheduleObj.mapel}</strong>.
             </p>
           </div>
 
-          <div class="space-y-2">
-            <input type="text" id="input-room-pin-code" inputmode="numeric" maxlength="6" autocomplete="off"
-                   placeholder="••••"
-                   class="w-full text-center font-mono font-extrabold text-2xl tracking-[0.45em] py-3 border-2 border-slate-300 rounded-xl focus:outline-none focus:border-ocean-600 focus:ring-2 focus:ring-ocean-500/30">
+          <div class="space-y-3">
+            <div>
+              <label class="block text-[11px] font-bold text-slate-700 mb-1">Pilih Ruangan Ujian</label>
+              <select id="select-room-number"
+                      class="w-full py-2.5 px-3 text-sm font-bold text-slate-800 bg-slate-50 border-2 border-slate-300 rounded-xl focus:outline-none focus:border-ocean-600">
+                ${roomOptionsHtml}
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-bold text-slate-700 mb-1">PIN Pengawas Ruangan (4 Digit)</label>
+              <input type="text" id="input-room-pin-code" inputmode="numeric" maxlength="6" autocomplete="off"
+                     placeholder="••••"
+                     class="w-full text-center font-mono font-extrabold text-2xl tracking-[0.45em] py-3 border-2 border-slate-300 rounded-xl focus:outline-none focus:border-ocean-600 focus:ring-2 focus:ring-ocean-500/30">
+            </div>
+
             <p id="error-room-pin-msg" class="hidden text-center text-[11px] font-bold text-rose-600">
-              PIN salah! Silakan cek papan tulis ruang ujian atau tanya Pengawas.
+              PIN salah untuk ruangan tersebut! Cek nomor ruangan dan PIN di papan tulis.
             </p>
           </div>
 
@@ -90,17 +118,22 @@ const ExamModule = {
       `;
 
       document.body.appendChild(overlay);
+      const roomSelectEl = document.getElementById('select-room-number');
       const inputEl = document.getElementById('input-room-pin-code');
       const errEl = document.getElementById('error-room-pin-msg');
 
       const verify = () => {
+        const chosenRoom = String(roomSelectEl.value || 'Ruang 01').trim();
+        const expectedPin = this.computeSessionRoomToken(scheduleObj, chosenRoom);
         const val = String(inputEl.value || '').trim();
+
         if (val === expectedPin) {
-          sessionStorage.setItem(verifiedKey, expectedPin);
+          localStorage.setItem('cbt_last_selected_room', chosenRoom);
+          const roomSessionKey = `${this.VERIFIED_PIN_PREFIX}${tgl}_${jm}_${this.normalizeText(chosenRoom)}`;
+          sessionStorage.setItem(roomSessionKey, expectedPin);
           if (inputEl) inputEl.blur();
           this._pinModalOpen = false;
           overlay.remove();
-          // Beri jeda 350ms agar keyboard virtual HP turun dulu sebelum fullscreen & sensor aktif
           setTimeout(() => resolve(true), 350);
         } else {
           errEl.classList.remove('hidden');
@@ -789,23 +822,20 @@ const ExamModule = {
     if (!State.examActive || this._pinModalOpen) return;
     if (Date.now() < this._securityArmTime) return;
 
-    // Jangan anggap keyboard virtual sebagai overlay jika ada elemen input teks yang aktif
     const activeTag = String(document.activeElement?.tagName || '').toUpperCase();
     const activeType = String(document.activeElement?.type || '').toLowerCase();
-    const isTypingText = (activeTag === 'INPUT' && activeType !== 'radio' && activeType !== 'checkbox') || activeTag === 'TEXTAREA';
+    const isTypingText = (activeTag === 'INPUT' && activeType !== 'radio' && activeType !== 'checkbox') || activeTag === 'TEXTAREA' || activeTag === 'SELECT';
     if (isTypingText) return;
 
     const screenArea = (window.screen?.availWidth || window.innerWidth) * (window.screen?.availHeight || window.innerHeight);
     const currentArea = window.innerWidth * window.innerHeight;
 
-    // 1. Deteksi 2 Layar (Split-Screen / Floating Window) ketika luas browser < 72% layar perangkat
     if (screenArea > 0 && (currentArea / screenArea) < 0.72) {
       this.setScreenShield(true);
       this.handleViolation("Mode 2 Layar (Split-Screen / Jendela Mengambang) terdeteksi!");
       return;
     }
 
-    // 2. Deteksi Overlay Gemini / Asisten Suara yang muncul dari bawah layar
     if (window.visualViewport) {
       const vpRatio = window.visualViewport.height / window.innerHeight;
       if (vpRatio < 0.80) {
@@ -971,7 +1001,7 @@ const ExamModule = {
         }
       }
 
-      // 2. Wajib verifikasi PIN Pengawas Ruang (sebelum State.examActive dihidupkan)
+      // 2. Wajib verifikasi Ruangan + PIN Pengawas Ruang
       const pinVerified = await this.promptRoomSupervisorPin(activeSchedule);
       if (!pinVerified) {
         return;
@@ -1142,7 +1172,8 @@ const ExamModule = {
       State.answers = {};
 
       const modeTag = navigator.onLine ? 'ONLINE' : 'OFFLINE';
-      document.getElementById('exam-student-info').textContent = `Peserta: ${student.nama} (${student.kelas}) • Mode ${modeTag}`;
+      const roomTag = localStorage.getItem('cbt_last_selected_room') || '';
+      document.getElementById('exam-student-info').textContent = `Peserta: ${student.nama} (${student.kelas}) • ${roomTag} • Mode ${modeTag}`;
       document.getElementById('exam-mapel-title').textContent = `Ujian Sumatif: ${activeSchedule.mapel}`;
 
       State.questions = this.shuffleArray(filtered);
@@ -1173,7 +1204,6 @@ const ExamModule = {
         }
       } catch (e) {}
 
-      // Beri masa tenggang 1,8 detik agar transisi fullscreen & penutupan keyboard PIN selesai sepenuhnya
       this._securityArmTime = Date.now() + 1800;
       State.examActive = true;
 
