@@ -16,7 +16,7 @@ const ExamModule = {
   LOCAL_COMPLETED_KEY: 'cbt_local_completed_exams_v1',
   VERIFIED_PIN_PREFIX: 'cbt_verified_room_pin_',
   ROOM_COUNT: 15,
-  APP_VERSION: 'v14',
+  APP_VERSION: 'v15',
 
   normalizeText(str) {
     return String(str || '').replace(/\s+/g, ' ').trim().toUpperCase();
@@ -162,6 +162,7 @@ const ExamModule = {
     });
   },
 
+  // Pencocokan nama mapel KETAT (exact match) agar mapel berbeda tidak saling menimpa status selesai
   isMapelMatch(mapelA, mapelB) {
     const clean = (s) => String(s || '')
       .toUpperCase()
@@ -173,8 +174,7 @@ const ExamModule = {
     const a = clean(mapelA);
     const b = clean(mapelB);
     if (!a || !b) return false;
-    if (a === b) return true;
-    return (a.length >= 6 && b.includes(a)) || (b.length >= 6 && a.includes(b));
+    return a === b;
   },
 
   getDeviceToken() {
@@ -627,9 +627,12 @@ const ExamModule = {
     schedulesContainer.innerHTML = '';
 
     schedules.forEach(j => {
+      const schedDateStr = String(j.tanggal || '').trim();
       const jamMulaiClean = String(j.jamMulai).substring(0, 5);
       const jamSelesaiClean = String(j.jamSelesai).substring(0, 5);
-      const isToday = String(j.tanggal).trim() === currentDateStr;
+      const isFutureDate = schedDateStr > currentDateStr;
+      const isToday = schedDateStr === currentDateStr;
+      const isNotStartedToday = isToday && currentTimeStr < jamMulaiClean;
       const isInWindow = isToday && currentTimeStr >= jamMulaiClean && currentTimeStr <= jamSelesaiClean;
 
       const serverDone = (onlineHasil || []).find(h => {
@@ -651,7 +654,8 @@ const ExamModule = {
       }
 
       const localDone = this.findLocalCompletedExam(student, j.mapel);
-      const doneRecord = serverDone || localDone;
+      // Jangan tampilkan status selesai jika tanggal/jam jadwal ujian bahkan belum dimulai
+      const doneRecord = (isFutureDate || isNotStartedToday) ? null : (serverDone || localDone);
       const hasOfflineSoal = offlinePkg && Array.isArray(offlinePkg.questions) &&
         offlinePkg.questions.some(q => this.isMapelMatch(q.mapel, j.mapel));
 
