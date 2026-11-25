@@ -84,28 +84,16 @@ const App = {
     const host = document.getElementById('tab-monitoring');
     if (!host || typeof ExamModule === 'undefined' || !ExamModule.computeSessionRoomToken) return;
 
-    const now = new Date();
-    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    const nowTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-
-    const todaySchedules = (State.schedules || []).filter(j => String(j.tanggal || '').trim() === todayStr);
-    const activeSched = todaySchedules.find(j => {
-      const jm = String(j.jamMulai || '').substring(0, 5);
-      const js = String(j.jamSelesai || '').substring(0, 5);
-      return nowTime >= jm && nowTime <= js;
-    }) || todaySchedules[0] || { tanggal: todayStr, jamMulai: now.getHours() < 10 ? '07:30' : '10:00' };
-
     const rooms = ExamModule.getRoomList ? ExamModule.getRoomList() : ['Ruang 01'];
-    const sessionLabel = `${activeSched.tanggal} • Sesi Mulai ${String(activeSched.jamMulai || '').substring(0, 5)}`;
+    const verLabel = ExamModule.APP_VERSION || 'v13';
 
     const waLines = [
-      `*PIN PENGAWAS RUANG UJIAN CBT*`,
-      `Tanggal/Sesi: ${sessionLabel}`,
+      `*PIN PENGAWAS RUANG UJIAN CBT (15 RUANGAN)*`,
       `-------------------------`
     ];
 
     const gridHtml = rooms.map(roomName => {
-      const pin = ExamModule.computeSessionRoomToken(activeSched, roomName);
+      const pin = ExamModule.computeSessionRoomToken(null, roomName);
       waLines.push(`${roomName}: *${pin}*`);
       return `
         <div class="bg-slate-950/75 border border-ocean-600/60 px-3 py-2 rounded-xl flex items-center justify-between">
@@ -126,9 +114,9 @@ const App = {
     box.innerHTML = `
       <div class="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <div class="text-[10px] uppercase tracking-wider font-bold text-teal-300">🔐 PIN / Token Pengawas per Ruangan (${sessionLabel})</div>
+          <div class="text-[10px] uppercase tracking-wider font-bold text-teal-300">🔐 PIN / Token Pengawas per Ruangan (Ruang 01 – 15 • ${verLabel})</div>
           <p class="text-[11px] text-ocean-100">
-            Setiap ruangan & sesi memiliki PIN berbeda. Bagikan ke grup WA Pengawas agar ditulis di papan tulis masing-masing ruangan.
+            Bagikan ke grup WA Pengawas agar ditulis di papan tulis masing-masing ruangan. Pastikan layar PIN siswa bertuliskan versi <strong>${verLabel}</strong>.
           </p>
         </div>
         <button type="button" id="btn-copy-all-room-pins"
@@ -137,7 +125,7 @@ const App = {
           <span>Salin Semua PIN (WA)</span>
         </button>
       </div>
-      <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-2">
+      <div class="grid grid-cols-3 sm:grid-cols-5 gap-2">
         ${gridHtml}
       </div>
     `;
