@@ -16,7 +16,7 @@ const ExamModule = {
   LOCAL_COMPLETED_KEY: 'cbt_local_completed_exams_v1',
   VERIFIED_PIN_PREFIX: 'cbt_verified_room_pin_',
   ROOM_COUNT: 15,
-  APP_VERSION: 'v18',
+  APP_VERSION: 'v19',
 
   normalizeText(str) {
     return String(str || '').replace(/\s+/g, ' ').trim().toUpperCase();
