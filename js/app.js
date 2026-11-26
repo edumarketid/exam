@@ -12,7 +12,7 @@ window.State = window.State || {
 };
 
 const App = {
-  APP_VERSION: 'v18',
+  APP_VERSION: 'v19',
 
   async init() {
     console.log(`[App] Menginisialisasi sistem CBT Semi-Online SMKN 1 Wakatobi (${this.APP_VERSION})...`);
