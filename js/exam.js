@@ -16,7 +16,7 @@ const ExamModule = {
   LOCAL_COMPLETED_KEY: 'cbt_local_completed_exams_v1',
   VERIFIED_PIN_PREFIX: 'cbt_verified_room_pin_',
   ROOM_COUNT: 15,
-  APP_VERSION: 'v17',
+  APP_VERSION: 'v18',
 
   normalizeText(str) {
     return String(str || '').replace(/\s+/g, ' ').trim().toUpperCase();
@@ -84,6 +84,9 @@ const ExamModule = {
             <h3 class="font-extrabold text-base text-slate-900">Verifikasi Ruangan & PIN Pengawas</h3>
             <p class="text-xs text-slate-600 leading-relaxed">
               Pilih <strong>Ruangan Ujian</strong> Anda (Ruang 01 – 15) dan masukkan <strong>4 digit PIN</strong> di papan tulis untuk memulai <strong>${scheduleObj.mapel}</strong>.
+            </p>
+            <p class="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+              ⚠️ Pastikan Mode Pesawat AKTIF / Internet MATI sebelum masuk soal agar tidak terhitung pelanggaran!
             </p>
           </div>
 
@@ -776,10 +779,22 @@ const ExamModule = {
 
   // Lapor ke dashboard Admin HANYA jika internet menyala saat sedang mengerjakan soal (State.examActive === true)
   async reportOnlineIntrusionToAdmin() {
-    if (!State.examActive || !navigator.onLine || this.activeRecordId) return;
+    if (!State.examActive || !navigator.onLine) return;
     const student = State.currentUser;
     if (!student) return;
     try {
+      const client = await DB.getClient();
+      if (this.activeRecordId && client) {
+        await client
+          .from('hasil_ujian')
+          .update({
+            jumlah_pelanggaran: State.violations,
+            waktu_selesai: new Date().toISOString()
+          })
+          .eq('id', this.activeRecordId);
+        return;
+      }
+
       const sId = String(student.id_siswa || student.nisn || '').trim();
       const mapelName = this.activeScheduleObj?.mapel || State.questions[0]?.mapel || 'Mata Pelajaran';
       const inserted = await DB.insertHasilUjian({
@@ -796,6 +811,16 @@ const ExamModule = {
         this.activeRecordId = inserted[0].id || inserted[0].ID;
       }
     } catch (e) {}
+  },
+
+  // Trigger pelanggaran otomatis jika koneksi internet aktif saat layar soal terbuka
+  triggerOnlineViolationIfActive() {
+    if (!State.examActive || this._pinModalOpen || this._isSubmitting) return;
+    if (Date.now() < this._securityArmTime) return;
+    if (!navigator.onLine) return;
+
+    this.reportOnlineIntrusionToAdmin();
+    this.handleViolation("Koneksi internet terdeteksi menyala saat ujian! Segera aktifkan Mode Pesawat.");
   },
 
   startSessionHeartbeat() {
@@ -830,7 +855,10 @@ const ExamModule = {
 
         await client
           .from('hasil_ujian')
-          .update({ waktu_selesai: new Date().toISOString() })
+          .update({
+            jumlah_pelanggaran: State.violations,
+            waktu_selesai: new Date().toISOString()
+          })
           .eq('id', this.activeRecordId);
       } catch (e) {
         console.warn("[ExamModule] Heartbeat dilewati:", e.message);
@@ -882,10 +910,8 @@ const ExamModule = {
 
   setupSecurityListeners() {
     // Hanya aktif saat sedang mengerjakan soal (State.examActive === true), tidak aktif di lobi/login
-    window.addEventListener('online', async () => {
-      if (!State.examActive || this._pinModalOpen || Date.now() < this._securityArmTime) return;
-      this.reportOnlineIntrusionToAdmin();
-      this.handleViolation("Koneksi internet terdeteksi menyala saat ujian berlangsung! Harap aktifkan Mode Pesawat.");
+    window.addEventListener('online', () => {
+      this.triggerOnlineViolationIfActive();
     });
 
     document.addEventListener('fullscreenchange', () => {
@@ -902,6 +928,7 @@ const ExamModule = {
         this.handleViolation("Anda membuka tab lain / meninggalkan layar ujian!");
       } else if (State.examActive) {
         this.setScreenShield(false);
+        this.triggerOnlineViolationIfActive();
       }
     });
 
@@ -921,6 +948,7 @@ const ExamModule = {
       if (State.examActive) {
         this.setScreenShield(false);
         this.checkSplitScreenOrOverlay();
+        this.triggerOnlineViolationIfActive();
       }
     });
 
@@ -1253,6 +1281,7 @@ const ExamModule = {
       setTimeout(() => {
         this.captureBaselineViewport();
         this.checkSplitScreenOrOverlay();
+        this.triggerOnlineViolationIfActive();
       }, 2000);
 
       if (hasRestoredAlert) {
@@ -1391,6 +1420,13 @@ const ExamModule = {
       }
       if (timer > 0 && timer % 5 === 0) {
         this.saveProgressToLocal();
+        // Cek berkala setiap 5 detik jika siswa masih mempertahankan internet menyala
+        if (navigator.onLine && Date.now() >= this._securityArmTime && !this._pinModalOpen) {
+          this.reportOnlineIntrusionToAdmin();
+          if (Date.now() - this.lastViolationTime >= 12000) {
+            this.handleViolation("Koneksi internet masih aktif saat ujian! Matikan data seluler / WiFi sekarang.");
+          }
+        }
       }
       if (--timer < 0) {
         clearInterval(State.timerInterval);
