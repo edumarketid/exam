@@ -30,7 +30,9 @@ const ExamModule = {
     return rooms;
   },
 
-  // Token/PIN 4-digit otomatis berganti setiap hari per Nomor Ruangan (sinkron online & offline)
+  APP_VERSION: 'v19',
+
+  // Token/PIN 4-digit otomatis berganti setiap hari per Nomor Ruangan (selalu 4 digit positif 1000-9999)
   computeSessionRoomToken(scheduleObj = null, roomName = 'Ruang 01') {
     const now = new Date();
     const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -41,7 +43,7 @@ const ExamModule = {
     let h = 2166136261 >>> 0;
     for (let i = 0; i < seed.length; i++) {
       h ^= seed.charCodeAt(i);
-      h = Math.imul(h, 16777619);
+      h = Math.imul(h, 16777619) >>> 0;
     }
     const fourDigits = 1000 + (h % 9000);
     return String(fourDigits);
