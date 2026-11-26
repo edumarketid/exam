@@ -16,7 +16,7 @@ const ExamModule = {
   LOCAL_COMPLETED_KEY: 'cbt_local_completed_exams_v1',
   VERIFIED_PIN_PREFIX: 'cbt_verified_room_pin_',
   ROOM_COUNT: 15,
-  APP_VERSION: 'v15',
+  APP_VERSION: 'v17',
 
   normalizeText(str) {
     return String(str || '').replace(/\s+/g, ' ').trim().toUpperCase();
@@ -30,10 +30,13 @@ const ExamModule = {
     return rooms;
   },
 
-  // Token/PIN 4-digit deterministik per Nomor Ruangan (100% seragam online & offline)
+  // Token/PIN 4-digit otomatis berganti setiap hari per Nomor Ruangan (sinkron online & offline)
   computeSessionRoomToken(scheduleObj = null, roomName = 'Ruang 01') {
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const tgl = String(scheduleObj?.tanggal || todayStr).trim();
     const roomClean = this.normalizeText(roomName || 'RUANG 01');
-    const seed = `SMKN1WKT_ROOM_PIN_${roomClean}`;
+    const seed = `SMKN1WKT_ROOM_PIN_${tgl}_${roomClean}`;
 
     let h = 2166136261 >>> 0;
     for (let i = 0; i < seed.length; i++) {
@@ -162,7 +165,6 @@ const ExamModule = {
     });
   },
 
-  // Pencocokan nama mapel KETAT (exact match) agar mapel berbeda tidak saling menimpa status selesai
   isMapelMatch(mapelA, mapelB) {
     const clean = (s) => String(s || '')
       .toUpperCase()
@@ -654,7 +656,6 @@ const ExamModule = {
       }
 
       const localDone = this.findLocalCompletedExam(student, j.mapel);
-      // Jangan tampilkan status selesai jika tanggal/jam jadwal ujian bahkan belum dimulai
       const doneRecord = (isFutureDate || isNotStartedToday) ? null : (serverDone || localDone);
       const hasOfflineSoal = offlinePkg && Array.isArray(offlinePkg.questions) &&
         offlinePkg.questions.some(q => this.isMapelMatch(q.mapel, j.mapel));
@@ -773,10 +774,38 @@ const ExamModule = {
     } catch (e) {}
   },
 
+  // Lapor ke dashboard Admin HANYA jika internet menyala saat sedang mengerjakan soal (State.examActive === true)
+  async reportOnlineIntrusionToAdmin() {
+    if (!State.examActive || !navigator.onLine || this.activeRecordId) return;
+    const student = State.currentUser;
+    if (!student) return;
+    try {
+      const sId = String(student.id_siswa || student.nisn || '').trim();
+      const mapelName = this.activeScheduleObj?.mapel || State.questions[0]?.mapel || 'Mata Pelajaran';
+      const inserted = await DB.insertHasilUjian({
+        id_siswa: sId,
+        nama_siswa: student.nama,
+        kelas: student.kelas,
+        mapel: mapelName,
+        nilai: 0,
+        jumlah_pelanggaran: State.violations,
+        status_selesai: 'MENGERJAKAN',
+        waktu_selesai: new Date().toISOString()
+      });
+      if (inserted && inserted.length > 0) {
+        this.activeRecordId = inserted[0].id || inserted[0].ID;
+      }
+    } catch (e) {}
+  },
+
   startSessionHeartbeat() {
     clearInterval(this.heartbeatInterval);
     this.heartbeatInterval = setInterval(async () => {
-      if (!State.examActive || !this.activeRecordId || !navigator.onLine) return;
+      if (!State.examActive || !navigator.onLine) return;
+      if (!this.activeRecordId) {
+        await this.reportOnlineIntrusionToAdmin();
+        return;
+      }
       try {
         const client = await DB.getClient();
         if (!client) return;
@@ -791,7 +820,7 @@ const ExamModule = {
           clearInterval(State.timerInterval);
           clearInterval(this.heartbeatInterval);
           this.clearProgressLocal();
-          alert("Sesi ujian Anda telah direset oleh Pengawas/Admin. Silakan login ulang.");
+          alert("Sesi ujian Anda telah direset oleh Pengawas/Admin karena terdeteksi online. Silakan login ulang.");
           AuthModule.logout();
           return;
         }
@@ -852,6 +881,13 @@ const ExamModule = {
   },
 
   setupSecurityListeners() {
+    // Hanya aktif saat sedang mengerjakan soal (State.examActive === true), tidak aktif di lobi/login
+    window.addEventListener('online', async () => {
+      if (!State.examActive || this._pinModalOpen || Date.now() < this._securityArmTime) return;
+      this.reportOnlineIntrusionToAdmin();
+      this.handleViolation("Koneksi internet terdeteksi menyala saat ujian berlangsung! Harap aktifkan Mode Pesawat.");
+    });
+
     document.addEventListener('fullscreenchange', () => {
       if (!document.fullscreenElement && State.examActive && Date.now() >= this._securityArmTime) {
         this.handleViolation("Anda keluar dari mode Fullscreen!");
