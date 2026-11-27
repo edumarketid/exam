@@ -12,14 +12,15 @@ window.State = window.State || {
 };
 
 const App = {
-  APP_VERSION: 'v19',
+  APP_VERSION: 'v20',
+  _selectedAdminPinSession: null,
 
   async init() {
     console.log(`[App] Menginisialisasi sistem CBT Semi-Online SMKN 1 Wakatobi (${this.APP_VERSION})...`);
 
     const verLabel = document.getElementById('app-version-label');
     if (verLabel) {
-      verLabel.textContent = `Versi: ${this.APP_VERSION}`;
+      verLabel.textContent = this.APP_VERSION;
     }
 
     if (typeof ExamModule !== 'undefined' && ExamModule.setupSecurityListeners) {
@@ -32,7 +33,6 @@ const App = {
     this.showScreen('login');
   },
 
-  // Menghapus cache Service Worker lama & memuat ulang kode terbaru TANPA menghapus paket soal/nilai di localStorage
   async forceUpdateApp() {
     if (!navigator.onLine) {
       alert(
@@ -53,7 +53,6 @@ const App = {
       if ('caches' in window) {
         const cacheNames = await caches.keys();
         for (const name of cacheNames) {
-          // Pertahankan cache gambar soal agar tidak perlu unduh gambar ulang
           if (!name.includes('images')) {
             await caches.delete(name);
           }
@@ -124,20 +123,32 @@ const App = {
     }
   },
 
-  renderAdminRoomTokenBanner() {
+  renderAdminRoomTokenBanner(sessionOverride = null) {
     const host = document.getElementById('tab-monitoring');
     if (!host || typeof ExamModule === 'undefined' || !ExamModule.computeSessionRoomToken) return;
 
+    if (sessionOverride) {
+      this._selectedAdminPinSession = sessionOverride;
+    } else if (!this._selectedAdminPinSession) {
+      this._selectedAdminPinSession = new Date().getHours() >= 9 ? 'SESI_2' : 'SESI_1';
+    }
+
+    const activeSession = this._selectedAdminPinSession;
+    const sessionTitle = activeSession === 'SESI_2' ? 'SESI 2 (Jam ≥ 09:00)' : 'SESI 1 (Jam < 09:00)';
+
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     const rooms = ExamModule.getRoomList ? ExamModule.getRoomList() : ['Ruang 01'];
-    const verLabel = this.APP_VERSION || 'v14';
+    const verLabel = this.APP_VERSION || 'v20';
 
     const waLines = [
-      `*PIN PENGAWAS RUANG UJIAN CBT (15 RUANGAN)*`,
+      `*PIN PENGAWAS RUANG UJIAN CBT*`,
+      `Tanggal: ${todayStr} • *${sessionTitle}*`,
       `-------------------------`
     ];
 
     const gridHtml = rooms.map(roomName => {
-      const pin = ExamModule.computeSessionRoomToken(null, roomName);
+      const pin = ExamModule.computeSessionRoomToken(null, roomName, activeSession);
       waLines.push(`${roomName}: *${pin}*`);
       return `
         <div class="bg-slate-950/75 border border-ocean-600/60 px-3 py-2 rounded-xl flex items-center justify-between">
@@ -154,20 +165,40 @@ const App = {
       host.prepend(box);
     }
 
+    const btnS1Class = activeSession === 'SESI_1'
+      ? 'bg-amber-400 text-slate-950 font-extrabold shadow'
+      : 'bg-slate-900/60 text-slate-200 hover:bg-slate-900 font-semibold border border-ocean-600';
+
+    const btnS2Class = activeSession === 'SESI_2'
+      ? 'bg-amber-400 text-slate-950 font-extrabold shadow'
+      : 'bg-slate-900/60 text-slate-200 hover:bg-slate-900 font-semibold border border-ocean-600';
+
     box.className = 'bg-gradient-to-r from-ocean-900 to-ocean-800 text-white p-4 rounded-2xl border border-ocean-700 shadow-sm space-y-3';
     box.innerHTML = `
       <div class="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <div class="text-[10px] uppercase tracking-wider font-bold text-teal-300">🔐 PIN / Token Pengawas per Ruangan (Ruang 01 – 15 • ${verLabel})</div>
+          <div class="text-[10px] uppercase tracking-wider font-bold text-teal-300">🔐 PIN / Token Pengawas per Ruangan (${todayStr} • ${sessionTitle} • ${verLabel})</div>
           <p class="text-[11px] text-ocean-100">
-            Bagikan ke grup WA Pengawas agar ditulis di papan tulis masing-masing ruangan. Pastikan halaman login siswa bertuliskan versi <strong>${verLabel}</strong>.
+            PIN otomatis berbeda antara Sesi 1 (&lt; 09:00) dan Sesi 2 (≥ 09:00). Pastikan aplikasi siswa bertuliskan <strong>${verLabel}</strong>.
           </p>
         </div>
-        <button type="button" id="btn-copy-all-room-pins"
-                class="px-3.5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-xs shadow transition flex items-center gap-1.5">
-          <i class="fa-regular fa-copy"></i>
-          <span>Salin Semua PIN (WA)</span>
-        </button>
+        <div class="flex flex-wrap items-center gap-2">
+          <div class="inline-flex rounded-xl p-1 bg-slate-950/50 border border-ocean-700 gap-1">
+            <button type="button" onclick="App.renderAdminRoomTokenBanner('SESI_1')"
+                    class="px-3 py-1.5 rounded-lg text-[11px] transition ${btnS1Class}">
+              Sesi 1 (&lt; 09:00)
+            </button>
+            <button type="button" onclick="App.renderAdminRoomTokenBanner('SESI_2')"
+                    class="px-3 py-1.5 rounded-lg text-[11px] transition ${btnS2Class}">
+              Sesi 2 (≥ 09:00)
+            </button>
+          </div>
+          <button type="button" id="btn-copy-all-room-pins"
+                  class="px-3.5 py-2 rounded-xl bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-extrabold text-xs shadow transition flex items-center gap-1.5">
+            <i class="fa-regular fa-copy"></i>
+            <span>Salin PIN ${activeSession === 'SESI_2' ? 'Sesi 2' : 'Sesi 1'} (WA)</span>
+          </button>
+        </div>
       </div>
       <div class="grid grid-cols-3 sm:grid-cols-5 gap-2">
         ${gridHtml}
@@ -181,7 +212,7 @@ const App = {
           await navigator.clipboard.writeText(waLines.join('\n'));
           copyBtn.innerHTML = `<i class="fa-solid fa-check"></i><span>Tersalin ke Clipboard!</span>`;
           setTimeout(() => {
-            copyBtn.innerHTML = `<i class="fa-regular fa-copy"></i><span>Salin Semua PIN (WA)</span>`;
+            copyBtn.innerHTML = `<i class="fa-regular fa-copy"></i><span>Salin PIN ${activeSession === 'SESI_2' ? 'Sesi 2' : 'Sesi 1'} (WA)</span>`;
           }, 2000);
         } catch (e) {
           alert(waLines.join('\n'));
