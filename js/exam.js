@@ -16,7 +16,7 @@ const ExamModule = {
   LOCAL_COMPLETED_KEY: 'cbt_local_completed_exams_v1',
   VERIFIED_PIN_PREFIX: 'cbt_verified_room_pin_',
   ROOM_COUNT: 15,
-  APP_VERSION: 'v19',
+  APP_VERSION: 'v20',
 
   normalizeText(str) {
     return String(str || '').replace(/\s+/g, ' ').trim().toUpperCase();
@@ -30,15 +30,29 @@ const ExamModule = {
     return rooms;
   },
 
-  APP_VERSION: 'v19',
+  // Menentukan kode sesi: SESI_2 jika jam >= 09:00, selain itu SESI_1
+  resolveSessionSlot(scheduleObj = null, forcedSession = null) {
+    if (forcedSession === 'SESI_1' || forcedSession === 'SESI_2') {
+      return forcedSession;
+    }
+    if (scheduleObj && scheduleObj.jamMulai) {
+      const hour = parseInt(String(scheduleObj.jamMulai).substring(0, 2), 10);
+      if (!isNaN(hour)) {
+        return hour >= 9 ? 'SESI_2' : 'SESI_1';
+      }
+    }
+    const nowHour = new Date().getHours();
+    return nowHour >= 9 ? 'SESI_2' : 'SESI_1';
+  },
 
-  // Token/PIN 4-digit otomatis berganti setiap hari per Nomor Ruangan (selalu 4 digit positif 1000-9999)
-  computeSessionRoomToken(scheduleObj = null, roomName = 'Ruang 01') {
+  // Token/PIN 4-digit otomatis berganti per Hari & Sesi (Sesi 1 < 09:00, Sesi 2 >= 09:00)
+  computeSessionRoomToken(scheduleObj = null, roomName = 'Ruang 01', forcedSession = null) {
     const now = new Date();
     const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     const tgl = String(scheduleObj?.tanggal || todayStr).trim();
+    const sessionSlot = this.resolveSessionSlot(scheduleObj, forcedSession);
     const roomClean = this.normalizeText(roomName || 'RUANG 01');
-    const seed = `SMKN1WKT_ROOM_PIN_${tgl}_${roomClean}`;
+    const seed = `SMKN1WKT_ROOM_PIN_${tgl}_${sessionSlot}_${roomClean}`;
 
     let h = 2166136261 >>> 0;
     for (let i = 0; i < seed.length; i++) {
@@ -52,11 +66,12 @@ const ExamModule = {
   promptRoomSupervisorPin(scheduleObj) {
     return new Promise((resolve) => {
       const tgl = String(scheduleObj?.tanggal || '').trim();
-      const jm = String(scheduleObj?.jamMulai || '').substring(0, 5);
+      const sessionSlot = this.resolveSessionSlot(scheduleObj);
+      const sessionLabel = sessionSlot === 'SESI_2' ? 'Sesi 2 (≥ 09:00)' : 'Sesi 1 (< 09:00)';
       const savedRoom = localStorage.getItem('cbt_last_selected_room') || 'Ruang 01';
       const validRooms = this.getRoomList();
       const defaultRoom = validRooms.includes(savedRoom) ? savedRoom : 'Ruang 01';
-      const verifiedKey = `${this.VERIFIED_PIN_PREFIX}${tgl}_${jm}_${this.normalizeText(defaultRoom)}`;
+      const verifiedKey = `${this.VERIFIED_PIN_PREFIX}${tgl}_${sessionSlot}_${this.normalizeText(defaultRoom)}`;
       const expectedSavedPin = this.computeSessionRoomToken(scheduleObj, defaultRoom);
 
       if (sessionStorage.getItem(verifiedKey) === expectedSavedPin) {
@@ -85,7 +100,7 @@ const ExamModule = {
             </div>
             <h3 class="font-extrabold text-base text-slate-900">Verifikasi Ruangan & PIN Pengawas</h3>
             <p class="text-xs text-slate-600 leading-relaxed">
-              Pilih <strong>Ruangan Ujian</strong> Anda (Ruang 01 – 15) dan masukkan <strong>4 digit PIN</strong> di papan tulis untuk memulai <strong>${scheduleObj.mapel}</strong>.
+              Pilih <strong>Ruangan Ujian</strong> Anda (Ruang 01 – 15) dan masukkan <strong>4 digit PIN ${sessionLabel}</strong> untuk memulai <strong>${scheduleObj.mapel}</strong>.
             </p>
             <p class="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
               ⚠️ Pastikan Mode Pesawat AKTIF / Internet MATI sebelum masuk soal agar tidak terhitung pelanggaran!
@@ -102,14 +117,14 @@ const ExamModule = {
             </div>
 
             <div>
-              <label class="block text-[11px] font-bold text-slate-700 mb-1">PIN Pengawas Ruangan (4 Digit)</label>
+              <label class="block text-[11px] font-bold text-slate-700 mb-1">PIN Pengawas ${sessionLabel} (4 Digit)</label>
               <input type="text" id="input-room-pin-code" inputmode="numeric" maxlength="6" autocomplete="off"
                      placeholder="••••"
                      class="w-full text-center font-mono font-extrabold text-2xl tracking-[0.45em] py-3 border-2 border-slate-300 rounded-xl focus:outline-none focus:border-ocean-600 focus:ring-2 focus:ring-ocean-500/30">
             </div>
 
             <p id="error-room-pin-msg" class="hidden text-center text-[11px] font-bold text-rose-600">
-              PIN salah untuk ruangan tersebut! Cek nomor ruangan dan PIN di papan tulis.
+              PIN salah untuk ruangan & sesi tersebut! Cek nomor ruangan dan PIN ${sessionLabel} di papan tulis.
             </p>
           </div>
 
@@ -139,7 +154,7 @@ const ExamModule = {
 
         if (val === expectedPin) {
           localStorage.setItem('cbt_last_selected_room', chosenRoom);
-          const roomSessionKey = `${this.VERIFIED_PIN_PREFIX}${tgl}_${jm}_${this.normalizeText(chosenRoom)}`;
+          const roomSessionKey = `${this.VERIFIED_PIN_PREFIX}${tgl}_${sessionSlot}_${this.normalizeText(chosenRoom)}`;
           sessionStorage.setItem(roomSessionKey, expectedPin);
           if (inputEl) inputEl.blur();
           this._pinModalOpen = false;
@@ -911,7 +926,6 @@ const ExamModule = {
   },
 
   setupSecurityListeners() {
-    // Hanya aktif saat sedang mengerjakan soal (State.examActive === true), tidak aktif di lobi/login
     window.addEventListener('online', () => {
       this.triggerOnlineViolationIfActive();
     });
@@ -1422,7 +1436,6 @@ const ExamModule = {
       }
       if (timer > 0 && timer % 5 === 0) {
         this.saveProgressToLocal();
-        // Cek berkala setiap 5 detik jika siswa masih mempertahankan internet menyala
         if (navigator.onLine && Date.now() >= this._securityArmTime && !this._pinModalOpen) {
           this.reportOnlineIntrusionToAdmin();
           if (Date.now() - this.lastViolationTime >= 12000) {
